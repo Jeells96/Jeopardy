@@ -1,0 +1,3 @@
+_test_*.html
+.DS_Store
+node_modules/
