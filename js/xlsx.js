@@ -11,22 +11,52 @@ export const COLUMNS = [
 ];
 const COL_WIDTHS = [7, 55, 28, 9, 16, 16, 16, 16, 9, 13];
 
-// Example content, grouped by category (tab name -> rows).
+// Example content, grouped by category (tab name -> rows). A full 6x5 board + Final.
 const EXAMPLE = {
   "Christmas Movies": [
     [100, "This 1990 film features Kevin McCallister defending his home from burglars.", "Home Alone", "spoken", "", "", "", "", "", ""],
-    [200, "In which movie does a boy ride a magical train to the North Pole?", "The Polar Express", "mcq", "Elf", "The Polar Express", "The Grinch", "Klaus", "B", ""],
-    [300, "DAILY DOUBLE! This grumpy green creature tried to steal Christmas from Whoville.", "The Grinch", "spoken", "", "", "", "", "", "Yes"],
+    [200, "In which film does a boy ride a magical train to the North Pole?", "The Polar Express", "mcq", "Elf", "The Polar Express", "The Grinch", "Klaus", "B", ""],
+    [300, "In 'Elf', what are Buddy's four main food groups?", "Candy, candy canes, candy corn, and syrup", "spoken", "", "", "", "", "", ""],
+    [400, "Which actor plays Clark Griswold in 'National Lampoon's Christmas Vacation'?", "Chevy Chase", "mcq", "Chevy Chase", "Bill Murray", "Tim Allen", "Steve Martin", "A", "Yes"],
+    [500, "In 'It's a Wonderful Life', what happens every time a bell rings?", "An angel gets its wings", "spoken", "", "", "", "", "", ""],
   ],
   "Holiday Songs": [
-    [100, "Chestnuts roasting on an open fire opens which classic song?", "The Christmas Song", "spoken", "", "", "", "", "", ""],
+    [100, "'Chestnuts roasting on an open fire' opens which classic song?", "The Christmas Song", "spoken", "", "", "", "", "", ""],
     [200, "Which reindeer had a very shiny nose?", "Rudolph", "mcq", "Dasher", "Rudolph", "Comet", "Blitzen", "B", ""],
+    [300, "In 'The Twelve Days of Christmas', what is given on the fifth day?", "Five gold rings", "spoken", "", "", "", "", "", ""],
+    [400, "Mariah Carey's holiday smash begins 'I don't want a lot for ___'.", "Christmas", "mcq", "Christmas", "presents", "money", "snow", "A", ""],
+    [500, "Which 1984 charity single asks 'Do They Know It's Christmas?'", "Band Aid", "spoken", "", "", "", "", "", ""],
   ],
-  "Santa Trivia": [
+  "Santa & Reindeer": [
     [100, "What do children traditionally leave out for Santa on Christmas Eve?", "Cookies and milk", "spoken", "", "", "", "", "", ""],
+    [200, "How does Santa typically enter a house?", "The chimney", "mcq", "The window", "The chimney", "The front door", "The garage", "B", ""],
+    [300, "What is the name of Santa's wife?", "Mrs. Claus", "spoken", "", "", "", "", "", ""],
+    [400, "According to the song, Rudolph's nose did what?", "Glowed", "mcq", "Glowed", "Sang", "Whistled", "Sneezed", "A", "Yes"],
+    [500, "Name any three of Santa's eight reindeer (besides Rudolph).", "Dasher, Dancer, Prancer, Vixen, Comet, Cupid, Donner, Blitzen", "spoken", "", "", "", "", "", ""],
+  ],
+  "Around the World": [
+    [100, "In which country did the Christmas tree tradition originate?", "Germany", "mcq", "France", "Germany", "Italy", "Spain", "B", ""],
+    [200, "In Mexico, what are the Christmas processions reenacting Mary and Joseph's search for lodging called?", "Las Posadas", "spoken", "", "", "", "", "", ""],
+    [300, "In which country does 'La Befana', a kindly witch, bring gifts?", "Italy", "mcq", "Italy", "Greece", "Russia", "Poland", "A", ""],
+    [400, "In Japan, which fast-food meal has become a popular Christmas tradition?", "KFC (fried chicken)", "spoken", "", "", "", "", "", ""],
+    [500, "In Sweden, the Christmas season includes a festival of light honoring which saint?", "St. Lucia", "mcq", "St. Nicholas", "St. Lucia", "St. Stephen", "St. Olaf", "B", ""],
+  ],
+  "Festive Food & Drink": [
+    [100, "What creamy, spiced drink is a Christmas favorite, often spiked with rum?", "Eggnog", "spoken", "", "", "", "", "", ""],
+    [200, "What fruit is traditionally placed in a Christmas stocking?", "An orange", "mcq", "Apple", "Orange", "Banana", "Grape", "B", ""],
+    [300, "What green plant, often hung in doorways, invites a Christmas kiss?", "Mistletoe", "spoken", "", "", "", "", "", ""],
+    [400, "A traditional British Christmas dessert set alight with brandy is called what?", "Christmas pudding", "mcq", "Trifle", "Christmas pudding", "Mince pie", "Yule log", "B", ""],
+    [500, "What candy is traditionally shaped like a shepherd's crook with red and white stripes?", "Candy cane", "spoken", "", "", "", "", "", ""],
+  ],
+  "Books & TV": [
+    [100, "Who wrote 'A Christmas Carol'?", "Charles Dickens", "spoken", "", "", "", "", "", ""],
+    [200, "What is the name of Scrooge's deceased business partner?", "Jacob Marley", "mcq", "Jacob Marley", "Bob Cratchit", "Tiny Tim", "Fezziwig", "A", ""],
+    [300, "In 'How the Grinch Stole Christmas', what is the name of the Grinch's dog?", "Max", "spoken", "", "", "", "", "", ""],
+    [400, "'Frosty the Snowman' came to life thanks to what?", "A magic hat", "mcq", "A magic hat", "A wish", "A snowball", "A star", "A", ""],
+    [500, "In 'A Charlie Brown Christmas', what kind of tree does Charlie Brown pick out?", "A small, scrawny tree", "spoken", "", "", "", "", "", ""],
   ],
   "Final Jeopardy": [
-    ["", "This fictional town is home to the Grinch.", "Whoville", "spoken", "", "", "", "", "", ""],
+    ["", "This poem beginning 'Twas the night before Christmas' is formally titled this.", "A Visit from St. Nicholas", "spoken", "", "", "", "", "", ""],
   ],
 };
 

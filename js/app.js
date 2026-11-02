@@ -1,6 +1,7 @@
 // Christmas Jeopardy — routing + all views.
 import * as D from "./data.js";
 import { downloadTemplate, parseWorkbook } from "./xlsx.js";
+import * as Speech from "./speech.js";
 
 const ADMIN_CODE = "2325";
 
@@ -153,8 +154,23 @@ function renderPlay() {
     <div class="screen player">
       ${scoreBar()}
       <div class="pname">You: <strong>${esc(id.name)}</strong> · <span class="chip ${myTeam}">${esc(teamName(myTeam))}</span></div>
+      ${micBanner()}
       ${body}
     </div>`;
+}
+
+// Mic status / pre-game enable prompt.
+function micBanner() {
+  if (!Speech.micSupported()) {
+    return `<div class="micbar off">🎙️ This device can't capture speech — no problem, just answer out loud when it's your turn.</div>`;
+  }
+  if (Speech.micEnabled() && !Speech.speechDenied()) {
+    return `<div class="micbar on">🎙️ Microphone ready — when you're the one answering, it listens automatically.</div>`;
+  }
+  return `<div class="micbar prompt">
+    <div>🎙️ <strong>Enable your microphone before the game</strong> so it can capture your spoken answers.</div>
+    <button class="btn gold" data-action="enable-mic">Enable microphone</button>
+  </div>`;
 }
 
 function playerQuestion(id, q, myTeam) {
@@ -182,7 +198,16 @@ function playerQuestion(id, q, myTeam) {
           c ? `<button class="mcqbtn" data-action="mcq-pick" data-i="${i}"><b>${"ABCD"[i]}</b> ${esc(c)}</button>` : ""
         ).join("") + `</div><div class="timerline">⏱ ${fmt(remainingAnswer())}</div>`;
     }
-    return clue + `<div class="pstatus big youup">🎤 You're up!<br><span class="dim">Answer out loud.</span></div><div class="timerline">⏱ ${fmt(remainingAnswer())}</div>`;
+    // Spoken answer — mic listens automatically and shows what it heard.
+    const sa = S.spokenAnswer && S.spokenAnswer.deviceId === D.deviceId() ? S.spokenAnswer : null;
+    let mic;
+    if (!Speech.micSupported() || Speech.speechDenied() || !Speech.micEnabled()) {
+      mic = `<div class="pstatus dim">Answer out loud — the host will score it.</div>`;
+    } else {
+      mic = `<div class="listening">🎙️ <span class="pulse-dot"></span> Listening…</div>` +
+        (sa && sa.text ? `<div class="heard">I heard: “${esc(sa.text)}”</div>` : `<div class="heard dim">Say your answer…</div>`);
+    }
+    return clue + `<div class="pstatus big youup">🎤 You're up!</div>${mic}<div class="timerline">⏱ ${fmt(remainingAnswer())}</div>`;
   }
 
   // Someone else is answering.
@@ -269,7 +294,9 @@ function boardClue() {
   if (S.resolved) {
     status = `<div class="revealbox">Answer: <strong>${esc(q.answer)}</strong></div>`;
   } else if (locked) {
-    status = `<div class="answering"><span class="chip ${locked.team}">${esc(locked.name)} · ${esc(teamName(locked.team))}</span><div class="bigtimer ${remainingAnswer() <= 5 ? "danger" : ""}">${Math.ceil(remainingAnswer())}</div></div>`;
+    const sa = S.spokenAnswer && locked.deviceId !== "dd" ? S.spokenAnswer : null;
+    const heard = sa && sa.text ? `<div class="boardheard">🎤 “${esc(sa.text)}”</div>` : "";
+    status = `<div class="answering"><span class="chip ${locked.team}">${esc(locked.name)} · ${esc(teamName(locked.team))}</span><div class="bigtimer ${remainingAnswer() <= 5 ? "danger" : ""}">${Math.ceil(remainingAnswer())}</div>${heard}</div>`;
   } else if (S.buzzOpen) {
     status = `<div class="buzzopen">🔔 BUZZERS OPEN 🔔</div>`;
   } else {
@@ -345,11 +372,23 @@ function renderCheat() {
       const idx = q.correctIndex;
       correctLine = `<div class="cheatmcq">Correct: <strong>${idx >= 0 ? "ABCD"[idx] + ". " + esc(q.choices[idx]) : "—"}</strong></div>`;
     }
+    // Live spoken answer + whether it seems to match (host's private hint).
+    let heardLine = "";
+    if (!f && q.type !== "mcq" && S.lockedBuzzer && S.lockedBuzzer.deviceId !== "dd") {
+      const sa = S.spokenAnswer;
+      if (sa && sa.text) {
+        const match = Speech.answerMatches(sa.text, q.answer);
+        heardLine = `<div class="cheatheard ${match ? "match" : "nomatch"}">🎤 “${esc(sa.text)}” ${match ? "— ✅ sounds right" : "— ❓ not a clear match"}</div>`;
+      } else if (!S.resolved) {
+        heardLine = `<div class="cheatheard dim">🎤 waiting for them to speak…</div>`;
+      }
+    }
     inner = `
       <div class="cheatcat">${f ? "FINAL · " : ""}${esc(q.category)}${q.isFinal ? "" : " · " + q.points}${q.dailyDouble ? " · ⭐DD" : ""}</div>
       <div class="cheatq">${esc(q.question)}</div>
       <div class="cheatans">✅ ${esc(q.answer) || "(no answer typed)"}</div>
-      ${correctLine}`;
+      ${correctLine}
+      ${heardLine}`;
   }
   app().innerHTML = `
     <div class="screen cheat">
@@ -472,12 +511,13 @@ function adminClue(q) {
         <div class="bigtimer ${rem <= 5 ? "danger" : ""}">${Math.ceil(rem)}s ${expired ? "— TIME!" : ""}</div>
         ${(q.type === "mcq" && !S.dailyDouble)
           ? `<div class="dim">🖥 Multiple choice — ${esc(locked.name)} taps a choice on their device and it's scored automatically.${expired ? " ⏰ Timed out — auto-scoring as wrong…" : ""}</div>`
-          : `<div class="judge">
+          : `${transcriptLine(locked, expired)}
+             <div class="judge">
                <button class="btn green" data-action="score" data-res="correct">✅ Correct (+${value})</button>
                <button class="btn danger" data-action="score" data-res="wrong">❌ Wrong (−${value})</button>
                <button class="btn" data-action="score" data-res="none">😐 No penalty / skip</button>
              </div>
-             ${expired ? `<div class="timeoutnote">⏰ Time's up! Your call — ❌ to dock ${value}, or 😐 for no penalty.</div>` : ""}`}
+             ${expired ? `<div class="timeoutnote">⏰ Time's up! Your call — ❌ to dock ${value}, or 😐 for no penalty. ${S.spokenAnswer && S.spokenAnswer.text ? "(They did answer — see transcript above.)" : "(No spoken answer was detected.)"}</div>` : ""}`}
       </div>`;
   }
 
@@ -574,6 +614,15 @@ function scoreBar(big) {
     <div class="teamscore team2"><span class="tn">${esc(teamName("team2"))}</span><span class="pts">${s.team2 || 0}</span></div>
   </div>`;
 }
+function transcriptLine(locked, expired) {
+  if (!locked || locked.deviceId === "dd") return ""; // Daily Double has no answering device
+  const sa = S.spokenAnswer;
+  if (sa && sa.text) {
+    const at = typeof sa.at === "number" ? ` <span class="dim">(@${sa.at.toFixed(1)}s)</span>` : "";
+    return `<div class="transcript">🎤 Heard: “${esc(sa.text)}”${at}</div>`;
+  }
+  return `<div class="transcript dim">🎤 ${expired ? "No spoken answer detected." : "Listening on their device…"}</div>`;
+}
 function loading() {
   if (firestoreError) {
     return `<div class="screen center"><div class="snowcard"><h1 class="title">🎄</h1>
@@ -614,6 +663,13 @@ document.addEventListener("click", async (e) => {
     go("play");
     return;
   }
+  if (a === "enable-mic") {
+    t.textContent = "Requesting…";
+    const ok = await Speech.requestMicPermission();
+    render();
+    if (!ok) alert("Microphone was blocked. You can still play — just answer out loud when it's your turn. (To enable later, allow mic access in your browser's site settings and tap again.)");
+    return;
+  }
   if (a === "code-login") {
     const v = document.getElementById("code-in").value.trim();
     if (v === ADMIN_CODE) {
@@ -650,7 +706,7 @@ document.addEventListener("click", async (e) => {
       // Wrong: dock, block this team, free the buzzer so the host can offer the other team.
       const blocked = Array.from(new Set([...(S.blockedTeams || []), team]));
       await D.patchState({
-        mcqSelection: null, revealAnswer: false, resolved: false,
+        mcqSelection: null, spokenAnswer: null, revealAnswer: false, resolved: false,
         blockedTeams: blocked, lockedBuzzer: null, lockedAt: null, buzzOpen: false,
       });
     }
@@ -662,8 +718,8 @@ document.addEventListener("click", async (e) => {
     await D.patchState({
       currentQuestionId: t.dataset.id, phase: "question", buzzOpen: false,
       buzzRound: (S.buzzRound || 0) + 1, lockedBuzzer: null, lockedAt: null,
-      blockedTeams: [], revealAnswer: false, mcqSelection: null, resolved: false,
-      dailyDouble: null,
+      blockedTeams: [], revealAnswer: false, mcqSelection: null, spokenAnswer: null,
+      resolved: false, dailyDouble: null,
     });
     await D.clearBuzzes();
     return;
@@ -671,7 +727,7 @@ document.addEventListener("click", async (e) => {
   if (a === "open-buzzers") {
     await D.patchState({
       buzzOpen: true, buzzRound: (S.buzzRound || 0) + 1, lockedBuzzer: null,
-      lockedAt: null, mcqSelection: null,
+      lockedAt: null, mcqSelection: null, spokenAnswer: null,
     });
     await D.clearBuzzes();
     return;
@@ -709,7 +765,7 @@ document.addEventListener("click", async (e) => {
       const blocked = Array.from(new Set([...(S.blockedTeams || []), team]));
       await D.patchState({
         blockedTeams: blocked, lockedBuzzer: null, lockedAt: null,
-        buzzOpen: false, resolved: false, mcqSelection: null,
+        buzzOpen: false, resolved: false, mcqSelection: null, spokenAnswer: null,
       });
     }
     return;
@@ -721,7 +777,7 @@ document.addEventListener("click", async (e) => {
     await D.patchState({
       phase: "lobby", currentQuestionId: null, buzzOpen: false, lockedBuzzer: null,
       lockedAt: null, blockedTeams: [], revealAnswer: false, mcqSelection: null,
-      resolved: false, dailyDouble: null,
+      spokenAnswer: null, resolved: false, dailyDouble: null,
     });
     return;
   }
@@ -854,8 +910,52 @@ function adminAutoEffects() {
     const blocked = Array.from(new Set([...(S.blockedTeams || []), team]));
     D.addScore(team, -q.points);
     D.patchState({
-      mcqSelection: null, resolved: false, blockedTeams: blocked,
+      mcqSelection: null, spokenAnswer: null, resolved: false, blockedTeams: blocked,
       lockedBuzzer: null, lockedAt: null, buzzOpen: false,
+    });
+  }
+}
+
+// ---- Player speech capture (only on the answering player's device) ----
+let listenKey = null;
+let lastTranscriptWrite = 0;
+let lastListenAttempt = 0;
+
+function playerSpeechEffect() {
+  const id = D.getLocalIdentity();
+  if (route() !== "play" || !id || !S) { if (listenKey) { Speech.stopListening(); listenKey = null; } return; }
+  const q = qById(S.currentQuestionId);
+  const mine = S.lockedBuzzer && S.lockedBuzzer.deviceId === D.deviceId();
+  const shouldListen =
+    mine && q && q.type !== "mcq" && !S.resolved &&
+    remainingAnswer() > 0 && Speech.micSupported() && Speech.micEnabled() && !Speech.speechDenied();
+
+  if (!shouldListen) {
+    if (listenKey) { Speech.stopListening(); listenKey = null; }
+    return;
+  }
+
+  const key = S.buzzRound + ":" + S.currentQuestionId;
+  if (listenKey !== key) { listenKey = key; lastTranscriptWrite = 0; }
+
+  if (!Speech.isListening() && Date.now() - lastListenAttempt > 900) {
+    lastListenAttempt = Date.now();
+    Speech.startListening({
+      onTranscript: (text) => {
+        const now = Date.now();
+        if (now - lastTranscriptWrite < 400) return;
+        lastTranscriptWrite = now;
+        const at = S.lockedAt ? (now - S.lockedAt) / 1000 : 0;
+        D.patchState({ spokenAnswer: { deviceId: D.deviceId(), name: id.name, team: id.team, text, at, final: false } })
+          .catch(() => {});
+      },
+      onEnd: (finalText) => {
+        if (!finalText) return;
+        const at = S.lockedAt ? (Date.now() - S.lockedAt) / 1000 : 0;
+        D.patchState({ spokenAnswer: { deviceId: D.deviceId(), name: id.name, team: id.team, text: finalText, at, final: true } })
+          .catch(() => {});
+      },
+      onError: () => {},
     });
   }
 }
@@ -865,9 +965,12 @@ setInterval(() => {
   const r = route();
   if (["board", "play", "admin", "cheat"].includes(r)) {
     adminAutoEffects();
+    if (r === "play") playerSpeechEffect();
     // Only re-render the timer-bearing views to avoid clobbering inputs on admin.
     if (r === "board" || r === "play" || r === "cheat") render();
     else updateAdminTimers();
+  } else if (listenKey) {
+    Speech.stopListening(); listenKey = null;
   }
 }, 300);
 

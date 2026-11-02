@@ -163,6 +163,21 @@ body {
 .buzzer:active { transform: translateY(10px); box-shadow: 0 2px 0 var(--red-dark); }
 @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
 
+/* Microphone + speech */
+.micbar { border-radius: 12px; padding: 12px 14px; margin: 0 auto 14px; max-width: 640px; font-size: 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.micbar.on { background: rgba(26,163,90,.2); border: 1px solid var(--green); }
+.micbar.off { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.15); opacity: .85; }
+.micbar.prompt { background: rgba(244,196,48,.16); border: 1px solid var(--gold); }
+.micbar .btn { margin: 0; }
+.listening { text-align: center; font-size: 18px; color: #7CFC00; margin: 10px 0 4px; }
+.pulse-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #ff3b3b; margin: 0 4px; animation: pulse .8s infinite; }
+.heard { text-align: center; font-size: 20px; background: rgba(0,0,0,.3); border-radius: 12px; padding: 12px; margin: 6px 0; min-height: 24px; }
+.transcript { background: rgba(0,0,0,.28); border-radius: 10px; padding: 10px 12px; margin: 0 0 10px; font-size: 17px; }
+.boardheard { font-size: clamp(18px, 3vw, 30px); color: var(--gold-soft); margin-top: 10px; font-style: italic; }
+.cheatheard { margin-top: 14px; font-size: 20px; border-radius: 12px; padding: 12px; }
+.cheatheard.match { background: rgba(26,163,90,.3); border: 2px solid #7CFC00; }
+.cheatheard.nomatch { background: rgba(193,18,31,.25); border: 1px solid var(--red); }
+
 .mcq { display: grid; gap: 10px; margin: 14px 0; }
 .mcqbtn { padding: 16px; border-radius: 12px; border: 2px solid var(--gold); background: rgba(6,12,233,.85); color: #fff; font-size: 17px; font-family: inherit; cursor: pointer; text-align: left; }
 .mcqbtn b { color: var(--gold); margin-right: 8px; }

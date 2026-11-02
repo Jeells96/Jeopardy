@@ -93,10 +93,23 @@ watch each deploy under the repo's **Actions** tab.
 3. The **first buzz wins** — decided on Firebase's server (a transaction), so it's accurate
    even with 50 phones hammering it at once. The buzz order is listed on the board.
 4. The buzzed-in player gets a **countdown** (length set in the Answer-timer box):
-   - **Spoken:** you tap ✅ Correct / ❌ Wrong / 😐 No penalty. If the timer runs out you
-     decide whether to dock points.
+   - **Spoken:** their phone's **microphone listens automatically** and shows the host the
+     live transcript of what they said (and whether they answered in time). You still tap
+     ✅ Correct / ❌ Wrong / 😐 No penalty — the **Cheat Sheet** shows a "sounds right / no
+     match" hint to help you decide. If the timer runs out you decide whether to dock points.
    - **Multiple choice:** the player taps a choice and it's **scored automatically**
      (right = +value, wrong = −value); a timeout auto-scores as wrong.
+
+### 🎙️ Microphone / spoken answers
+- On the player screen there's an **Enable microphone** button — have everyone tap it
+  **before the game starts** so answers are captured instantly with no mid-game prompt.
+- When a player is the one answering a *spoken* clue, their mic starts listening on its own
+  and streams a transcript to your control panel, the projector, and the Cheat Sheet.
+- **Browser support:** speech-to-text works on **Chrome, Edge, and Android Chrome**. On
+  iPhones/Safari and Firefox it may not transcribe — those players simply answer out loud
+  and you judge as normal (the game never blocks on the mic). It needs the HTTPS site
+  (GitHub Pages is fine) and an internet connection.
+- The host always makes the final call — speech recognition is a helper, not the judge.
 5. If the first team misses a spoken clue, tap **↪ Open to [other team]** to pass it.
 6. **Reveal answer** on the board if you like, then **✓ Done** to close the clue.
 

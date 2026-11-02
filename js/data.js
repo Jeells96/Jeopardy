@@ -43,6 +43,7 @@ export const DEFAULT_STATE = {
   blockedTeams: [], // teams that already answered (wrong) this question
   revealAnswer: false,
   mcqSelection: null, // {index, correct}
+  spokenAnswer: null, // {deviceId, name, team, text, at, final} — live speech-to-text
   resolved: false, // current question has been scored / closed
   scores: { team1: 0, team2: 0 },
   teamNames: { team1: "Team 1", team2: "Team 2" },
@@ -147,6 +148,7 @@ export async function buzz(me, round, answerSeconds) {
       lockedAt: Date.now(),
       phase: "answering",
       mcqSelection: null,
+      spokenAnswer: null,
       "settings.answerSeconds": answerSeconds,
     });
     return { won: true };
