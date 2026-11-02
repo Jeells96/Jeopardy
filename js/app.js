@@ -797,10 +797,11 @@ document.addEventListener("change", async (e) => {
     msg.textContent = "Reading…";
     try {
       const buf = await file.arrayBuffer();
-      const { rows, error, finalCount } = parseWorkbook(buf);
+      const { rows, error, finalCount, categories } = parseWorkbook(buf);
       if (error) { msg.textContent = "⚠️ " + error; return; }
       await D.replaceAllQuestions(rows);
-      msg.textContent = `✅ Imported ${rows.length} clues${finalCount ? " (incl. Final Jeopardy)" : " — ⚠️ no Final row flagged"}.`;
+      const nCat = (categories || []).filter((c) => !/^final(\s*jeopardy)?$/i.test(c)).length;
+      msg.textContent = `✅ Imported ${rows.length} clues across ${nCat} categor${nCat === 1 ? "y" : "ies"}${finalCount ? " (incl. Final Jeopardy)" : ' — ⚠️ no "Final Jeopardy" tab found'}.`;
     } catch (err) { msg.textContent = "⚠️ " + err.message; }
     t.value = "";
     return;

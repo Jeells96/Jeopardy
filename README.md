@@ -77,10 +77,14 @@ watch each deploy under the repo's **Actions** tab.
 ### Load your questions
 1. In Jaren's View → **🛠 Questions & Players → ⬇ Download XLSX template**
    (or grab [`christmas-jeopardy-template.xlsx`](./christmas-jeopardy-template.xlsx) from this repo).
-2. Fill it in (see the template's own notes). Columns:
-   `Category · Points · Question · Answer · Type · Choice A–D · Correct · Daily Double · Final Jeopardy`.
-   - **Type** = `spoken` (you judge out loud) or `mcq` (4 choices, auto-scored).
-   - **Daily Double** = `Yes` to flag a clue. **Final Jeopardy** = `Yes` on exactly one row.
+2. **Each category is its own tab.** The tab's name is the category shown on the board.
+   - **Add a tab** → new category. **Delete a tab** → removes it. **Rename a tab** → renames the category. The board columns follow the tab order.
+   - The tab named **Final Jeopardy** is the Final round (keep the word "Final" in its name; its first row is used).
+   - The **① Read me first** tab is just instructions and is ignored on import.
+   - In each category tab, fill the columns: `Points · Question · Answer · Type · Choice A–D · Correct · Daily Double`.
+     - **Type** = `spoken` (you judge out loud) or `mcq` (4 choices, auto-scored).
+     - **Correct** = the correct letter (A/B/C/D) for `mcq` rows. **Daily Double** = `Yes` to flag a clue.
+   - *(Excel limits tab names to 31 characters and they can't contain `: \ / ? * [ ]`.)*
 3. Back in Jaren's View → **⬆ Import questions**. The board loads for everyone instantly.
 
 ### Playing a clue
