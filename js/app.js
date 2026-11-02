@@ -3,6 +3,7 @@ import * as D from "./data.js";
 import { downloadTemplate, parseWorkbook } from "./xlsx.js";
 import * as Speech from "./speech.js";
 import * as Sounds from "./sounds.js";
+import { OWN, OPP, punText } from "./puns.js";
 
 const ADMIN_CODE = "2325";
 
@@ -211,9 +212,19 @@ function playerQuestion(id, q, myTeam) {
     return clue + `<div class="pstatus big youup">🎤 You're up!</div>${mic}<div class="timerline">⏱ ${fmt(remainingAnswer())}</div>`;
   }
 
-  // Someone else is answering.
+  // Someone else is answering — show this viewer's team-appropriate holiday pun.
   if (locked) {
-    return clue + `<div class="pstatus">🔔 <strong>${esc(locked.name)}</strong> (${esc(teamName(locked.team))}) is answering…</div><div class="timerline">⏱ ${fmt(remainingAnswer())}</div>`;
+    const onAnsweringTeam = myTeam === locked.team;
+    const pun = S.pun || {};
+    const line = onAnsweringTeam
+      ? punText(OWN, pun.own, locked.name)
+      : punText(OPP, pun.opp, locked.name);
+    return clue +
+      `<div class="punbox ${onAnsweringTeam ? "ourturn" : "theirturn"}">
+         <div class="punwho">🔔 ${esc(locked.name)} buzzed in${onAnsweringTeam ? " for your team!" : "…"}</div>
+         <div class="punline">${esc(line)}</div>
+       </div>
+       <div class="timerline">⏱ ${fmt(remainingAnswer())}</div>`;
   }
 
   // Buzzers open?

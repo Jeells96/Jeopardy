@@ -1,5 +1,6 @@
 // Data layer: all Firestore reads/writes and the buzzer race logic.
 import { db } from "./firebase.js";
+import { OWN, OPP, pickPunIndex } from "./puns.js";
 import {
   doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc,
   getDocs, writeBatch, query, where, orderBy, runTransaction,
@@ -44,6 +45,7 @@ export const DEFAULT_STATE = {
   revealAnswer: false,
   mcqSelection: null, // {index, correct}
   spokenAnswer: null, // {deviceId, name, team, text, at, final} — live speech-to-text
+  pun: null, // {own, opp} — indices into the holiday pun pools for the current buzz
   sfx: null, // {sound, at} — one-shot sound cue for host/board devices
   resolved: false, // current question has been scored / closed
   scores: { team1: 0, team2: 0 },
@@ -144,12 +146,15 @@ export async function buzz(me, round, answerSeconds) {
     if (!s || !s.buzzOpen || s.buzzRound !== round) return { won: false, reason: "closed" };
     if (s.lockedBuzzer) return { won: false, reason: "taken" };
     if ((s.blockedTeams || []).includes(me.team)) return { won: false, reason: "blocked" };
+    const prev = s.pun || {};
     tx.update(stateRef, {
       lockedBuzzer: me,
       lockedAt: Date.now(),
       phase: "answering",
+      buzzOpen: false, // lock out everyone the instant someone buzzes
       mcqSelection: null,
       spokenAnswer: null,
+      pun: { own: pickPunIndex(OWN.length, prev.own), opp: pickPunIndex(OPP.length, prev.opp) },
       "settings.answerSeconds": answerSeconds,
     });
     return { won: true };
