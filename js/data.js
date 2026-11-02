@@ -44,6 +44,7 @@ export const DEFAULT_STATE = {
   revealAnswer: false,
   mcqSelection: null, // {index, correct}
   spokenAnswer: null, // {deviceId, name, team, text, at, final} — live speech-to-text
+  sfx: null, // {sound, at} — one-shot sound cue for host/board devices
   resolved: false, // current question has been scored / closed
   scores: { team1: 0, team2: 0 },
   teamNames: { team1: "Team 1", team2: "Team 2" },
@@ -175,6 +176,12 @@ export async function clearBuzzes() {
   let n = 0;
   snap.forEach((d) => { batch.delete(d.ref); if (++n >= 450) { batch.commit(); batch = writeBatch(db); n = 0; } });
   if (n > 0) await batch.commit();
+}
+
+// ---- Sound cues ----
+// Sets a one-shot sound event; host/board devices watch `sfx.at` and play it.
+export async function playSfx(sound) {
+  await patchState({ sfx: { sound, at: Date.now() } });
 }
 
 // ---- Scoring ----

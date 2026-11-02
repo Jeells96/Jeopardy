@@ -207,6 +207,7 @@ body {
 .gcell.used { background: rgba(0,0,0,.25); border-color: transparent; color: transparent; }
 .gcell.empty { background: transparent; border: none; }
 
+.soundtoggle { position: absolute; top: 24px; right: 16px; z-index: 6; background: rgba(0,0,0,.35); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; padding: 8px 14px; font-family: inherit; font-size: 15px; cursor: pointer; }
 .emptyboard { text-align: center; font-size: 24px; padding: 60px 20px; }
 .finalrow { text-align: center; margin-top: 18px; }
 

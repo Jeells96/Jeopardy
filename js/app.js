@@ -2,6 +2,7 @@
 import * as D from "./data.js";
 import { downloadTemplate, parseWorkbook } from "./xlsx.js";
 import * as Speech from "./speech.js";
+import * as Sounds from "./sounds.js";
 
 const ADMIN_CODE = "2325";
 
@@ -247,6 +248,7 @@ function renderBoard() {
 
   app().innerHTML = `
     <div class="screen board">
+      <button class="soundtoggle" data-action="toggle-sound">${Sounds.soundEnabled() ? "🔊" : "🔇 Tap for sound"}</button>
       <div class="boardhead">
         <h1 class="btitle">🎄 Christmas Jeopardy 🎅</h1>
         ${scoreBar(true)}
@@ -426,6 +428,7 @@ function renderAdmin() {
           <label>Final timer (s)<input type="number" min="5" class="numin" id="set-final" value="${settings.finalSeconds || 60}" data-action="set-final" /></label>
         </div>
         <div class="adminlinks">
+          <button class="btn ghost" data-action="toggle-sound">${Sounds.soundEnabled() ? "🔊 Sound on" : "🔇 Sound off"}</button>
           <a class="btn ghost" href="#/board" target="_blank" rel="noopener">📺 Board</a>
           <a class="btn ghost" href="#/cheat" target="_blank" rel="noopener">🤫 Cheat Sheet</a>
         </div>
@@ -646,6 +649,12 @@ document.addEventListener("click", async (e) => {
   const a = t.dataset.action;
 
   if (a === "goto") return go(t.dataset.r);
+  if (a === "toggle-sound") {
+    if (Sounds.soundEnabled()) { Sounds.disableSound(); finalPlaying = false; }
+    else { await Sounds.enableSound(); lastSfxAt = (S && S.sfx && S.sfx.at) || Date.now(); }
+    render();
+    return;
+  }
 
   if (a === "pickteam") {
     selectedTeam = t.dataset.t;
@@ -700,6 +709,7 @@ document.addEventListener("click", async (e) => {
     const value = S.dailyDouble ? S.dailyDouble.wager : q.points;
     const team = S.lockedBuzzer.team;
     await D.addScore(team, correct ? value : -value);
+    await D.playSfx(correct ? "correct" : "wrong");
     if (correct) {
       await D.patchState({ mcqSelection: { index: i, correct: true }, resolved: true, revealAnswer: true });
     } else {
@@ -757,6 +767,8 @@ document.addEventListener("click", async (e) => {
     const team = S.lockedBuzzer.team;
     const delta = res === "correct" ? value : res === "wrong" ? -value : 0;
     if (delta) await D.addScore(team, delta);
+    if (res === "correct") await D.playSfx("correct");
+    else if (res === "wrong") await D.playSfx("wrong");
     if (dd || res === "correct") {
       // Daily Double always ends the clue; a correct spoken answer ends it too.
       await D.patchState({ resolved: true, revealAnswer: true });
@@ -916,6 +928,40 @@ function adminAutoEffects() {
   }
 }
 
+// ---- Times-up sound cue (admin is the single writer) ----
+let timesUpGuard = "";
+function maybeTimesUp() {
+  if (route() !== "admin" || !isAdminOk() || !S) return;
+  if (!S.lockedBuzzer || S.resolved) return;
+  const rem = remainingAnswer();
+  if (rem === null || rem > 0) return;
+  const key = S.buzzRound + ":" + S.currentQuestionId;
+  if (timesUpGuard === key) return;
+  timesUpGuard = key;
+  D.playSfx("timesup");
+}
+
+// ---- Sound playback (host + projector devices only) ----
+let lastSfxAt = 0;
+let finalPlaying = false;
+function soundEffects() {
+  const r = route();
+  const canPlay = (r === "admin" && isAdminOk()) || r === "board";
+  if (!canPlay || !S || !Sounds.soundEnabled()) {
+    if (finalPlaying) { Sounds.stopFinal(); finalPlaying = false; }
+    return;
+  }
+  // One-shot cues (correct / wrong / times-up).
+  if (S.sfx && S.sfx.at && S.sfx.at > lastSfxAt) {
+    lastSfxAt = S.sfx.at;
+    Sounds.playOneShot(S.sfx.sound);
+  }
+  // Final Jeopardy music loops while the final clue is live.
+  const inFinalQ = S.final && S.final.active && S.final.stage === "question";
+  if (inFinalQ && !finalPlaying) { Sounds.startFinal(); finalPlaying = true; }
+  else if (!inFinalQ && finalPlaying) { Sounds.stopFinal(); finalPlaying = false; }
+}
+
 // ---- Player speech capture (only on the answering player's device) ----
 let listenKey = null;
 let lastTranscriptWrite = 0;
@@ -964,13 +1010,16 @@ function playerSpeechEffect() {
 setInterval(() => {
   const r = route();
   if (["board", "play", "admin", "cheat"].includes(r)) {
+    maybeTimesUp();
     adminAutoEffects();
+    soundEffects();
     if (r === "play") playerSpeechEffect();
     // Only re-render the timer-bearing views to avoid clobbering inputs on admin.
     if (r === "board" || r === "play" || r === "cheat") render();
     else updateAdminTimers();
-  } else if (listenKey) {
-    Speech.stopListening(); listenKey = null;
+  } else {
+    if (listenKey) { Speech.stopListening(); listenKey = null; }
+    if (finalPlaying) { Sounds.stopFinal(); finalPlaying = false; }
   }
 }, 300);
 
@@ -1008,6 +1057,10 @@ function onSnapErr(e) {
 }
 
 async function boot() {
+  Sounds.initFromPref();
+  // Unlock audio on the first user gesture (browser autoplay policy).
+  const unlock = () => { Sounds.resume(); };
+  window.addEventListener("pointerdown", unlock, { once: false });
   render(); // show the UI immediately, before any network call
   D.subscribeState((s) => {
     S = s;
