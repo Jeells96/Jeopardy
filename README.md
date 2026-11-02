@@ -77,14 +77,19 @@ watch each deploy under the repo's **Actions** tab.
 ### Load your questions
 1. In Jaren's View → **🛠 Questions & Players → ⬇ Download XLSX template**
    (or grab [`christmas-jeopardy-template.xlsx`](./christmas-jeopardy-template.xlsx) from this repo).
-2. **Each category is its own tab.** The tab's name is the category shown on the board.
-   - **Add a tab** → new category. **Delete a tab** → removes it. **Rename a tab** → renames the category. The board columns follow the tab order.
-   - The tab named **Final Jeopardy** is the Final round (keep the word "Final" in its name; its first row is used).
-   - The **① Read me first** tab is just instructions and is ignored on import.
-   - In each category tab, fill the columns: `Points · Question · Answer · Type · Choice A–D · Correct · Daily Double`.
-     - **Type** = `spoken` (you judge out loud) or `mcq` (4 choices, auto-scored).
-     - **Correct** = the correct letter (A/B/C/D) for `mcq` rows. **Daily Double** = `Yes` to flag a clue.
-   - *(Excel limits tab names to 31 characters and they can't contain `: \ / ? * [ ]`.)*
+2. **Each category is its own tab** (phone-friendly — only 5 columns, and most clues need
+   just 2). The tab's name is the category shown on the board.
+   - **Add a tab** → new category. **Delete a tab** → removes it. **Rename a tab** → renames the category. Board columns follow tab order.
+   - Columns: `Points · Question · Answer · Other choices · Daily Double`.
+     - **Spoken clue:** just fill **Question** + **Answer**.
+     - **Points:** leave blank to auto-number 100/200/300…, or type your own.
+     - **Multiple choice:** also put the *wrong* options in **Other choices**, separated by
+       `;` (e.g. `Elf; The Grinch; Klaus`). The app adds your Answer as the correct option
+       and shuffles them. Blank = spoken.
+     - **Daily Double:** pick **Yes** (there's a dropdown).
+   - The tab named **Final Jeopardy** is the Final round (keep the word "Final"; first row is used).
+   - The **① Read me first** tab is instructions and is ignored on import.
+   - *(Older templates with the long `Type / Choice A–D / Correct` layout still import fine.)*
 3. Back in Jaren's View → **⬆ Import questions**. The board loads for everyone instantly.
 
 ### Playing a clue

@@ -1,94 +1,94 @@
 // Spreadsheet template download + import. Uses global `XLSX` (SheetJS, loaded via CDN).
 //
-// NEW layout: each CATEGORY is its own tab (sheet). The tab's name is the category
-// shown on the board. Add a tab = new category; delete a tab = remove it. A tab named
-// "Final Jeopardy" (or just "Final") holds the Final Jeopardy clue.
+// Phone-friendly layout: each CATEGORY is its own tab, and each tab has just a few columns:
+//   Points | Question | Answer | Other choices | Daily Double
+// - Spoken clue: fill Question + Answer (Points optional — blank auto-numbers 100,200,…).
+// - Multiple choice: also put the WRONG options in "Other choices", separated by ";".
+//   The app treats Answer as the correct option and shuffles them together.
+// A tab named "Final Jeopardy" holds the final clue.
 
-// Per-category sheet columns (no "Category" column — the tab name is the category):
-export const COLUMNS = [
-  "Points", "Question", "Answer", "Type",
-  "Choice A", "Choice B", "Choice C", "Choice D", "Correct", "Daily Double",
-];
-const COL_WIDTHS = [8, 38, 24, 10, 15, 15, 15, 15, 9, 12];
+export const COLUMNS = ["Points", "Question", "Answer", "Other choices", "Daily Double"];
+const COL_WIDTHS = [8, 34, 24, 30, 13];
 
-// Example content, grouped by category (tab name -> rows). A full 6x5 board + Final.
+// Example content per category: [Points, Question, Answer, Other choices, Daily Double]
 const EXAMPLE = {
   "Christmas Movies": [
-    [100, "This 1990 film features Kevin McCallister defending his home from burglars.", "Home Alone", "spoken", "", "", "", "", "", ""],
-    [200, "In which film does a boy ride a magical train to the North Pole?", "The Polar Express", "mcq", "Elf", "The Polar Express", "The Grinch", "Klaus", "B", ""],
-    [300, "In 'Elf', what are Buddy's four main food groups?", "Candy, candy canes, candy corn, and syrup", "spoken", "", "", "", "", "", ""],
-    [400, "Which actor plays Clark Griswold in 'National Lampoon's Christmas Vacation'?", "Chevy Chase", "mcq", "Chevy Chase", "Bill Murray", "Tim Allen", "Steve Martin", "A", "Yes"],
-    [500, "In 'It's a Wonderful Life', what happens every time a bell rings?", "An angel gets its wings", "spoken", "", "", "", "", "", ""],
+    [100, "This 1990 film features Kevin McCallister defending his home from burglars.", "Home Alone", "", ""],
+    [200, "In which film does a boy ride a magical train to the North Pole?", "The Polar Express", "Elf; The Grinch; Klaus", ""],
+    [300, "In 'Elf', what are Buddy's four main food groups?", "Candy, candy canes, candy corn, and syrup", "", ""],
+    [400, "Which actor plays Clark Griswold in 'National Lampoon's Christmas Vacation'?", "Chevy Chase", "Bill Murray; Tim Allen; Steve Martin", "Yes"],
+    [500, "In 'It's a Wonderful Life', what happens every time a bell rings?", "An angel gets its wings", "", ""],
   ],
   "Holiday Songs": [
-    [100, "'Chestnuts roasting on an open fire' opens which classic song?", "The Christmas Song", "spoken", "", "", "", "", "", ""],
-    [200, "Which reindeer had a very shiny nose?", "Rudolph", "mcq", "Dasher", "Rudolph", "Comet", "Blitzen", "B", ""],
-    [300, "In 'The Twelve Days of Christmas', what is given on the fifth day?", "Five gold rings", "spoken", "", "", "", "", "", ""],
-    [400, "Mariah Carey's holiday smash begins 'I don't want a lot for ___'.", "Christmas", "mcq", "Christmas", "presents", "money", "snow", "A", ""],
-    [500, "Which 1984 charity single asks 'Do They Know It's Christmas?'", "Band Aid", "spoken", "", "", "", "", "", ""],
+    [100, "'Chestnuts roasting on an open fire' opens which classic song?", "The Christmas Song", "", ""],
+    [200, "Which reindeer had a very shiny nose?", "Rudolph", "Dasher; Comet; Blitzen", ""],
+    [300, "In 'The Twelve Days of Christmas', what is given on the fifth day?", "Five gold rings", "", ""],
+    [400, "Mariah Carey's holiday hit begins 'I don't want a lot for ___'.", "Christmas", "presents; money; snow", ""],
+    [500, "Which 1984 charity single asks 'Do They Know It's Christmas?'", "Band Aid", "", ""],
   ],
   "Santa & Reindeer": [
-    [100, "What do children traditionally leave out for Santa on Christmas Eve?", "Cookies and milk", "spoken", "", "", "", "", "", ""],
-    [200, "How does Santa typically enter a house?", "The chimney", "mcq", "The window", "The chimney", "The front door", "The garage", "B", ""],
-    [300, "What is the name of Santa's wife?", "Mrs. Claus", "spoken", "", "", "", "", "", ""],
-    [400, "According to the song, Rudolph's nose did what?", "Glowed", "mcq", "Glowed", "Sang", "Whistled", "Sneezed", "A", "Yes"],
-    [500, "Name any three of Santa's eight reindeer (besides Rudolph).", "Dasher, Dancer, Prancer, Vixen, Comet, Cupid, Donner, Blitzen", "spoken", "", "", "", "", "", ""],
+    [100, "What do children traditionally leave out for Santa on Christmas Eve?", "Cookies and milk", "", ""],
+    [200, "How does Santa typically enter a house?", "The chimney", "The window; The front door; The garage", ""],
+    [300, "What is the name of Santa's wife?", "Mrs. Claus", "", ""],
+    [400, "According to the song, Rudolph's nose did what?", "Glowed", "Sang; Whistled; Sneezed", "Yes"],
+    [500, "Name any three of Santa's eight reindeer (besides Rudolph).", "Dasher, Dancer, Prancer, Vixen, Comet, Cupid, Donner, Blitzen", "", ""],
   ],
   "Around the World": [
-    [100, "In which country did the Christmas tree tradition originate?", "Germany", "mcq", "France", "Germany", "Italy", "Spain", "B", ""],
-    [200, "In Mexico, what are the Christmas processions reenacting Mary and Joseph's search for lodging called?", "Las Posadas", "spoken", "", "", "", "", "", ""],
-    [300, "In which country does 'La Befana', a kindly witch, bring gifts?", "Italy", "mcq", "Italy", "Greece", "Russia", "Poland", "A", ""],
-    [400, "In Japan, which fast-food meal has become a popular Christmas tradition?", "KFC (fried chicken)", "spoken", "", "", "", "", "", ""],
-    [500, "In Sweden, the Christmas season includes a festival of light honoring which saint?", "St. Lucia", "mcq", "St. Nicholas", "St. Lucia", "St. Stephen", "St. Olaf", "B", ""],
+    [100, "In which country did the Christmas tree tradition originate?", "Germany", "France; Italy; Spain", ""],
+    [200, "In Mexico, what are the Christmas processions reenacting Mary and Joseph's search for lodging called?", "Las Posadas", "", ""],
+    [300, "In which country does 'La Befana', a kindly witch, bring gifts?", "Italy", "Greece; Russia; Poland", ""],
+    [400, "In Japan, which fast-food meal has become a popular Christmas tradition?", "KFC (fried chicken)", "", ""],
+    [500, "In Sweden, the Christmas season includes a festival of light honoring which saint?", "St. Lucia", "St. Nicholas; St. Stephen; St. Olaf", ""],
   ],
   "Festive Food & Drink": [
-    [100, "What creamy, spiced drink is a Christmas favorite, often spiked with rum?", "Eggnog", "spoken", "", "", "", "", "", ""],
-    [200, "What fruit is traditionally placed in a Christmas stocking?", "An orange", "mcq", "Apple", "Orange", "Banana", "Grape", "B", ""],
-    [300, "What green plant, often hung in doorways, invites a Christmas kiss?", "Mistletoe", "spoken", "", "", "", "", "", ""],
-    [400, "A traditional British Christmas dessert set alight with brandy is called what?", "Christmas pudding", "mcq", "Trifle", "Christmas pudding", "Mince pie", "Yule log", "B", ""],
-    [500, "What candy is traditionally shaped like a shepherd's crook with red and white stripes?", "Candy cane", "spoken", "", "", "", "", "", ""],
+    [100, "What creamy, spiced drink is a Christmas favorite, often spiked with rum?", "Eggnog", "", ""],
+    [200, "What fruit is traditionally placed in a Christmas stocking?", "An orange", "An apple; A banana; A grape", ""],
+    [300, "What green plant, often hung in doorways, invites a Christmas kiss?", "Mistletoe", "", ""],
+    [400, "A traditional British Christmas dessert set alight with brandy is called what?", "Christmas pudding", "Trifle; Mince pie; Yule log", ""],
+    [500, "What candy is traditionally shaped like a shepherd's crook with red and white stripes?", "Candy cane", "", ""],
   ],
   "Books & TV": [
-    [100, "Who wrote 'A Christmas Carol'?", "Charles Dickens", "spoken", "", "", "", "", "", ""],
-    [200, "What is the name of Scrooge's deceased business partner?", "Jacob Marley", "mcq", "Jacob Marley", "Bob Cratchit", "Tiny Tim", "Fezziwig", "A", ""],
-    [300, "In 'How the Grinch Stole Christmas', what is the name of the Grinch's dog?", "Max", "spoken", "", "", "", "", "", ""],
-    [400, "'Frosty the Snowman' came to life thanks to what?", "A magic hat", "mcq", "A magic hat", "A wish", "A snowball", "A star", "A", ""],
-    [500, "In 'A Charlie Brown Christmas', what kind of tree does Charlie Brown pick out?", "A small, scrawny tree", "spoken", "", "", "", "", "", ""],
+    [100, "Who wrote 'A Christmas Carol'?", "Charles Dickens", "", ""],
+    [200, "What is the name of Scrooge's deceased business partner?", "Jacob Marley", "Bob Cratchit; Tiny Tim; Fezziwig", ""],
+    [300, "In 'How the Grinch Stole Christmas', what is the name of the Grinch's dog?", "Max", "", ""],
+    [400, "'Frosty the Snowman' came to life thanks to what?", "A magic hat", "A wish; A snowball; A star", ""],
+    [500, "In 'A Charlie Brown Christmas', what kind of tree does Charlie Brown pick out?", "A small, scrawny tree", "", ""],
   ],
   "Final Jeopardy": [
-    ["", "This poem beginning 'Twas the night before Christmas' is formally titled this.", "A Visit from St. Nicholas", "spoken", "", "", "", "", "", ""],
+    ["", "This poem beginning 'Twas the night before Christmas' is formally titled this.", "A Visit from St. Nicholas", "", ""],
   ],
 };
 
 const INSTRUCTIONS = [
-  ["🎄 Christmas Jeopardy — question template"],
+  ["🎄 Christmas Jeopardy — question template (easy on your phone!)"],
   [],
-  ["HOW THIS WORKS:"],
-  ["• Each CATEGORY is its own tab (sheet) at the bottom. The tab name is the category shown on the board."],
-  ["• Add a tab to add a category. Delete a tab to remove it. Rename a tab to rename the category."],
-  ["• Tab names are limited by Excel to 31 characters and can't contain : \\ / ? * [ ]"],
-  ["• The tab named 'Final Jeopardy' is the Final round (its first row is used). Rename/keep it, but keep the word 'Final'."],
+  ["THE BASICS:"],
+  ["• Each CATEGORY is its own tab at the bottom. The tab name IS the category on the board."],
+  ["• Add a tab = new category. Delete a tab = remove it. Rename a tab = rename the category."],
+  ["• For most clues you only fill TWO things: Question and Answer."],
   [],
-  ["IN EACH CATEGORY TAB, fill the columns:"],
-  ["• Points  — the clue value (100/200/300…). Clues are ordered by Points, then top-to-bottom."],
-  ["• Question / Answer — the clue and its answer."],
-  ["• Type — 'spoken' (you judge out loud) or 'mcq' (multiple choice, auto-scored)."],
-  ["• Choice A–D + Correct — only for 'mcq'. Put the correct letter (A/B/C/D) in Correct."],
-  ["• Daily Double — put 'Yes' to flag that clue as a Daily Double."],
+  ["THE COLUMNS:"],
+  ["• Points — leave blank to auto-number (100, 200, 300…), or type your own value."],
+  ["• Question — the clue."],
+  ["• Answer — the correct answer."],
+  ["• Other choices — ONLY for multiple choice. Type the WRONG options separated by a"],
+  ["      semicolon ;   e.g.   Elf; The Grinch; Klaus"],
+  ["      The app adds your Answer as the correct option and shuffles them. Leave blank = spoken."],
+  ["• Daily Double — pick Yes to make a clue a Daily Double."],
   [],
-  ["Tip: the sample tabs show both spoken and multiple-choice clues plus a Daily Double. Edit or replace them."],
-  ["Blank rows and this tab are ignored on import."],
+  ["FINAL JEOPARDY:"],
+  ["• The tab named 'Final Jeopardy' is the final clue (its first row is used)."],
+  [],
+  ["PHONE TIP: tap a cell and type in the bar at the top. There are only a few columns now,"],
+  ["so there's very little side-scrolling. This notes tab is ignored on import."],
 ];
 
 function sanitizeSheetName(name) {
-  // Excel sheet names: <=31 chars, none of : \ / ? * [ ]
   return String(name).replace(/[:\\/?*\[\]]/g, " ").slice(0, 31).trim() || "Category";
 }
 
 export async function downloadTemplate() {
-  // Prefer the prebuilt, nicely formatted file (wrapped text + tall rows). The free
-  // SheetJS build can't write that styling, so fall back to a plain generated file only
-  // if the prebuilt one can't be fetched (e.g. opened from a file:// path).
+  // Prefer the prebuilt, nicely formatted file (wrapped text, tall rows, dropdowns).
   try {
     const res = await fetch("./christmas-jeopardy-template.xlsx", { cache: "no-store" });
     if (res.ok) {
@@ -103,33 +103,53 @@ export async function downloadTemplate() {
       setTimeout(() => URL.revokeObjectURL(url), 2000);
       return;
     }
-  } catch (e) { /* fall through to generated version */ }
+  } catch (e) { /* fall through */ }
 
   const wb = XLSX.utils.book_new();
   const info = XLSX.utils.aoa_to_sheet(INSTRUCTIONS);
-  info["!cols"] = [{ wch: 95 }];
+  info["!cols"] = [{ wch: 92 }];
   XLSX.utils.book_append_sheet(wb, info, "① Read me first");
   for (const [cat, rows] of Object.entries(EXAMPLE)) {
     const ws = XLSX.utils.aoa_to_sheet([COLUMNS, ...rows]);
     ws["!cols"] = COL_WIDTHS.map((wch) => ({ wch }));
-    ws["!rows"] = [{ hpt: 26 }, ...rows.map(() => ({ hpt: 60 }))];
+    ws["!rows"] = [{ hpt: 26 }, ...rows.map(() => ({ hpt: 64 }))];
     XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(cat));
   }
   XLSX.writeFile(wb, "christmas-jeopardy-template.xlsx");
 }
 
-function letterToIndex(s) {
-  if (s == null) return -1;
-  return "ABCD".indexOf(String(s).trim().toUpperCase()); // -1 when not A/B/C/D
-}
 function truthy(v) {
   return ["yes", "y", "true", "1", "x", "✓"].includes(String(v || "").trim().toLowerCase());
+}
+function letterToIndex(s) {
+  if (s == null) return -1;
+  return "ABCD".indexOf(String(s).trim().toUpperCase());
 }
 function isSkippableTab(name) {
   return /read ?me|instruction|notes|^help$|^info$/i.test(name);
 }
 function isFinalTab(name) {
   return /^final(\s*jeopardy)?$/i.test(String(name).trim());
+}
+function splitChoices(s) {
+  const raw = String(s || "").trim();
+  if (!raw) return [];
+  const parts = /[\n;]/.test(raw) ? raw.split(/[\n;]+/) : raw.split(",");
+  const seen = new Set();
+  const out = [];
+  for (const p of parts) {
+    const v = p.trim();
+    if (v && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); out.push(v); }
+  }
+  return out;
+}
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 // Returns { rows, categories, finalCount, error }
@@ -150,41 +170,74 @@ export function parseWorkbook(arrayBuffer) {
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: "" });
     if (!aoa.length) continue;
 
-    // Find the header row (the one containing "Question").
     const headerIdx = aoa.findIndex((r) =>
       r.some((c) => String(c).trim().toLowerCase() === "question")
     );
-    if (headerIdx < 0) continue; // not a category sheet (e.g. a notes tab)
+    if (headerIdx < 0) continue;
 
     const header = aoa[headerIdx].map((c) => String(c).trim().toLowerCase());
-    const col = (n) => header.indexOf(n);
+    const col = (names) => {
+      for (const n of names) { const i = header.indexOf(n); if (i >= 0) return i; }
+      return -1;
+    };
     const idx = {
-      points: col("points"), question: col("question"), answer: col("answer"), type: col("type"),
-      a: col("choice a"), b: col("choice b"), c: col("choice c"), d: col("choice d"),
-      correct: col("correct"), dd: col("daily double"),
+      points: col(["points", "value"]),
+      question: col(["question", "clue"]),
+      answer: col(["answer", "correct answer"]),
+      other: col(["other choices", "other options", "wrong options", "wrong answers", "choices", "options", "distractors"]),
+      dd: col(["daily double", "dailydouble", "daily-double", "dd"]),
+      type: col(["type"]),
+      a: col(["choice a"]), b: col(["choice b"]), c: col(["choice c"]), d: col(["choice d"]),
+      correct: col(["correct"]),
     };
     const isFinal = isFinalTab(name);
 
+    let autoPoints = 0;
     let countInCat = 0;
     for (let i = headerIdx + 1; i < aoa.length; i++) {
       const r = aoa[i];
       const get = (k) => (idx[k] >= 0 ? r[idx[k]] : "");
       const question = String(get("question") || "").trim();
       if (!question) continue;
+      autoPoints += 100;
 
-      let type = String(get("type") || "spoken").trim().toLowerCase();
-      if (type !== "mcq") type = "spoken";
-      const choices = [get("a"), get("b"), get("c"), get("d")].map((x) => String(x || "").trim());
-      if (type === "mcq" && !choices.some((x) => x)) type = "spoken";
+      const answer = String(get("answer") || "").trim();
+      const typeExplicit = String(get("type") || "").trim().toLowerCase();
+
+      // Build choices: legacy 4-column layout, else the single "Other choices" column.
+      let type = "spoken";
+      let choices = [];
+      let correctIndex = -1;
+      const legacy = [get("a"), get("b"), get("c"), get("d")].map((x) => String(x || "").trim());
+      const hasLegacy = legacy.some((x) => x);
+      const other = splitChoices(get("other"));
+
+      if (typeExplicit !== "spoken") {
+        if (hasLegacy) {
+          choices = legacy.filter((x) => x);
+          correctIndex = letterToIndex(get("correct"));
+          if (correctIndex < 0 && answer) {
+            const ai = choices.findIndex((c) => c.toLowerCase() === answer.toLowerCase());
+            correctIndex = ai >= 0 ? ai : 0;
+          }
+          type = "mcq";
+        } else if (other.length && answer) {
+          const all = shuffle([answer, ...other]).slice(0, 6);
+          choices = all;
+          correctIndex = all.findIndex((c) => c.toLowerCase() === answer.toLowerCase());
+          if (correctIndex < 0) { choices = [answer, ...other]; correctIndex = 0; }
+          type = "mcq";
+        }
+      }
 
       rows.push({
         category: name,
-        points: Number(get("points")) || 0,
+        points: Number(get("points")) || autoPoints,
         question,
-        answer: String(get("answer") || "").trim(),
+        answer,
         type,
         choices: type === "mcq" ? choices : [],
-        correctIndex: type === "mcq" ? letterToIndex(get("correct")) : -1,
+        correctIndex: type === "mcq" ? correctIndex : -1,
         dailyDouble: truthy(get("dd")),
         isFinal,
         order: order++,
