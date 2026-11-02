@@ -616,8 +616,15 @@ document.addEventListener("click", async (e) => {
   }
   if (a === "code-login") {
     const v = document.getElementById("code-in").value.trim();
-    if (v === ADMIN_CODE) { setAdminOk(); go(t.dataset.target); }
-    else document.getElementById("code-err").textContent = "Wrong code. Try again.";
+    if (v === ADMIN_CODE) {
+      setAdminOk();
+      // The gate lives at the same hash we're navigating to, so setting the hash
+      // fires no event — re-render directly (and still sync the hash if different).
+      if ("#/" + t.dataset.target !== location.hash) location.hash = "#/" + t.dataset.target;
+      render();
+    } else {
+      document.getElementById("code-err").textContent = "Wrong code. Try again.";
+    }
     return;
   }
 
