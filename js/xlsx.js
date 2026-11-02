@@ -9,7 +9,7 @@ export const COLUMNS = [
   "Points", "Question", "Answer", "Type",
   "Choice A", "Choice B", "Choice C", "Choice D", "Correct", "Daily Double",
 ];
-const COL_WIDTHS = [7, 55, 28, 9, 16, 16, 16, 16, 9, 13];
+const COL_WIDTHS = [8, 38, 24, 10, 15, 15, 15, 15, 9, 12];
 
 // Example content, grouped by category (tab name -> rows). A full 6x5 board + Final.
 const EXAMPLE = {
@@ -85,17 +85,34 @@ function sanitizeSheetName(name) {
   return String(name).replace(/[:\\/?*\[\]]/g, " ").slice(0, 31).trim() || "Category";
 }
 
-export function downloadTemplate() {
-  const wb = XLSX.utils.book_new();
+export async function downloadTemplate() {
+  // Prefer the prebuilt, nicely formatted file (wrapped text + tall rows). The free
+  // SheetJS build can't write that styling, so fall back to a plain generated file only
+  // if the prebuilt one can't be fetched (e.g. opened from a file:// path).
+  try {
+    const res = await fetch("./christmas-jeopardy-template.xlsx", { cache: "no-store" });
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "christmas-jeopardy-template.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      return;
+    }
+  } catch (e) { /* fall through to generated version */ }
 
+  const wb = XLSX.utils.book_new();
   const info = XLSX.utils.aoa_to_sheet(INSTRUCTIONS);
   info["!cols"] = [{ wch: 95 }];
   XLSX.utils.book_append_sheet(wb, info, "① Read me first");
-
   for (const [cat, rows] of Object.entries(EXAMPLE)) {
     const ws = XLSX.utils.aoa_to_sheet([COLUMNS, ...rows]);
     ws["!cols"] = COL_WIDTHS.map((wch) => ({ wch }));
-    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    ws["!rows"] = [{ hpt: 26 }, ...rows.map(() => ({ hpt: 60 }))];
     XLSX.utils.book_append_sheet(wb, ws, sanitizeSheetName(cat));
   }
   XLSX.writeFile(wb, "christmas-jeopardy-template.xlsx");
