@@ -1,0 +1,294 @@
+// The show-style "stage": board grid, clue card, Daily Double, Final Jeopardy,
+// podiums and lobby. Used by the projector board and the host console.
+import { esc, money, cls } from "./util.js";
+import * as E from "../engine.js";
+
+export const tn = (G, t) => E.teamName(G.S || {}, t);
+export const findQ = (G, id) => G.Q.find((q) => q.id === id) || null;
+export const nowMs = (G) => G.now();
+
+export function roundLabel(S) {
+  if (!S) return "";
+  if (S.phase === "lobby") return "Get ready!";
+  if (S.phase === "final") return "Final Jeopardy!";
+  if (S.phase === "over") return "Final scores";
+  return S.round === 2 ? "Double Jeopardy!" : "Jeopardy! Round";
+}
+
+export function categories(G, round) {
+  const order = [];
+  const map = new Map();
+  for (const q of E.boardClues(G.Q, round)) {
+    if (!map.has(q.category)) { map.set(q.category, []); order.push(q.category); }
+    map.get(q.category).push(q);
+  }
+  return order.map((name) => ({
+    name,
+    clues: map.get(name).sort((a, b) => (a.points - b.points) || (a.order - b.order)),
+  }));
+}
+
+export function joinUrl() {
+  return location.origin + location.pathname.replace(/index\.html$/, "");
+}
+
+// ---------------------------------------------------------------
+export function stage(G, opts = {}) {
+  const S = G.S;
+  return `<div class="stage${opts.host ? " stage--host" : ""}" data-phase="${S.phase}">
+    ${stageTop(G)}
+    <div class="stage-main">${stageMain(G, opts)}</div>
+    ${podiums(G, opts)}
+  </div>`;
+}
+
+function stageTop(G) {
+  const S = G.S;
+  const showCtrl = (S.phase === "board" || S.phase === "clue") && S.control;
+  return `<div class="stage-top">
+    <div class="brand"><span class="brand-xmas">Christmas</span> <span class="brand-j">JEOPARDY!</span></div>
+    <div class="roundtag">${esc(roundLabel(S))}</div>
+    <div class="ctrl-slot">${showCtrl ? `<div class="ctrl ${S.control}">🎁 ${esc(tn(G, S.control))} picks next</div>` : ""}</div>
+  </div>`;
+}
+
+function stageMain(G, opts) {
+  const S = G.S;
+  if (S.phase === "lobby") return lobby(G);
+  if (S.phase === "board") return grid(G, opts);
+  if (S.phase === "clue" && S.clue) return clueCard(G);
+  if (S.phase === "final") return finalView(G);
+  if (S.phase === "over") return overView(G);
+  return grid(G, opts);
+}
+
+// ---------------- lobby ----------------
+function lobby(G) {
+  const url = joinUrl();
+  const pretty = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  return `<div class="lobby">
+    <div class="lobby-join">
+      <div class="lobby-title">Grab your phone &amp; join!</div>
+      <div class="qr" data-keep data-qr="${esc(url)}"></div>
+      <div class="join-url">${esc(pretty)}</div>
+      <ol class="lobby-steps">
+        <li>Scan the code or type the address</li>
+        <li>Enter your name &amp; pick a team</li>
+        <li>Tap <b>Enable microphone</b></li>
+      </ol>
+    </div>
+    <div class="lobby-teams">${E.TEAMS.map((t) => roster(G, t)).join("")}</div>
+  </div>`;
+}
+function roster(G, t) {
+  const ps = G.P.filter((p) => p.team === t);
+  return `<div class="roster ${t}">
+    <div class="roster-head"><span>${esc(tn(G, t))}</span><span class="roster-count">${ps.length}</span></div>
+    <div class="roster-list">${ps.length ? ps.map((p) => `<span class="chip" data-key="p-${esc(p.id)}">${esc(p.name)}</span>`).join("") : `<span class="roster-empty">Waiting for players…</span>`}</div>
+  </div>`;
+}
+
+// ---------------- board grid ----------------
+export function grid(G, opts = {}) {
+  const S = G.S;
+  const cats = categories(G, S.round);
+  if (!cats.length) {
+    return `<div class="empty-board"><div class="empty-ico">🎁</div><div>No questions loaded yet.</div><div class="muted">Host: open ⚙ Settings → Questions to import your spreadsheet.</div></div>`;
+  }
+  const rows = Math.max(...cats.map((c) => c.clues.length));
+  const fill = S.sfx && S.sfx.sound === "fill" && G.now() - S.sfx.at < 3500;
+  let i = 0;
+  let html = `<div class="jgrid${fill ? " filling" : ""}" style="--cols:${cats.length};--rows:${rows}" data-key="grid-${S.gameId}-${S.round}">`;
+  for (const c of cats) html += `<div class="jcat"><span>${esc(c.name)}</span></div>`;
+  for (let r = 0; r < rows; r++) {
+    for (const c of cats) {
+      const q = c.clues[r];
+      const d = ((i++ * 137) % 900) + 80; // pseudo-random fill-in delay
+      if (!q) { html += `<div class="jcell empty"></div>`; continue; }
+      const can = opts.pick && !q.used;
+      html += `<div class="${cls("jcell", q.used && "used", can && "pick")}" style="--d:${d}ms"${can ? ` data-action="pick" data-id="${esc(q.id)}" role="button" tabindex="0"` : ""}>`
+        + (q.used ? "" : `<span class="val">${money(q.points)}</span>${opts.showDD && q.dailyDouble ? `<span class="ddmark">DD</span>` : ""}`)
+        + `</div>`;
+    }
+  }
+  return html + `</div>`;
+}
+
+// ---------------- clue ----------------
+function clueCard(G) {
+  const S = G.S;
+  const c = S.clue;
+  const q = findQ(G, c.id);
+  if (!q) return `<div class="clue"><div class="clue-text">Loading clue…</div></div>`;
+  if (c.stage === "dd") return ddSplash(G, c, q);
+  const value = c.dd ? `Daily Double · ${money(c.dd.wager)}` : money(q.points);
+  return `<div class="clue${c.dd ? " clue--dd" : ""}" data-key="clue-${esc(c.id)}">
+    <div class="clue-head"><span class="clue-cat">${esc(q.category)}</span><span class="clue-val">${esc(value)}</span></div>
+    <div class="clue-body">
+      <div class="clue-text"><span>${esc(q.question)}</span></div>
+      ${q.type === "mcq" ? mcqBoard(c, q) : ""}
+    </div>
+    <div class="clue-foot">${clueStatus(G, c, q)}</div>
+    ${buzzOrder(G, c)}
+  </div>`;
+}
+
+function mcqBoard(c, q) {
+  return `<div class="bmcq">${q.choices.map((ch, i) => {
+    if (!ch) return "";
+    const elim = c.eliminated.includes(i);
+    const right = c.revealed && i === q.correctIndex;
+    const picked = c.mcq && c.mcq.index === i;
+    return `<div class="${cls("bchoice", elim && "elim", right && "right", picked && !right && c.stage === "done" && "wrong")}"><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></div>`;
+  }).join("")}</div>`;
+}
+
+export function timerLights(deadline, totalMs) {
+  return `<div class="lights" data-deadline="${deadline}" data-total="${totalMs}">${"<i></i>".repeat(9)}</div>`;
+}
+
+function clueStatus(G, c, q) {
+  const S = G.S;
+  const set = S.settings || {};
+  if (c.stage === "reading") {
+    const auto = set.readSeconds > 0 ? ` <span class="cd" data-deadline="${c.pickedAt + set.readSeconds * 1000}" data-format="s"></span>` : "";
+    return `<div class="status status--wait">Get ready to buzz…${auto}</div>`;
+  }
+  if (c.stage === "open") {
+    const win = set.buzzWindowSeconds > 0
+      ? timerLights(c.openedAt + set.buzzWindowSeconds * 1000, set.buzzWindowSeconds * 1000) : "";
+    const reb = c.blocked.length ? `<div class="status-sub">${esc(tn(G, E.otherTeam(c.blocked[0])))} can steal it!</div>` : "";
+    return `<div class="status status--open">🔔 BUZZERS OPEN</div>${reb}${win}`;
+  }
+  if (c.stage === "paused") return `<div class="status status--wait">Buzzers paused</div>`;
+  if (c.stage === "answering" && c.locked) {
+    const L = c.locked;
+    const total = (set.answerSeconds || 15) * 1000;
+    const key = E.lockKey(c);
+    const sp = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard">🎤 “${esc(G.spoken.text)}”</div>` : "";
+    const tu = c.timeUp === key ? `<div class="status-sub timeup">⏰ Time's up!</div>` : "";
+    const who = c.dd ? `${esc(tn(G, L.team))}` : `${esc(L.name)} <small>${esc(tn(G, L.team))}</small>`;
+    return `<div class="answerer ${L.team}">${who}</div>${c.timeUp === key ? "" : timerLights(L.at + total, total)}${tu}${sp}`;
+  }
+  if (c.stage === "done") {
+    let banner = "";
+    if (c.result === "correct") {
+      const who = c.dd ? tn(G, c.winner) : (c.locked ? `${c.locked.name}` : tn(G, c.winner));
+      const amt = c.dd ? c.dd.wager : q.points;
+      banner = `<div class="result result--yes">✅ ${esc(who)} — ${esc(tn(G, c.winner))} +${money(amt)}</div>`;
+    } else if (c.result === "wrong") {
+      banner = `<div class="result result--no">❌ ${esc(tn(G, c.dd ? c.dd.team : c.winner || ""))} missed the Daily Double</div>`;
+    } else if (c.result === "nobody") {
+      banner = `<div class="result result--none">Nobody got it!</div>`;
+    } else if (c.result === "skipped") {
+      banner = `<div class="result result--none">Clue skipped</div>`;
+    }
+    const ans = c.revealed ? `<div class="answer-reveal"><span>Answer</span>${esc(q.answer)}</div>` : "";
+    return banner + ans;
+  }
+  return "";
+}
+
+function buzzOrder(G, c) {
+  if (!["answering", "open", "done"].includes(c.stage) || c.dd || !G.B.length) return "";
+  const t0 = tsOf(G.B[0]);
+  return `<div class="buzzorder"><div class="bo-head">Buzz order</div>${G.B.slice(0, 6).map((b, i) => {
+    const dt = i === 0 ? "first!" : `+${((tsOf(b) - t0) / 1000).toFixed(2)}s`;
+    return `<div class="bo-row ${b.team}${i === 0 ? " first" : ""}" data-key="bo-${esc(b.id)}"><span class="bo-n">${i + 1}</span><span class="bo-name">${esc(b.name)}</span><span class="bo-dt">${dt}</span></div>`;
+  }).join("")}</div>`;
+}
+const tsOf = (b) => (b.ts && b.ts.toMillis ? b.ts.toMillis() : b.at || 0);
+
+function ddSplash(G, c, q) {
+  const team = c.dd && c.dd.team;
+  return `<div class="dd" data-key="dd-${esc(c.id)}">
+    <div class="dd-burst"></div>
+    <div class="dd-title"><span>DAILY</span><span>DOUBLE!</span></div>
+    <div class="dd-sub">${esc(q.category)}</div>
+    <div class="dd-team">${team ? `${esc(tn(G, team))} is making a wager…` : "Who found it?"}</div>
+  </div>`;
+}
+
+// ---------------- Final Jeopardy ----------------
+function finalView(G) {
+  const S = G.S;
+  const f = S.final;
+  const fq = E.finalClue(G.Q);
+  const cat = fq ? fq.category : "Final Jeopardy";
+  if (f.stage === "wager") {
+    return `<div class="final final--cat" data-key="final-cat">
+      <div class="final-kicker">Final Jeopardy!</div>
+      <div class="final-cat">${esc(cat)}</div>
+      <div class="final-teams">${E.TEAMS.map((t) => {
+        const st = !f.eligible[t] ? `<span class="fstat out">Sitting out</span>` : f.wagers[t] ? `<span class="fstat ok">Wager locked ✓</span>` : `<span class="fstat wait">Deciding wager…</span>`;
+        return `<div class="fteam ${t}"><span>${esc(tn(G, t))}</span>${st}</div>`;
+      }).join("")}</div>
+    </div>`;
+  }
+  if (f.stage === "clue") {
+    const total = (S.settings.finalSeconds || 30) * 1000;
+    return `<div class="clue final--clue" data-key="final-clue">
+      <div class="clue-head"><span class="clue-cat">${esc(cat)}</span><span class="clue-val">Final Jeopardy!</span></div>
+      <div class="clue-body"><div class="clue-text"><span>${esc(fq ? fq.question : "")}</span></div></div>
+      <div class="clue-foot">
+        <div class="final-clock"><span class="cd" data-deadline="${f.deadline}" data-format="s"></span></div>
+        ${timerLights(f.deadline, total)}
+        <div class="final-teams small">${E.TEAMS.filter((t) => f.eligible[t]).map((t) => `<div class="fteam ${t}"><span>${esc(tn(G, t))}</span>${f.answers[t] && f.answers[t].text ? `<span class="fstat ok">Answer in ✓</span>` : `<span class="fstat wait">Writing…</span>`}</div>`).join("")}</div>
+      </div>
+    </div>`;
+  }
+  // reveal
+  return `<div class="final final--reveal" data-key="final-reveal">
+    <div class="final-kicker">Final Jeopardy! · ${esc(cat)}</div>
+    <div class="reveal-row">${f.order.map((t) => revealPanel(G, t)).join("")}</div>
+    ${f.order.every((t) => !f.eligible[t] || f.results[t]) ? `<div class="answer-reveal big"><span>Correct response</span>${esc(fq ? fq.answer : "")}</div>` : ""}
+  </div>`;
+}
+function revealPanel(G, t) {
+  const f = G.S.final;
+  if (!f.eligible[t]) {
+    return `<div class="rpanel ${t} out"><div class="rp-team">${esc(tn(G, t))}</div><div class="rp-ans muted">Sitting out</div></div>`;
+  }
+  const a = f.answers[t];
+  const w = f.wagers[t];
+  const res = f.results[t];
+  return `<div class="rpanel ${t}${res ? " " + res : ""}" data-key="rp-${t}">
+    <div class="rp-team">${esc(tn(G, t))}</div>
+    <div class="rp-ans">${f.shown[t].answer ? esc(a && a.text ? a.text : "(no answer)") : `<span class="rp-hidden">?</span>`}</div>
+    <div class="rp-wager">${f.shown[t].wager ? `Wager ${money(w ? w.amount : 0)}` : "Wager ???"}</div>
+    ${res ? `<div class="rp-res">${res === "correct" ? "✅ Correct!" : "❌ Wrong"}</div>` : ""}
+  </div>`;
+}
+
+// ---------------- game over ----------------
+function overView(G) {
+  const sc = G.S.scores || {};
+  const tie = sc.team1 === sc.team2;
+  const win = sc.team1 > sc.team2 ? "team1" : "team2";
+  const conf = Array.from({ length: 70 }, (_, i) => {
+    const x = (i * 53) % 100, d = (i * 37) % 30 / 10, s = 6 + (i * 7) % 10, col = ["#ffcf40", "#d7263d", "#139a4b", "#ffffff", "#5ab0ff"][i % 5];
+    return `<i style="left:${x}%;animation-delay:-${d}s;width:${s}px;height:${s * 1.6}px;background:${col}"></i>`;
+  }).join("");
+  return `<div class="over" data-key="over">
+    <div class="confetti" data-keep>${conf}</div>
+    <div class="over-kicker">${tie ? "What a finish!" : "Merry Christmas, champions!"}</div>
+    <div class="over-title">${tie ? "🤝 It's a tie!" : `🏆 ${esc(tn(G, win))} wins!`}</div>
+    <div class="over-scores">${E.TEAMS.map((t) => `<div class="os ${t}${!tie && t === win ? " win" : ""}"><span>${esc(tn(G, t))}</span><b>${money(sc[t])}</b></div>`).join("")}</div>
+  </div>`;
+}
+
+// ---------------- podiums ----------------
+export function podiums(G, opts = {}) {
+  const S = G.S;
+  const answering = S.clue && S.clue.stage === "answering" && S.clue.locked ? S.clue.locked.team : null;
+  return `<div class="podiums">${E.TEAMS.map((t) => {
+    const score = (S.scores && S.scores[t]) || 0;
+    const count = G.P.filter((p) => p.team === t).length;
+    const ctl = (S.phase === "board" || S.phase === "clue") && S.control === t;
+    return `<div class="${cls("podium", t, ctl && "has-control", answering === t && "answering")}">
+      <div class="${cls("pscore", score < 0 && "neg")}"${opts.host ? ` data-action="score-panel" data-team="${t}" title="Adjust score"` : ""}>${money(score)}</div>
+      <div class="pname">${esc(tn(G, t))}</div>
+      <div class="pmeta">${count} player${count === 1 ? "" : "s"}${ctl ? " · 🎁 picks next" : ""}</div>
+    </div>`;
+  }).join("")}</div>`;
+}

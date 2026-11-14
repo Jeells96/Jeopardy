@@ -1,198 +1,175 @@
-// Data layer: all Firestore reads/writes and the buzzer race logic.
+// Data layer: Firestore I/O, clock sync, and running engine actions in transactions.
 import { db } from "./firebase.js";
-import { OWN, OPP, pickPunIndex } from "./puns.js";
+import * as E from "./engine.js";
 import {
-  doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc,
-  getDocs, writeBatch, query, where, orderBy, runTransaction,
-  serverTimestamp, deleteDoc,
+  doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, getDocs, writeBatch,
+  query, where, runTransaction, serverTimestamp, deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ---- Refs ----
 const stateRef = doc(db, "state", "game");
+const spokenRef = doc(db, "state", "spoken");
 const questionsCol = collection(db, "questions");
 const playersCol = collection(db, "players");
 const buzzesCol = collection(db, "buzzes");
 
-// ---- Local identity (saved once per device) ----
+// ---------------- device identity ----------------
+function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function safeSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
+function safeDel(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } }
+
 export function deviceId() {
-  let id = localStorage.getItem("jeop_device_id");
+  let id = safeGet("jeop_device_id");
   if (!id) {
     id = "d_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    localStorage.setItem("jeop_device_id", id);
+    safeSet("jeop_device_id", id);
   }
   return id;
 }
 export function getLocalIdentity() {
-  const raw = localStorage.getItem("jeop_identity");
-  return raw ? JSON.parse(raw) : null;
+  try { return JSON.parse(safeGet("jeop_identity") || "null"); } catch { return null; }
 }
-export function setLocalIdentity(name, team) {
-  localStorage.setItem("jeop_identity", JSON.stringify({ name, team }));
-}
-export function clearLocalIdentity() {
-  localStorage.removeItem("jeop_identity");
-}
+export function setLocalIdentity(name, team) { safeSet("jeop_identity", JSON.stringify({ name, team })); }
+export function clearLocalIdentity() { safeDel("jeop_identity"); }
 
-// ---- Default game state ----
-export const DEFAULT_STATE = {
-  phase: "lobby", // lobby | question | answering | final | done
-  currentQuestionId: null,
-  buzzOpen: false,
-  buzzRound: 0,
-  lockedBuzzer: null, // {deviceId,name,team}
-  lockedAt: null, // ms epoch
-  blockedTeams: [], // teams that already answered (wrong) this question
-  revealAnswer: false,
-  mcqSelection: null, // {index, correct}
-  spokenAnswer: null, // {deviceId, name, team, text, at, final} — live speech-to-text
-  pun: null, // {own, opp} — indices into the holiday pun pools for the current buzz
-  sfx: null, // {sound, at} — one-shot sound cue for host/board devices
-  resolved: false, // current question has been scored / closed
-  scores: { team1: 0, team2: 0 },
-  teamNames: { team1: "Team 1", team2: "Team 2" },
-  settings: { answerSeconds: 30, finalSeconds: 60 },
-  dailyDouble: null, // {team, wager} when an admin sets up a DD
-  final: {
-    active: false,
-    stage: "idle", // idle | wager | question | reveal | done
-    category: "",
-    questionId: null,
-    deadline: null,
-    wagers: {}, // {team1: n, team2: n}
-    results: {}, // {team1: 'correct'|'wrong', team2: ...}
-  },
-};
-
-export async function ensureState() {
-  const snap = await getDoc(stateRef);
-  if (!snap.exists()) {
-    await setDoc(stateRef, DEFAULT_STATE);
+// ---------------- server clock ----------------
+// Every countdown uses serverNow() so all phones, the board and the host agree to within
+// a few tens of milliseconds, regardless of how wrong each device's own clock is.
+let clockOffset = 0;
+export const serverNow = () => Date.now() + clockOffset;
+export async function syncClock() {
+  const ref = doc(db, "state", "clock-" + deviceId());
+  let best = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const t0 = Date.now();
+      await setDoc(ref, { t: serverTimestamp() });
+      const t1 = Date.now();
+      const snap = await getDoc(ref);
+      const t = snap.exists() ? snap.data().t : null;
+      if (t && t.toMillis) {
+        const rtt = t1 - t0;
+        if (!best || rtt < best.rtt) best = { rtt, offset: t.toMillis() - (t0 + t1) / 2 };
+      }
+    } catch { /* offline or rules not set yet */ }
   }
-  return (await getDoc(stateRef)).data();
+  if (best) clockOffset = best.offset;
+  return best;
 }
 
-export function subscribeState(cb, errCb) {
-  return onSnapshot(stateRef, (s) => cb(s.exists() ? s.data() : null), errCb);
+// ---------------- subscriptions ----------------
+let QCACHE = [];
+export const questionsCache = () => QCACHE;
+
+export function subscribeState(cb, err) {
+  return onSnapshot(stateRef, (s) => cb(s.exists() ? s.data({ serverTimestamps: "estimate" }) : null), err);
 }
-export async function patchState(patch) {
-  await setDoc(stateRef, patch, { merge: true });
+export function subscribeSpoken(cb, err) {
+  return onSnapshot(spokenRef, (s) => cb(s.exists() ? s.data() : null), err);
 }
-export async function getState() {
-  const s = await getDoc(stateRef);
-  return s.exists() ? s.data() : null;
+export function subscribeQuestions(cb, err) {
+  return onSnapshot(questionsCol, (snap) => {
+    QCACHE = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order || 0) - (b.order || 0));
+    cb(QCACHE);
+  }, err);
+}
+export function subscribePlayers(cb, err) {
+  return onSnapshot(playersCol, (snap) =>
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0))), err);
+}
+export function subscribeBuzzes(key, cb, err) {
+  const q = query(buzzesCol, where("key", "==", key));
+  return onSnapshot(q, (snap) => {
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const t = (r) => (r.ts && r.ts.toMillis ? r.ts.toMillis() : r.at || Infinity);
+    rows.sort((a, b) => t(a) - t(b));
+    cb(rows);
+  }, err);
 }
 
-// ---- Players ----
+// ---------------- game state ----------------
+export async function ensureState() {
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(stateRef);
+    if (snap.exists() && snap.data().v === 2) return;
+    const old = snap.exists() ? snap.data() : {};
+    tx.set(stateRef, E.defaultState({ teamNames: old.teamNames }));
+  });
+}
+
+export class GameError extends Error {}
+
+// Run an engine action atomically. Returns true if it changed anything.
+export async function act(name, params = {}) {
+  const fn = E.ACTIONS[name];
+  if (!fn) throw new Error("Unknown action " + name);
+  let outcome = null;
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(stateRef);
+    if (!snap.exists()) throw new GameError("The game isn't set up yet — reload the page.");
+    outcome = fn(snap.data(), params, { now: serverNow(), questions: QCACHE, deviceId: deviceId() });
+    if (!outcome || outcome.error) return;
+    if (Object.keys(outcome.set).length) tx.update(stateRef, outcome.set);
+    for (const u of outcome.questions || []) tx.update(doc(questionsCol, u.id), u.data);
+  });
+  if (outcome && outcome.error) throw new GameError(outcome.error);
+  return !!outcome;
+}
+
+// ---------------- players ----------------
 export async function joinGame(name, team) {
   const id = deviceId();
   setLocalIdentity(name, team);
-  await setDoc(doc(playersCol, id), {
-    name, team, joinedAt: Date.now(), deviceId: id,
-  });
+  await setDoc(doc(playersCol, id), { name, team, deviceId: id, joinedAt: serverNow() });
 }
-export function subscribePlayers(cb, errCb) {
-  return onSnapshot(playersCol, (snap) =>
-    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), errCb
-  );
+export async function registerSelf() {
+  const me = getLocalIdentity();
+  if (!me) return;
+  const ref = doc(playersCol, deviceId());
+  const snap = await getDoc(ref);
+  if (!snap.exists()) await setDoc(ref, { name: me.name, team: me.team, deviceId: deviceId(), joinedAt: serverNow() });
 }
-export async function adminUpdatePlayer(id, patch) {
-  await updateDoc(doc(playersCol, id), patch);
-}
-export async function adminRemovePlayer(id) {
-  await deleteDoc(doc(playersCol, id));
+export const updatePlayer = (id, patch) => updateDoc(doc(playersCol, id), patch);
+export const removePlayer = (id) => deleteDoc(doc(playersCol, id));
+export async function clearPlayers() {
+  const snap = await getDocs(playersCol);
+  await commitInChunks(snap.docs.map((d) => (b) => b.delete(d.ref)));
 }
 
-// ---- Questions ----
-export function subscribeQuestions(cb, errCb) {
-  return onSnapshot(questionsCol, (snap) =>
-    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), errCb
-  );
+// ---------------- questions ----------------
+async function commitInChunks(ops) {
+  for (let i = 0; i < ops.length; i += 400) {
+    const b = writeBatch(db);
+    ops.slice(i, i + 400).forEach((op) => op(b));
+    await b.commit();
+  }
 }
 export async function replaceAllQuestions(rows) {
-  // Clear existing, then write new in batches of <=450.
   const existing = await getDocs(questionsCol);
-  let batch = writeBatch(db);
-  let n = 0;
-  const flush = async () => { await batch.commit(); batch = writeBatch(db); n = 0; };
-  existing.forEach((d) => { batch.delete(d.ref); if (++n >= 450) flush(); });
-  if (n > 0) { await batch.commit(); batch = writeBatch(db); n = 0; }
-  for (const r of rows) {
-    const ref = doc(questionsCol);
-    batch.set(ref, r);
-    if (++n >= 450) await flush();
-  }
-  if (n > 0) await batch.commit();
+  await commitInChunks(existing.docs.map((d) => (b) => b.delete(d.ref)));
+  await commitInChunks(rows.map((r) => (b) => b.set(doc(questionsCol), r)));
 }
-export async function setQuestionUsed(id, used) {
-  await updateDoc(doc(questionsCol, id), { used });
+export async function resetUsed() {
+  const snap = await getDocs(questionsCol);
+  await commitInChunks(snap.docs.filter((d) => d.data().used).map((d) => (b) => b.update(d.ref, { used: false })));
 }
 
-// ---- Buzzers ----
-// Log every press (for an ordered display) AND atomically claim "first" via a
-// transaction, so the winner is decided on the server regardless of client clocks.
-export async function buzz(me, round, answerSeconds) {
-  // Record the press for the ordered queue (server timestamp = authoritative order).
+// ---------------- buzzes / live answers ----------------
+export async function logBuzz(key, me) {
   try {
-    await addDoc(buzzesCol, {
-      round, name: me.name, team: me.team, deviceId: me.deviceId,
-      ts: serverTimestamp(), clientTs: Date.now(),
-    });
-  } catch (e) { /* non-fatal */ }
-
-  // Claim first.
-  return runTransaction(db, async (tx) => {
-    const snap = await tx.get(stateRef);
-    const s = snap.data();
-    if (!s || !s.buzzOpen || s.buzzRound !== round) return { won: false, reason: "closed" };
-    if (s.lockedBuzzer) return { won: false, reason: "taken" };
-    if ((s.blockedTeams || []).includes(me.team)) return { won: false, reason: "blocked" };
-    const prev = s.pun || {};
-    tx.update(stateRef, {
-      lockedBuzzer: me,
-      lockedAt: Date.now(),
-      phase: "answering",
-      buzzOpen: false, // lock out everyone the instant someone buzzes
-      mcqSelection: null,
-      spokenAnswer: null,
-      pun: { own: pickPunIndex(OWN.length, prev.own), opp: pickPunIndex(OPP.length, prev.opp) },
-      "settings.answerSeconds": answerSeconds,
-    });
-    return { won: true };
-  });
-}
-
-export function subscribeBuzzes(round, cb, errCb) {
-  // Equality-only query (no composite index needed); order on the client by the
-  // server timestamp, falling back to the client time until the server resolves it.
-  const q = query(buzzesCol, where("round", "==", round));
-  return onSnapshot(q, (snap) => {
-    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    rows.sort((a, b) => {
-      const at = a.ts && a.ts.toMillis ? a.ts.toMillis() : (a.clientTs || Infinity);
-      const bt = b.ts && b.ts.toMillis ? b.ts.toMillis() : (b.clientTs || Infinity);
-      return at - bt;
-    });
-    cb(rows);
-  }, errCb);
+    await addDoc(buzzesCol, { key, deviceId: me.deviceId, name: me.name, team: me.team, ts: serverTimestamp(), at: serverNow() });
+  } catch { /* the order list is cosmetic; the transaction decides the winner */ }
 }
 export async function clearBuzzes() {
   const snap = await getDocs(buzzesCol);
-  let batch = writeBatch(db);
-  let n = 0;
-  snap.forEach((d) => { batch.delete(d.ref); if (++n >= 450) { batch.commit(); batch = writeBatch(db); n = 0; } });
-  if (n > 0) await batch.commit();
+  await commitInChunks(snap.docs.map((d) => (b) => b.delete(d.ref)));
+}
+export async function writeSpoken(data) {
+  await setDoc(spokenRef, data);
 }
 
-// ---- Sound cues ----
-// Sets a one-shot sound event; host/board devices watch `sfx.at` and play it.
-export async function playSfx(sound) {
-  await patchState({ sfx: { sound, at: Date.now() } });
-}
-
-// ---- Scoring ----
-export async function addScore(team, delta) {
-  const s = await getState();
-  const scores = { ...(s.scores || { team1: 0, team2: 0 }) };
-  scores[team] = (scores[team] || 0) + delta;
-  await patchState({ scores });
+export async function newGameFull() {
+  await act("newGame");
+  await resetUsed();
+  await clearBuzzes();
+  await writeSpoken({ key: "" }).catch(() => {});
 }

@@ -1,0 +1,183 @@
+// Player phone view.
+import { esc, money, cls } from "./util.js";
+import * as E from "../engine.js";
+import { tn, findQ } from "./stage.js";
+import { OWN, OPP, punText } from "../puns.js";
+import * as Speech from "../speech.js";
+
+export function renderPlayer(G) {
+  const S = G.S;
+  const me = G.me;
+  return `<div class="phone ${me.team}">
+    <header class="ph-top">
+      <div class="me"><span class="dot ${me.team}"></span><div><b>${esc(me.name)}</b><small>${esc(tn(G, me.team))}</small></div></div>
+      <div class="ph-scores">${E.TEAMS.map((t) => `<div class="${cls("phs", t, t === me.team && "mine")}"><small>${esc(tn(G, t))}</small><b class="${S.scores[t] < 0 ? "neg" : ""}">${money(S.scores[t])}</b></div>`).join("")}</div>
+    </header>
+    ${micBar(G)}
+    <main class="ph-main">${body(G)}</main>
+  </div>`;
+}
+
+function micBar(G) {
+  const phase = G.S.phase;
+  if (!Speech.micSupported()) {
+    return phase === "lobby" ? `<div class="micbar off">🎙️ Your phone can't transcribe speech — no problem, just answer out loud.</div>` : "";
+  }
+  if (Speech.micEnabled() && !Speech.speechDenied()) return "";
+  return `<div class="micbar prompt"><div><b>🎙️ Enable your microphone</b><small>So your spoken answers show up on the big screen.</small></div><button class="btn primary sm" data-action="enable-mic">Enable</button></div>`;
+}
+
+function card(emoji, title, text = "", extra = "") {
+  return `<div class="ph-card hero">${emoji ? `<div class="big-emoji">${emoji}</div>` : ""}<h2>${title}</h2>${text ? `<p>${text}</p>` : ""}${extra}</div>`;
+}
+const timer = (deadline, total) => `<div class="ph-timer"><span class="cd" data-deadline="${deadline}" data-format="s"></span><div class="bar" data-deadline="${deadline}" data-total="${total}"><i></i></div></div>`;
+
+function body(G) {
+  const S = G.S;
+  const me = G.me;
+  if (S.phase === "lobby") {
+    const mates = G.P.filter((p) => p.team === me.team);
+    return card("🎄", `You're in, ${esc(me.name)}!`, "Waiting for Jaren to start the game.",
+      `<div class="tips"><b>How to play</b><ul>
+        <li>When the button turns <b class="red">red</b>, tap it as fast as you can.</li>
+        <li>First tap wins — then answer out loud${Speech.micEnabled() ? " (your mic listens)" : ""}.</li>
+        <li>Multiple choice? Just tap your answer.</li>
+      </ul></div>
+      <div class="mates"><small>${esc(tn(G, me.team))}</small>${mates.map((p) => `<span class="chip" data-key="m-${esc(p.id)}">${esc(p.name)}</span>`).join("")}</div>`);
+  }
+  if (S.phase === "board") {
+    const mine = S.control === me.team;
+    return card(mine ? "🎁" : "👀", mine ? "Your team picks next!" : S.control ? `${esc(tn(G, S.control))} picks next` : "Next clue coming up…",
+      mine ? "Shout a category and amount to Jaren." : "Get that buzzer finger ready.");
+  }
+  if (S.phase === "clue" && S.clue) return clueBody(G);
+  if (S.phase === "final") return finalBody(G);
+  if (S.phase === "over") {
+    const sc = S.scores;
+    const tie = sc.team1 === sc.team2;
+    const won = !tie && (sc.team1 > sc.team2 ? "team1" : "team2") === me.team;
+    return card(tie ? "🤝" : won ? "🏆" : "🎄", tie ? "It's a tie!" : won ? "Your team wins!" : `${esc(tn(G, sc.team1 > sc.team2 ? "team1" : "team2"))} wins!`,
+      won ? "Merry Christmas, champion! 🎉" : "Thanks for playing — Merry Christmas!");
+  }
+  return card("⏳", "Hang tight…");
+}
+
+function clueBox(G, c, q) {
+  const value = c.dd ? `Daily Double${c.dd.wager ? " · " + money(c.dd.wager) : ""}` : money(q.points);
+  return `<div class="${cls("ph-clue", c.dd && "dd")}"><div class="ph-cat"><span>${esc(q.category)}</span><span>${esc(value)}</span></div><div class="ph-q">${esc(q.question)}</div></div>`;
+}
+
+function choices(G, c, q) {
+  return `<div class="ph-mcq">${q.choices.map((ch, i) => ch
+    ? `<button class="mcqbtn" data-action="mcq" data-i="${i}"${c.eliminated.includes(i) ? " disabled" : ""}><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></button>` : "").join("")}</div>`;
+}
+
+function clueBody(G) {
+  const S = G.S;
+  const me = G.me;
+  const c = S.clue;
+  const q = findQ(G, c.id);
+  if (!q) return card("⏳", "Loading clue…");
+  const set = S.settings || {};
+  const key = E.lockKey(c);
+
+  if (c.stage === "dd") {
+    const mine = c.dd.team === me.team;
+    return `<div class="ph-card dd-card"><div class="dd-mini">DAILY DOUBLE!</div><p>${mine ? "Your team found it! Tell Jaren your wager." : c.dd.team ? `${esc(tn(G, c.dd.team))} found it and is wagering…` : "Someone found a Daily Double!"}</p><small class="muted">${esc(q.category)}</small></div>`;
+  }
+  if (c.stage === "reading") {
+    return `${clueBox(G, c, q)}<button class="buzz wait" disabled aria-label="Buzzer not open yet"><span>WAIT</span><small>Buzzers open soon</small></button>`;
+  }
+  if (c.stage === "open") {
+    if (c.blocked.includes(me.team)) return `${clueBox(G, c, q)}<div class="ph-note">Your team already had a go — fingers crossed! 🤞</div>`;
+    if (G.myBuzzKey === key) return `${clueBox(G, c, q)}<button class="buzz sent" disabled><span>BUZZED!</span><small>Checking who was first…</small></button>`;
+    return `${clueBox(G, c, q)}<button class="buzz live" data-action="buzz" aria-label="Buzz in"><span>BUZZ!</span></button>`;
+  }
+  if (c.stage === "paused") return `${clueBox(G, c, q)}<div class="ph-note">Buzzers paused…</div>`;
+
+  if (c.stage === "answering" && c.locked) {
+    const L = c.locked;
+    const total = (set.answerSeconds || 15) * 1000;
+    const clock = c.timeUp === key ? `<div class="ph-note timeup">⏰ Time's up!</div>` : timer(L.at + total, total);
+    if (c.dd) {
+      if (me.team === c.dd.team) {
+        return q.type === "mcq"
+          ? `${clueBox(G, c, q)}<div class="youup">⭐ Your team's Daily Double — pick together!</div>${choices(G, c, q)}${clock}`
+          : `${clueBox(G, c, q)}<div class="youup">⭐ Your team's Daily Double — answer out loud!</div>${clock}`;
+      }
+      return `${clueBox(G, c, q)}<div class="ph-note">${esc(tn(G, c.dd.team))} is answering their Daily Double (${money(c.dd.wager)}).</div>${clock}`;
+    }
+    if (L.deviceId === G.deviceId) {
+      if (q.type === "mcq") return `<div class="youup big">🎉 You're up! Tap your answer</div>${clueBox(G, c, q)}${choices(G, c, q)}${clock}`;
+      let mic;
+      if (Speech.micSupported() && Speech.micEnabled() && !Speech.speechDenied()) {
+        const sp = G.spoken && G.spoken.key === key && G.spoken.deviceId === G.deviceId ? G.spoken.text : "";
+        mic = `<div class="listening"><span class="rec"></span> Listening — say your answer</div><div class="heard-box">${sp ? `“${esc(sp)}”` : `<span class="muted">…</span>`}</div>`;
+      } else {
+        mic = `<div class="ph-note">Say your answer out loud!</div>`;
+      }
+      return `<div class="youup big">🎉 You're up!</div>${mic}${clock}${clueBox(G, c, q)}`;
+    }
+    const mine = L.team === me.team;
+    const pun = c.pun || {};
+    const line = mine ? punText(OWN, pun.own, L.name) : punText(OPP, pun.opp, L.name);
+    return `<div class="${cls("punbox", mine ? "ours" : "theirs")}" data-key="pun-${esc(key)}">
+        <div class="pun-who">🔔 ${esc(L.name)} buzzed in${mine ? " for your team!" : ""}</div>
+        <div class="pun-line">${esc(line)}</div>
+      </div>${clock}${clueBox(G, c, q)}`;
+  }
+
+  if (c.stage === "done") {
+    let res = "";
+    if (c.result === "correct") {
+      const mine = c.winner === me.team;
+      res = `<div class="${cls("ph-result", mine ? "yes" : "no")}">${mine ? "🎉" : "😬"} ${esc(c.dd ? tn(G, c.winner) : c.locked ? c.locked.name : tn(G, c.winner))} got it! <b>+${money(c.dd ? c.dd.wager : q.points)}</b></div>`;
+    } else if (c.result === "nobody") res = `<div class="ph-result none">Nobody got it!</div>`;
+    else if (c.result === "wrong") res = `<div class="ph-result none">Daily Double missed!</div>`;
+    return `${res}${c.revealed ? `<div class="ph-answer"><small>Answer</small>${esc(q.answer)}</div>` : ""}${clueBox(G, c, q)}`;
+  }
+  return clueBox(G, c, q);
+}
+
+function finalBody(G) {
+  const S = G.S;
+  const me = G.me;
+  const f = S.final;
+  const fq = E.finalClue(G.Q);
+  const cat = fq ? fq.category : "Final Jeopardy";
+  const playing = f.eligible[me.team];
+  if (f.stage === "wager") {
+    if (!playing) return card("🍿", "Your team is sitting out Final Jeopardy", "Teams need more than $0 to play. Cheer everyone on!");
+    const max = E.finalMax(S, me.team);
+    const cur = f.wagers[me.team];
+    return `<div class="ph-card final-card">
+      <div class="kicker">Final Jeopardy!</div>
+      <div class="ph-final-cat">${esc(cat)}</div>
+      <p>Huddle up and choose your team's wager. The other team can't see it.</p>
+      <label class="wager-box big"><span>$</span><input id="fw-input" class="wager-input" type="number" inputmode="numeric" min="0" max="${max}" placeholder="0 – ${max}" data-sticky></label>
+      <div class="quick">${[[0, "$0"], [Math.floor(max / 2), "Half"], [max, "All in!"]].map(([v, l]) => `<button class="chipbtn" data-action="fw-quick" data-v="${v}">${l}</button>`).join("")}</div>
+      <button class="btn primary big" data-action="final-wager">${cur ? "Update our wager" : "Lock in our wager"}</button>
+      ${cur ? `<div class="locked-note">✓ Your team's wager: <b>${money(cur.amount)}</b> <small>set by ${esc(cur.by)}</small></div>` : ""}
+      <small class="muted">Your team has ${money(S.scores[me.team])} — you can wager up to ${money(max)}.</small>
+    </div>`;
+  }
+  if (f.stage === "clue") {
+    const total = (S.settings.finalSeconds || 30) * 1000;
+    const clue = `<div class="ph-clue ph-clue--final"><div class="ph-cat"><span>${esc(cat)}</span><span>Final</span></div><div class="ph-q">${esc(fq ? fq.question : "")}</div></div>`;
+    if (!playing) return `${clue}${timer(f.deadline, total)}<div class="ph-note">Your team is sitting out — enjoy the show!</div>`;
+    const cur = f.answers[me.team];
+    return `${clue}${timer(f.deadline, total)}
+      <div class="ph-card">
+        <label class="lbl" for="fa-input">Your team's answer</label>
+        <textarea id="fa-input" class="answer-input" rows="2" maxlength="200" placeholder="What is…?" data-input="final-answer" data-sticky>${esc(cur ? cur.text : "")}</textarea>
+        <button class="btn primary big" data-action="final-answer">Submit answer</button>
+        ${cur && cur.text ? `<div class="locked-note">✓ Saved: “${esc(cur.text)}” <small>by ${esc(cur.by)}</small></div>` : `<small class="muted">Saves automatically as you type. Whatever's saved when time runs out counts.</small>`}
+      </div>`;
+  }
+  // reveal
+  const res = f.results[me.team];
+  const w = f.wagers[me.team];
+  return card(res === "correct" ? "🎉" : res === "wrong" ? "😬" : "🎬",
+    res ? (res === "correct" ? "Your team got Final Jeopardy right!" : "Not this time!") : "Watch the big screen!",
+    res && w ? `Your wager: ${money(w.amount)}` : playing ? "Answers are being revealed…" : "");
+}

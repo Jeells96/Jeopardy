@@ -1,27 +1,28 @@
 # 🔊 Sound effects — drop your MP3s here
 
-The game plays four sounds on the **host (Jaren's View)** and **projector (Board)** devices.
-To use your own authentic audio, add MP3 files to **this `sounds/` folder** with these
-**exact file names**:
+The game plays these on the **host console**, **projector board** and **host remote**
+(whichever has 🔊 turned on) — never on players' phones. Add MP3s to **this folder** with
+these **exact** names:
 
-| Event | File name (exact) | When it plays |
-|---|---|---|
-| ✅ Correct answer | `correct.mp3` | A team answers correctly (spoken or multiple choice) |
-| ❌ Wrong answer | `wrong.mp3` | A team answers wrong |
-| ⏰ Time's up | `times-up.mp3` | The answer timer runs out before anyone answers |
-| 🎵 Final Jeopardy | `final-jeopardy.mp3` | Plays on a loop during the Final Jeopardy timer |
+| Event | File name |
+|---|---|
+| ✅ Correct answer | `correct.mp3` |
+| ❌ Wrong answer | `wrong.mp3` |
+| ⏰ Time's up | `times-up.mp3` |
+| 🎵 Final Jeopardy think music (loops during the timer) | `final-jeopardy.mp3` |
+| ⭐ Daily Double revealed | `daily-double.mp3` |
+| 🔔 Someone buzzed in | `buzz-in.mp3` |
+| 🎄 Board appears / new round starts | `board-fill.mp3` |
+| 🏆 Winner announced | `winner.mp3` |
 
 ## How to add them
-1. Put the four files in this folder, named exactly as above (all lowercase, `.mp3`).
-2. Commit & push (or use GitHub's **Add file → Upload files** on this folder).
-3. After the site redeploys (~1 min), hard-refresh. That's it — no code changes needed.
+1. On GitHub, open this `sounds/` folder → **Add file → Upload files**.
+2. Drag in your MP3s (named exactly as above) and commit.
+3. Wait ~1 minute for the site to redeploy, then hard-refresh. No code changes needed.
 
-Notes:
-- You don't need all four. Any file that's missing just uses a built-in placeholder tone.
-- `final-jeopardy.mp3` loops, so a ~30–60s clip is plenty (it stops when the clue is judged).
-- Keep each file reasonably small (a few MB) so it loads fast.
-- Turn sound on with the **🔊 / 🔇** button in Jaren's View (and on the Board screen).
+Any file you don't add keeps its built-in sound. Keep files small (a few MB) so they load
+quickly; a 30–60 second clip is plenty for the Final Jeopardy loop.
 
-> ⚠️ The official *Jeopardy!* cues and the "Think!" music are copyrighted, so they can't be
-> bundled with this project. Use audio you have the right to use. Until you add files, the
-> game plays original, non-copyrighted placeholder tones so everything still works.
+> ⚠️ The official *Jeopardy!* cues and music are copyrighted and can't be bundled with this
+> project. Use audio you have the rights to use. The built-in placeholder sounds are
+> original.

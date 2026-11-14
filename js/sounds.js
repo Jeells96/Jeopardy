@@ -1,103 +1,185 @@
-// Sound effects for the host / projector devices.
+// Sound effects for the host / projector / remote screens.
 //
-// Drop your own authentic MP3s into the /sounds folder with these exact names and they
-// will be used automatically. Until then, original synthesized placeholder tones play.
-//   sounds/correct.mp3         — correct answer
-//   sounds/wrong.mp3           — wrong answer
-//   sounds/times-up.mp3        — answer timer ran out
-//   sounds/final-jeopardy.mp3  — Final Jeopardy music (looped during the final timer)
-
-const FILES = {
-  correct: "./sounds/correct.mp3",
-  wrong: "./sounds/wrong.mp3",
-  timesup: "./sounds/times-up.mp3",
-  final: "./sounds/final-jeopardy.mp3",
+// Drop your own MP3s into the /sounds folder with these exact names and they're used
+// automatically. Anything missing falls back to an original synthesized placeholder.
+export const SLOTS = {
+  correct: "correct.mp3",          // right answer
+  wrong: "wrong.mp3",              // wrong answer
+  timesup: "times-up.mp3",         // a timer ran out
+  final: "final-jeopardy.mp3",     // Final Jeopardy think music (loops)
+  dd: "daily-double.mp3",          // Daily Double revealed
+  buzz: "buzz-in.mp3",             // someone buzzed in
+  fill: "board-fill.mp3",          // board appears at the start of a round
+  win: "winner.mp3",               // winner announced
 };
 
+const BASE = "./sounds/";
 let enabled = false;
 let ctx = null;
-const oneShot = {};      // cached HTMLAudioElements for one-shot files
-let finalEl = null;      // looping Final Jeopardy audio
-let tickTimer = null;    // metronome fallback when no final mp3
+let master = null;
+const available = {};   // slot -> true/false once probed
+const cache = {};       // slot -> HTMLAudioElement
+let probed = false;
 
-export function soundPref() { return localStorage.getItem("jeop_sound") === "1"; }
-export function soundEnabled() { return enabled; }
-
-export function initFromPref() { enabled = soundPref(); return enabled; }
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } } };
+export const soundPref = () => store.get("jeop_sound") === "1";
+export const soundEnabled = () => enabled;
+export function initFromPref() { enabled = soundPref(); if (enabled) probe(); return enabled; }
 
 function ensureCtx() {
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
-    if (AC) ctx = new AC();
+    if (!AC) return null;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = 0.9;
+    master.connect(ctx.destination);
   }
   return ctx;
 }
-// Resume the audio context after a user gesture (autoplay policies).
 export function resume() {
-  try { ensureCtx(); if (ctx && ctx.state === "suspended") ctx.resume(); } catch (e) { /* ignore */ }
+  try { ensureCtx(); if (ctx && ctx.state === "suspended") ctx.resume(); } catch { /* ignore */ }
+}
+export function enableSound() { enabled = true; store.set("jeop_sound", "1"); resume(); probe(); play("buzz"); }
+export function disableSound() { enabled = false; store.set("jeop_sound", "0"); setFinalMusic(false); }
+
+// Check once which MP3s exist so a missing file never delays a cue.
+async function probe() {
+  if (probed) return;
+  probed = true;
+  await Promise.all(Object.entries(SLOTS).map(async ([k, f]) => {
+    try {
+      const r = await fetch(BASE + f, { method: "HEAD", cache: "no-store" });
+      const type = r.headers.get("content-type") || "";
+      available[k] = r.ok && !type.includes("text/html");
+    } catch { available[k] = false; }
+  }));
 }
 
-export async function enableSound() {
-  enabled = true;
-  localStorage.setItem("jeop_sound", "1");
-  resume();
+// ---------------- synth building blocks ----------------
+function tone(freq, start, dur, { type = "sine", gain = 0.2, attack = 0.008, partials = null, detune = 0 } = {}) {
+  const c = ensureCtx(); if (!c) return;
+  const t0 = c.currentTime + start;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  g.connect(master);
+  const list = partials || [[1, 1]];
+  for (const [mult, amp] of list) {
+    const o = c.createOscillator();
+    const og = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq * mult, t0);
+    o.detune.value = detune;
+    og.gain.value = amp;
+    o.connect(og).connect(g);
+    o.start(t0);
+    o.stop(t0 + dur + 0.05);
+  }
 }
-export function disableSound() {
-  enabled = false;
-  localStorage.setItem("jeop_sound", "0");
-  stopFinal();
+const bell = (f, s, d = 0.9, g = 0.16) => tone(f, s, d, { partials: [[1, 1], [2, 0.35], [3.01, 0.18], [4.2, 0.08]], gain: g });
+const pluck = (f, s, d = 0.35, g = 0.14) => tone(f, s, d, { type: "triangle", gain: g, attack: 0.004 });
+function noise(start, dur, { gain = 0.08, hp = 6000 } = {}) {
+  const c = ensureCtx(); if (!c) return;
+  const len = Math.floor(c.sampleRate * dur);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const f = c.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp;
+  const g = c.createGain(); g.gain.value = gain;
+  src.connect(f).connect(g).connect(master);
+  src.start(c.currentTime + start);
 }
+const sleighBells = (start, n = 6, gap = 0.07) => { for (let i = 0; i < n; i++) noise(start + i * gap, 0.09, { gain: 0.07, hp: 7000 }); };
+const N = (semi) => 440 * Math.pow(2, (semi - 9) / 12); // semitones from C4 (C4 = 0)
 
-// ---- Synthesized placeholder tones (original, non-copyrighted) ----
-function beep(freq, dur, type = "sine", gain = 0.2, delay = 0) {
-  try {
-    ensureCtx();
-    if (!ctx) return;
-    const t0 = ctx.currentTime + delay;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, t0);
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    osc.connect(g).connect(ctx.destination);
-    osc.start(t0);
-    osc.stop(t0 + dur + 0.03);
-  } catch (e) { /* ignore */ }
-}
-function synth(key) {
-  if (key === "correct") { beep(659, 0.12, "sine", 0.25, 0); beep(988, 0.22, "sine", 0.25, 0.12); }
-  else if (key === "wrong") { beep(160, 0.5, "square", 0.18, 0); }
-  else if (key === "timesup") { beep(466, 0.16, "square", 0.2, 0); beep(392, 0.16, "square", 0.2, 0.18); beep(311, 0.34, "square", 0.2, 0.36); }
-}
+const SYNTH = {
+  correct() { [12, 16, 19, 24].forEach((s, i) => bell(N(s + 12), i * 0.07, 0.8, 0.14)); sleighBells(0.05, 4); },
+  wrong() { tone(N(-16), 0, 0.32, { type: "square", gain: 0.12 }); tone(N(-17), 0.28, 0.55, { type: "square", gain: 0.12 }); },
+  timesup() { [0, 0.22, 0.44].forEach((t, i) => tone(N(7 - i * 2), t, 0.18, { type: "square", gain: 0.13 })); },
+  buzz() { bell(N(19), 0, 0.5, 0.18); bell(N(24), 0.03, 0.6, 0.1); },
+  dd() {
+    for (let i = 0; i < 14; i++) pluck(N(i * 2 + 4), i * 0.035, 0.4, 0.09);
+    sleighBells(0.1, 10, 0.06);
+    [0, 4, 7, 12].forEach((s) => bell(N(s + 12), 0.55, 1.6, 0.11));
+  },
+  fill() {
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+    for (let i = 0; i < 22; i++) pluck(N(scale[(i * 7) % scale.length] + 12), i * 0.05, 0.3, 0.07);
+    sleighBells(0.2, 8, 0.08);
+  },
+  win() {
+    [[0, 0], [4, 0.14], [7, 0.28], [12, 0.42]].forEach(([s, t]) => tone(N(s + 12), t, 0.3, { type: "sawtooth", gain: 0.06 }));
+    [0, 4, 7, 12, 16].forEach((s) => bell(N(s + 12), 0.6, 2.2, 0.1));
+    sleighBells(0.6, 14, 0.07);
+  },
+  finalcat() { bell(N(12), 0, 1.2, 0.14); bell(N(16), 0.18, 1.2, 0.12); bell(N(19), 0.36, 1.6, 0.12); },
+};
 
-// ---- One-shot cues ----
-export function playOneShot(key) {
-  if (!enabled || !FILES[key]) return;
-  let a = oneShot[key];
-  if (!a) { a = new Audio(FILES[key]); a.preload = "auto"; oneShot[key] = a; }
-  try { a.currentTime = 0; } catch (e) { /* ignore */ }
-  const p = a.play();
-  if (p && p.catch) p.catch(() => synth(key)); // file missing/blocked → placeholder tone
-}
-
-// ---- Final Jeopardy music (looped) ----
-export function startFinal() {
+export function play(name) {
   if (!enabled) return;
-  stopFinal();
-  finalEl = new Audio(FILES.final);
-  finalEl.loop = true;
-  const p = finalEl.play();
-  if (p && p.catch) p.catch(() => { finalEl = null; startTick(); });
+  resume();
+  if (available[name]) {
+    let a = cache[name];
+    if (!a) { a = new Audio(BASE + SLOTS[name]); a.preload = "auto"; cache[name] = a; }
+    try { a.currentTime = 0; } catch { /* ignore */ }
+    const p = a.play();
+    if (p && p.catch) p.catch(() => SYNTH[name] && SYNTH[name]());
+    return;
+  }
+  if (SYNTH[name]) SYNTH[name]();
 }
-export function stopFinal() {
-  if (finalEl) { try { finalEl.pause(); } catch (e) { /* ignore */ } finalEl = null; }
-  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+
+// ---------------- Final Jeopardy music ----------------
+// Your final-jeopardy.mp3 if present, otherwise an original music-box waltz placeholder.
+let finalEl = null;
+let loopTimer = null;
+let loopNext = 0;
+let loopStep = 0;
+const PROG = [[0, 4, 7], [-3, 0, 4], [-7, -3, 0], [-5, -1, 2]]; // C – Am – F – G (generic)
+
+function scheduleLoop() {
+  const c = ensureCtx(); if (!c) return;
+  const beat = 0.42;
+  while (loopNext < c.currentTime + 0.6) {
+    const bar = Math.floor(loopStep / 6) % PROG.length;
+    const chord = PROG[bar];
+    const pos = loopStep % 6; // two 3/4 bars per chord, eighth-note arpeggio
+    const pattern = [0, 1, 2, 1, 2, 1];
+    const s = chord[pattern[pos]] + 12 + (pos === 0 ? 0 : 12);
+    const at = loopNext - c.currentTime;
+    bell(N(s), at, 0.7, pos === 0 ? 0.11 : 0.07);
+    if (pos === 0) tone(N(chord[0] - 12), at, 1.2, { type: "triangle", gain: 0.06 });
+    if (pos % 2 === 0) noise(at, 0.03, { gain: 0.03, hp: 3000 }); // soft clock tick
+    loopNext += beat / 2;
+    loopStep++;
+  }
 }
-function startTick() {
-  if (tickTimer) return;
-  const t = () => beep(1000, 0.04, "square", 0.05, 0);
-  t();
-  tickTimer = setInterval(t, 1000); // neutral countdown tick placeholder
+
+export function setFinalMusic(on) {
+  if (!on || !enabled) {
+    if (finalEl) { try { finalEl.pause(); } catch { /* ignore */ } finalEl = null; }
+    if (loopTimer) { clearInterval(loopTimer); loopTimer = null; }
+    return;
+  }
+  if (finalEl || loopTimer) return;
+  resume();
+  if (available.final) {
+    finalEl = new Audio(BASE + SLOTS.final);
+    finalEl.loop = true;
+    const p = finalEl.play();
+    if (p && p.catch) p.catch(() => { finalEl = null; startLoop(); });
+  } else {
+    startLoop();
+  }
+}
+function startLoop() {
+  const c = ensureCtx(); if (!c) return;
+  loopNext = c.currentTime + 0.1;
+  loopStep = 0;
+  scheduleLoop();
+  loopTimer = setInterval(scheduleLoop, 150);
 }
