@@ -4,6 +4,7 @@ import { esc, money, cls } from "./util.js";
 import * as E from "../engine.js";
 import { stage, tn, roundLabel } from "./stage.js";
 import { hostSteps, renderButtons } from "./dock.js";
+import { minisTab, miniModal } from "./minis.js";
 
 export function renderHost(G) {
   const S = G.S;
@@ -37,14 +38,16 @@ export function renderHost(G) {
 function drawer(G) {
   const open = !!G.ui.drawer;
   const tab = G.ui.drawerTab || "game";
-  const tabs = [["game", "Game"], ["questions", "Questions"], ["players", `Players (${G.P.length})`], ["help", "Help"]];
+  const nMinis = E.minisOf(G.S).list.length;
+  const tabs = [["game", "Game"], ["minis", `Mini games${nMinis ? ` (${nMinis})` : ""}`], ["questions", "Questions"], ["players", `Players (${G.P.length})`], ["help", "Help"]];
   let body = "";
   if (tab === "game") body = gameTab(G);
+  else if (tab === "minis") body = minisTab(G);
   else if (tab === "questions") body = questionsTab(G);
   else if (tab === "players") body = playersTab(G);
   else body = helpTab();
   return `<div class="${cls("scrim", open && "open")}" data-action="drawer-close"></div>
-  <aside class="${cls("drawer", open && "open")}" aria-hidden="${!open}">
+  <aside class="${cls("drawer", open && "open")}" aria-hidden="${!open}"${open ? "" : " inert"}>
     <div class="drawer-head"><span>⚙ Settings</span><button class="iconbtn" data-action="drawer-close" title="Close (Esc)">✕</button></div>
     <nav class="tabs">${tabs.map(([k, l]) => `<button class="${cls("tab", tab === k && "on")}" data-action="drawer" data-p='{"tab":"${k}"}'>${l}</button>`).join("")}</nav>
     <div class="drawer-body">${body}</div>
@@ -80,12 +83,15 @@ function gameTab(G) {
   <section class="sect"><h4>Rules</h4>
     ${toggle("autoRebound", "Auto-rebound", st.autoRebound, "After a miss, the other team can buzz in right away")}
     ${toggle("finalNeedsPositive", "Official Final Jeopardy rule", st.finalNeedsPositive, "Only teams above $0 can play Final")}
+    ${toggle("playersRename", "Teams can rename themselves", st.playersRename !== false, "From their phones, until Jeopardy starts")}
+    ${toggle("announce", "Announce who's up out loud", st.announce !== false, "Mini games: the screen with 🔊 on reads the names aloud")}
   </section>
   <section class="sect"><h4>Scores</h4>
     ${E.TEAMS.map((t) => `<div class="field-row"><span class="dot ${t}"></span><span class="grow">${esc(tn(G, t))}</span><b>${money(S.scores[t])}</b><button class="btn ghost sm" data-action="score-panel" data-team="${t}">Adjust</button></div>`).join("")}
   </section>
   <section class="sect"><h4>Jump to</h4>
     <div class="btnrow">
+      ${S.phase === "board" || S.phase === "lobby" ? `<button class="btn ghost sm" data-action="act" data-p='{"name":"minisStart","p":{},"then":"drawer"}'>🎯 Mini games</button>` : ""}
       ${S.phase !== "lobby" && r2 && S.round !== 2 ? `<button class="btn ghost sm" data-action="confirm" data-p='{"what":"startRound2"}'>Double Jeopardy</button>` : ""}
       ${S.phase !== "lobby" && fq && S.phase !== "final" ? `<button class="btn ghost sm" data-action="confirm" data-p='{"what":"finalStart"}'>Final Jeopardy</button>` : ""}
       ${S.phase !== "lobby" && S.phase !== "over" ? `<button class="btn ghost sm" data-action="confirm" data-p='{"what":"endGame"}'>End game</button>` : ""}
@@ -134,12 +140,14 @@ function playersTab(G) {
         <button class="btn ghost sm" data-action="player-team" data-id="${esc(p.id)}" data-team="${E.otherTeam(t)}" title="Move to the other team">⇄</button>
         <button class="btn bad sm" data-action="player-remove" data-id="${esc(p.id)}" title="Remove (they can rejoin)">✕</button>
       </div>`).join("") : `<p class="muted">Nobody yet.</p>`}
+      <div class="prow add"><input id="add-player-${t}" maxlength="20" placeholder="Add someone without a phone" aria-label="Add a player to ${esc(tn(G, t))}" data-sticky>
+        <button class="btn ghost sm" data-action="player-add" data-team="${t}">+ Add</button></div>
     </section>`;
-  }).join("") + `<small class="muted">Players can't change their own name or team — you can fix it here and their phone updates instantly.</small>`;
+  }).join("") + `<small class="muted">Players can't change their own name or team — fix it here and their phone updates instantly. People you add by hand can be drawn for mini games too.</small>`;
 }
 
 function helpTab() {
-  const keys = [["Space / Enter", "Do the highlighted (gold) step"], ["C", "Correct"], ["W", "Wrong"], ["S", "Skip — no penalty"],
+  const keys = [["Space / Enter", "Do the highlighted (gold) step"], ["1 / 2 / T", "Mini game matchup: left team won / right team won / tie"], ["C", "Correct"], ["W", "Wrong"], ["S", "Skip — no penalty"],
     ["N", "Nobody knows — reveal answer"], ["P", "Pause buzzers"], ["R", "Show answer"], ["U", "Undo last score change"],
     ["M", "Sound on/off"], ["F", "Fullscreen"], ["Esc", "Close panels"]];
   return `<section class="sect"><h4>Keyboard shortcuts</h4>
@@ -149,6 +157,7 @@ function helpTab() {
       <li>Put <b>this screen</b> (or 📺 Board) on the projector. Turn 🔊 sound on for whichever screen has speakers.</li>
       <li>Open <b>📱 Remote</b> on your phone — it shows the answer for each clue and has every control, so you can host from anywhere in the room.</li>
       <li>Players scan the QR code in the lobby, join a team and enable their mic.</li>
+      <li><b>Mini games</b> (optional) come first: set them up in the Mini games tab. Their points carry into Jeopardy.</li>
       <li>Just follow the gold button. It always shows the next step.</li>
     </ol></section>`;
 }
@@ -166,6 +175,7 @@ const CONFIRMS = {
 export function modal(G) {
   const m = G.ui.modal;
   if (!m) return "";
+  if (String(m.type).startsWith("mini")) return miniModal(G, m);
   if (m.type === "confirm") {
     const [title, text, cta] = CONFIRMS[m.what] || ["Are you sure?", "", "Yes"];
     return `<div class="modal-scrim" data-action="modal-close"></div><div class="modal" role="dialog">

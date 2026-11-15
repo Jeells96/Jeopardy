@@ -1,7 +1,9 @@
 // Player phone view.
-import { esc, money, cls } from "./util.js";
+import { esc, money, cls, verb } from "./util.js";
 import * as E from "../engine.js";
 import { tn, findQ } from "./stage.js";
+import { playerMinis } from "./minis.js";
+import { renameBlock } from "./team.js";
 import { OWN, OPP, punText } from "../puns.js";
 import * as Speech from "../speech.js";
 
@@ -43,11 +45,13 @@ function body(G) {
         <li>First tap wins — then answer out loud${Speech.micEnabled() ? " (your mic listens)" : ""}.</li>
         <li>Multiple choice? Just tap your answer.</li>
       </ul></div>
-      <div class="mates"><small>${esc(tn(G, me.team))}</small>${mates.map((p) => `<span class="chip" data-key="m-${esc(p.id)}">${esc(p.name)}</span>`).join("")}</div>`);
+      <div class="mates"><small>${esc(tn(G, me.team))}</small>${mates.map((p) => `<span class="chip" data-key="m-${esc(p.id)}">${esc(p.name)}</span>`).join("")}</div>
+      ${renameBlock(G)}`);
   }
+  if (S.phase === "minis") return playerMinis(G, renameBlock(G));
   if (S.phase === "board") {
     const mine = S.control === me.team;
-    return card(mine ? "🎁" : "👀", mine ? "Your team picks next!" : S.control ? `${esc(tn(G, S.control))} picks next` : "Next clue coming up…",
+    return card(mine ? "🎁" : "👀", mine ? "Your team picks next!" : S.control ? `${esc(tn(G, S.control))} ${verb(tn(G, S.control), "picks", "pick")} next` : "Next clue coming up…",
       mine ? "Shout a category and amount to Jaren." : "Get that buzzer finger ready.");
   }
   if (S.phase === "clue" && S.clue) return clueBody(G);
@@ -56,7 +60,8 @@ function body(G) {
     const sc = S.scores;
     const tie = sc.team1 === sc.team2;
     const won = !tie && (sc.team1 > sc.team2 ? "team1" : "team2") === me.team;
-    return card(tie ? "🤝" : won ? "🏆" : "🎄", tie ? "It's a tie!" : won ? "Your team wins!" : `${esc(tn(G, sc.team1 > sc.team2 ? "team1" : "team2"))} wins!`,
+    const champ = tn(G, sc.team1 > sc.team2 ? "team1" : "team2");
+    return card(tie ? "🤝" : won ? "🏆" : "🎄", tie ? "It's a tie!" : won ? "Your team wins!" : `${esc(champ)} ${verb(champ, "wins", "win")}!`,
       won ? "Merry Christmas, champion! 🎉" : "Thanks for playing — Merry Christmas!");
   }
   return card("⏳", "Hang tight…");
@@ -83,7 +88,7 @@ function clueBody(G) {
 
   if (c.stage === "dd") {
     const mine = c.dd.team === me.team;
-    return `<div class="ph-card dd-card"><div class="dd-mini">DAILY DOUBLE!</div><p>${mine ? "Your team found it! Tell Jaren your wager." : c.dd.team ? `${esc(tn(G, c.dd.team))} found it and is wagering…` : "Someone found a Daily Double!"}</p><small class="muted">${esc(q.category)}</small></div>`;
+    return `<div class="ph-card dd-card"><div class="dd-mini">DAILY DOUBLE!</div><p>${mine ? "Your team found it! Tell Jaren your wager." : c.dd.team ? `${esc(tn(G, c.dd.team))} found it and ${verb(tn(G, c.dd.team), "is", "are")} wagering…` : "Someone found a Daily Double!"}</p><small class="muted">${esc(q.category)}</small></div>`;
   }
   if (c.stage === "reading") {
     return `${clueBox(G, c, q)}<button class="buzz wait" disabled aria-label="Buzzer not open yet"><span>WAIT</span><small>Buzzers open soon</small></button>`;
@@ -105,7 +110,7 @@ function clueBody(G) {
           ? `${clueBox(G, c, q)}<div class="youup">⭐ Your team's Daily Double — pick together!</div>${choices(G, c, q)}${clock}`
           : `${clueBox(G, c, q)}<div class="youup">⭐ Your team's Daily Double — answer out loud!</div>${clock}`;
       }
-      return `${clueBox(G, c, q)}<div class="ph-note">${esc(tn(G, c.dd.team))} is answering their Daily Double (${money(c.dd.wager)}).</div>${clock}`;
+      return `${clueBox(G, c, q)}<div class="ph-note">${esc(tn(G, c.dd.team))} ${verb(tn(G, c.dd.team), "is", "are")} answering their Daily Double (${money(c.dd.wager)}).</div>${clock}`;
     }
     if (L.deviceId === G.deviceId) {
       if (q.type === "mcq") return `<div class="youup big">🎉 You're up! Tap your answer</div>${clueBox(G, c, q)}${choices(G, c, q)}${clock}`;

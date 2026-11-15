@@ -58,6 +58,7 @@ export async function syncClock() {
 
 // ---------------- subscriptions ----------------
 let QCACHE = [];
+let PCACHE = [];
 export const questionsCache = () => QCACHE;
 
 export function subscribeState(cb, err) {
@@ -73,8 +74,10 @@ export function subscribeQuestions(cb, err) {
   }, err);
 }
 export function subscribePlayers(cb, err) {
-  return onSnapshot(playersCol, (snap) =>
-    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0))), err);
+  return onSnapshot(playersCol, (snap) => {
+    PCACHE = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+    cb(PCACHE);
+  }, err);
 }
 export function subscribeBuzzes(key, cb, err) {
   const q = query(buzzesCol, where("key", "==", key));
@@ -90,9 +93,10 @@ export function subscribeBuzzes(key, cb, err) {
 export async function ensureState() {
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(stateRef);
-    if (snap.exists() && snap.data().v === 2) return;
-    const old = snap.exists() ? snap.data() : {};
-    tx.set(stateRef, E.defaultState({ teamNames: old.teamNames }));
+    const m = E.migrate(snap.exists() ? snap.data() : null);
+    if (!m) return;                          // already up to date
+    if (m.full) tx.set(stateRef, m.full);    // brand new (or very old) game
+    else tx.update(stateRef, m.patch);       // add new features without touching a game in progress
   });
 }
 
@@ -106,7 +110,7 @@ export async function act(name, params = {}) {
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(stateRef);
     if (!snap.exists()) throw new GameError("The game isn't set up yet — reload the page.");
-    outcome = fn(snap.data(), params, { now: serverNow(), questions: QCACHE, deviceId: deviceId() });
+    outcome = fn(snap.data(), params, { now: serverNow(), questions: QCACHE, players: PCACHE, deviceId: deviceId() });
     if (!outcome || outcome.error) return;
     if (Object.keys(outcome.set).length) tx.update(stateRef, outcome.set);
     for (const u of outcome.questions || []) tx.update(doc(questionsCol, u.id), u.data);
@@ -127,6 +131,11 @@ export async function registerSelf() {
   const ref = doc(playersCol, deviceId());
   const snap = await getDoc(ref);
   if (!snap.exists()) await setDoc(ref, { name: me.name, team: me.team, deviceId: deviceId(), joinedAt: serverNow() });
+}
+// A player without a phone, added by the host (they can still be drawn for mini games).
+export async function addPlayer(name, team) {
+  const ref = doc(playersCol);
+  await setDoc(ref, { name, team, deviceId: ref.id, joinedAt: serverNow(), manual: true });
 }
 export const updatePlayer = (id, patch) => updateDoc(doc(playersCol, id), patch);
 export const removePlayer = (id) => deleteDoc(doc(playersCol, id));

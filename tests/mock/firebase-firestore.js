@@ -23,7 +23,12 @@ function err(code, message) { const e = new Error(message || code); e.code = cod
 function encode(v, where = "data") {
   if (v === undefined) throw err("invalid-argument", `Unsupported field value: undefined (found in ${where})`);
   if (v instanceof Timestamp) return { __ts: v.toMillis() };
-  if (Array.isArray(v)) return v.map((x, i) => encode(x, `${where}[${i}]`));
+  if (Array.isArray(v)) {
+    return v.map((x, i) => {
+      if (Array.isArray(x)) throw err("invalid-argument", `Nested arrays are not supported (found in ${where}[${i}])`);
+      return encode(x, `${where}[${i}]`);
+    });
+  }
   if (v && typeof v === "object") {
     if ("__sv" in v) return v;
     const o = {};

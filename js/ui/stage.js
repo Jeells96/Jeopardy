@@ -1,7 +1,8 @@
 // The show-style "stage": board grid, clue card, Daily Double, Final Jeopardy,
 // podiums and lobby. Used by the projector board and the host console.
-import { esc, money, cls } from "./util.js";
+import { esc, money, cls, verb } from "./util.js";
 import * as E from "../engine.js";
+import { minisStage } from "./minis.js";
 
 export const tn = (G, t) => E.teamName(G.S || {}, t);
 export const findQ = (G, id) => G.Q.find((q) => q.id === id) || null;
@@ -10,6 +11,7 @@ export const nowMs = (G) => G.now();
 export function roundLabel(S) {
   if (!S) return "";
   if (S.phase === "lobby") return "Get ready!";
+  if (S.phase === "minis") return "Mini Games";
   if (S.phase === "final") return "Final Jeopardy!";
   if (S.phase === "over") return "Final scores";
   return S.round === 2 ? "Double Jeopardy!" : "Jeopardy! Round";
@@ -48,13 +50,14 @@ function stageTop(G) {
   return `<div class="stage-top">
     <div class="brand"><span class="brand-xmas">Christmas</span> <span class="brand-j">JEOPARDY!</span></div>
     <div class="roundtag">${esc(roundLabel(S))}</div>
-    <div class="ctrl-slot">${showCtrl ? `<div class="ctrl ${S.control}">🎁 ${esc(tn(G, S.control))} picks next</div>` : ""}</div>
+    <div class="ctrl-slot">${showCtrl ? `<div class="ctrl ${S.control}">🎁 ${esc(tn(G, S.control))} ${verb(tn(G, S.control), "picks", "pick")} next</div>` : ""}</div>
   </div>`;
 }
 
 function stageMain(G, opts) {
   const S = G.S;
   if (S.phase === "lobby") return lobby(G);
+  if (S.phase === "minis") return minisStage(G, opts);
   if (S.phase === "board") return grid(G, opts);
   if (S.phase === "clue" && S.clue) return clueCard(G);
   if (S.phase === "final") return finalView(G);
@@ -205,7 +208,7 @@ function ddSplash(G, c, q) {
     <div class="dd-burst"></div>
     <div class="dd-title"><span>DAILY</span><span>DOUBLE!</span></div>
     <div class="dd-sub">${esc(q.category)}</div>
-    <div class="dd-team">${team ? `${esc(tn(G, team))} is making a wager…` : "Who found it?"}</div>
+    <div class="dd-team">${team ? `${esc(tn(G, team))} ${verb(tn(G, team), "is", "are")} making a wager…` : "Who found it?"}</div>
   </div>`;
 }
 
@@ -272,7 +275,7 @@ function overView(G) {
   return `<div class="over" data-key="over">
     <div class="confetti" data-keep>${conf}</div>
     <div class="over-kicker">${tie ? "What a finish!" : "Merry Christmas, champions!"}</div>
-    <div class="over-title">${tie ? "🤝 It's a tie!" : `🏆 ${esc(tn(G, win))} wins!`}</div>
+    <div class="over-title">${tie ? "🤝 It's a tie!" : `🏆 ${esc(tn(G, win))} ${verb(tn(G, win), "wins", "win")}!`}</div>
     <div class="over-scores">${E.TEAMS.map((t) => `<div class="os ${t}${!tie && t === win ? " win" : ""}"><span>${esc(tn(G, t))}</span><b>${money(sc[t])}</b></div>`).join("")}</div>
   </div>`;
 }
@@ -288,7 +291,7 @@ export function podiums(G, opts = {}) {
     return `<div class="${cls("podium", t, ctl && "has-control", answering === t && "answering")}">
       <div class="${cls("pscore", score < 0 && "neg")}"${opts.host ? ` data-action="score-panel" data-team="${t}" title="Adjust score"` : ""}>${money(score)}</div>
       <div class="pname">${esc(tn(G, t))}</div>
-      <div class="pmeta">${count} player${count === 1 ? "" : "s"}${ctl ? " · 🎁 picks next" : ""}</div>
+      <div class="pmeta">${count} player${count === 1 ? "" : "s"}${ctl ? " · 🎁 picking next" : ""}</div>
     </div>`;
   }).join("")}</div>`;
 }

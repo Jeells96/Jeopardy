@@ -11,6 +11,8 @@ export const SLOTS = {
   buzz: "buzz-in.mp3",             // someone buzzed in
   fill: "board-fill.mp3",          // board appears at the start of a round
   win: "winner.mp3",               // winner announced
+  pick: "up-next.mp3",             // mini games: drawing who's up next (about 2 seconds)
+  miniwin: "mini-game-win.mp3",    // mini games: a team wins a mini game
 };
 
 const BASE = "./sounds/";
@@ -117,6 +119,17 @@ const SYNTH = {
     sleighBells(0.6, 14, 0.07);
   },
   finalcat() { bell(N(12), 0, 1.2, 0.14); bell(N(16), 0.18, 1.2, 0.12); bell(N(19), 0.36, 1.6, 0.12); },
+  // Drum-roll of quickening ticks while names shuffle, then a "ta-da" when it lands (~1.8s).
+  pick() {
+    let t = 0;
+    for (let i = 0; i < 18; i++) { pluck(N(12 + (i % 5) * 2), t, 0.08, 0.07); noise(t, 0.03, { gain: 0.04, hp: 4000 }); t += 0.14 - i * 0.004; }
+    [7, 12, 16].forEach((s2) => bell(N(s2 + 12), 1.8, 0.9, 0.13));
+    sleighBells(1.8, 5, 0.06);
+  },
+  miniwin() {
+    [[0, 0], [4, 0.1], [7, 0.2], [12, 0.3], [16, 0.42]].forEach(([s2, t]) => bell(N(s2 + 12), t, 0.9, 0.12));
+    sleighBells(0.3, 8, 0.07);
+  },
 };
 
 export function play(name) {
@@ -131,6 +144,19 @@ export function play(name) {
     return;
   }
   if (SYNTH[name]) SYNTH[name]();
+}
+
+// Read a short line out loud with the browser's built-in voice (mini games: "who's up next").
+export function say(text) {
+  if (!enabled || !text || !("speechSynthesis" in window) || !window.SpeechSynthesisUtterance) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.pitch = 1.05;
+    u.volume = 1;
+    window.speechSynthesis.speak(u);
+  } catch { /* no voice available — the names are on screen anyway */ }
 }
 
 // ---------------- Final Jeopardy music ----------------

@@ -6,6 +6,7 @@ import { tn, findQ, categories, roundLabel } from "./stage.js";
 import { hostSteps, renderButtons } from "./dock.js";
 import { answerMatches } from "../speech.js";
 import { modal } from "./host.js";
+import { remoteMinis } from "./minis.js";
 
 export function renderRemote(G) {
   const S = G.S;
@@ -22,6 +23,7 @@ export function renderRemote(G) {
     ${steps.panel ? `<div class="r-panel">${steps.panel}</div>` : ""}
     <div class="r-buttons">${renderButtons(steps.buttons, { showKeys: false })}</div>
     ${S.phase === "board" ? miniGrid(G) : ""}
+    ${remoteMinis(G)}
     <div class="r-foot"><a href="#/admin">🖥 Console</a><a href="#/board" target="_blank" rel="noopener">📺 Board</a><span class="muted">Keep this screen private 🤫</span></div>
     ${modal(G)}
   </div>`;

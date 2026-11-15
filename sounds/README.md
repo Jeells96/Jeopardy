@@ -14,6 +14,8 @@ these **exact** names:
 | 🔔 Someone buzzed in | `buzz-in.mp3` |
 | 🎄 Board appears / new round starts | `board-fill.mp3` |
 | 🏆 Winner announced | `winner.mp3` |
+| 🎲 Mini games: drawing who's up next (about 2 seconds) | `up-next.mp3` |
+| 🎯 Mini games: a team wins a mini game | `mini-game-win.mp3` |
 
 ## How to add them
 1. On GitHub, open this `sounds/` folder → **Add file → Upload files**.

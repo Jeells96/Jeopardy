@@ -1,9 +1,17 @@
 // "What should the host do next?" — shared by the host console and the phone remote.
 // hostSteps(G) returns { status, panel, buttons }, where each button is
 // { label, action, params, kind: primary|good|bad|ghost, key }.
-import { esc, money, cls } from "./util.js";
+import { esc, money, cls, verb } from "./util.js";
 import * as E from "../engine.js";
 import { tn, findQ } from "./stage.js";
+import { miniSteps } from "./minis.js";
+
+function firstPickPanel(G) {
+  const fp = G.ui.firstPick || "random";
+  return `<div class="seg-wrap"><span class="seg-label">Who picks first in Jeopardy?</span><div class="seg">
+    ${["team1", "team2", "random"].map((v) => `<button class="${cls("seg-btn", v, fp === v && "on")}" data-action="first-pick" data-v="${v}">${v === "random" ? "🎲 Random" : esc(tn(G, v))}</button>`).join("")}
+  </div></div>`;
+}
 
 export function hostSteps(G, { privateView = false } = {}) {
   const S = G.S;
@@ -17,25 +25,38 @@ export function hostSteps(G, { privateView = false } = {}) {
     const n1 = E.boardClues(G.Q, 1).length, n2 = E.boardClues(G.Q, 2).length, fq = E.finalClue(G.Q);
     const c1 = G.P.filter((p) => p.team === "team1").length, c2 = G.P.filter((p) => p.team === "team2").length;
     const item = (done, text) => `<li class="${done ? "ok" : ""}"><span class="tick">${done ? "✓" : ""}</span>${text}</li>`;
+    const M = E.minisOf(S);
+    const todo = M.list.filter((g) => g.status !== "done").length;
     status = `<ul class="checklist">
-      ${item(n1 > 0, n1 ? `<b>${n1}</b> clues${n2 ? ` + <b>${n2}</b> Double Jeopardy` : ""}${fq ? " + Final Jeopardy" : ""}` : "Load your questions (⚙ Settings → Questions)")}
+      ${item(n1 > 0, n1 ? `<b>${n1}</b> clues${n2 ? ` + <b>${n2}</b> Double Jeopardy` : ""}${fq ? " + Final Jeopardy" : ""}` : "Load your Jeopardy questions (⚙ Settings → Questions)")}
+      ${M.list.length ? item(true, `<b>${M.list.length}</b> mini game${M.list.length === 1 ? "" : "s"} ready`) : ""}
       ${item(c1 + c2 > 0, `Players: ${esc(tn(G, "team1"))} <b>${c1}</b> · ${esc(tn(G, "team2"))} <b>${c2}</b>`)}
       ${item(G.soundOn, G.soundOn ? "Sound is on" : "Turn on 🔊 on the screen connected to speakers")}
     </ul>`;
     const fp = G.ui.firstPick || "random";
-    panel = `<div class="seg-wrap"><span class="seg-label">Who picks first?</span><div class="seg">
-      ${["team1", "team2", "random"].map((v) => `<button class="${cls("seg-btn", v, fp === v && "on")}" data-action="first-pick" data-v="${v}">${v === "random" ? "🎲 Random" : esc(tn(G, v))}</button>`).join("")}
-    </div></div>`;
-    if (!n1) btn("📥 Load questions", "drawer", { tab: "questions" }, "primary", "Space");
-    else btn("▶ Start the game", "act", act("startGame", { control: fp }), "primary", "Space");
+    if (todo) {
+      // Mini games come first; their points carry into Jeopardy.
+      btn("▶ Start the mini games", "act", act("minisStart"), "primary", "Space");
+      if (n1) btn("Skip to Jeopardy", "act", act("startGame", { control: fp }));
+      btn("🎯 Edit mini games", "drawer", { tab: "minis" });
+    } else {
+      if (n1) { panel = firstPickPanel(G); btn("▶ Start Jeopardy!", "act", act("startGame", { control: fp }), "primary", "Space"); }
+      else btn("📥 Load questions", "drawer", { tab: "questions" }, "primary", "Space");
+      btn("🎯 Add mini games", "drawer", { tab: "minis" });
+    }
     return { status, panel, buttons: B };
+  }
+
+  if (S.phase === "minis") {
+    const steps = miniSteps(G, { privateView });
+    return { status: steps.status, panel: steps.panel || (steps.wantFirstPick ? firstPickPanel(G) : ""), buttons: steps.buttons };
   }
 
   if (S.phase === "board") {
     const left = E.cluesLeft(G.Q, S.round);
     if (left > 0) {
       status = S.control
-        ? `🎁 <b>${esc(tn(G, S.control))}</b> picks next — ${privateView ? "tap" : "click"} their clue on the board. <span class="muted">${left} left</span>`
+        ? `🎁 <b>${esc(tn(G, S.control))}</b> ${verb(tn(G, S.control), "picks", "pick")} next — ${privateView ? "tap" : "click"} their clue on the board. <span class="muted">${left} left</span>`
         : `${privateView ? "Tap" : "Click"} any clue on the board to begin. <span class="muted">${left} left</span>`;
       btn("⇄ Switch who picks", "act", act("setControl", { team: S.control ? E.otherTeam(S.control) : "team1" }), "ghost", "");
     } else if (S.round === 1 && E.hasRound2(G.Q)) {
@@ -100,7 +121,7 @@ export function hostSteps(G, { privateView = false } = {}) {
         : `<span class="pill-cd"><span class="cd" data-deadline="${L.at + (set.answerSeconds || 15) * 1000}" data-format="s"></span></span>`;
       const heard = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard-line">🎤 “${esc(G.spoken.text)}”</div>` : "";
       const isMcq = q && q.type === "mcq";
-      status = `${who} is answering ${clock}${isMcq ? `<div class="muted">They choose on ${c.dd ? "their team's phones" : "their phone"} — scored automatically.</div>` : ""}${heard}`;
+      status = `${who} ${c.dd ? verb(tn(G, L.team), "is", "are") : "is"} answering ${clock}${isMcq ? `<div class="muted">They choose on ${c.dd ? "their team's phones" : "their phone"} — scored automatically.</div>` : ""}${heard}`;
       if (isMcq) {
         btn("✗ Mark wrong", "act", act("judge", { result: "wrong" }), "bad", "W");
         btn("Skip (no penalty)", "act", act("judge", { result: "skip" }), "ghost", "S");
@@ -157,7 +178,8 @@ export function hostSteps(G, { privateView = false } = {}) {
 
   if (S.phase === "over") {
     const sc = S.scores;
-    status = sc.team1 === sc.team2 ? "It's a tie!" : `🏆 ${esc(tn(G, sc.team1 > sc.team2 ? "team1" : "team2"))} wins!`;
+    const champ = tn(G, sc.team1 > sc.team2 ? "team1" : "team2");
+    status = sc.team1 === sc.team2 ? "It's a tie!" : `🏆 ${esc(champ)} ${verb(champ, "wins", "win")}!`;
     btn("🎄 New game", "confirm", { what: "newGame" }, "primary", "");
     return { status, panel, buttons: B };
   }
@@ -193,7 +215,7 @@ function finalWagerPanel(G, privateView) {
     const w = f.wagers[t];
     const st = !f.eligible[t] ? "Sitting out" : w ? `✓ Locked${privateView ? ` · ${money(w.amount)}` : ""} <small>by ${esc(w.by)}</small>` : "Waiting for their phones…";
     return `<div class="fwrow ${t}">
-      <label class="toggle"><input type="checkbox" data-change="final-eligible" data-team="${t}"${f.eligible[t] ? " checked" : ""}><span>${esc(tn(G, t))} plays</span></label>
+      <label class="toggle"><input type="checkbox" data-change="final-eligible" data-team="${t}"${f.eligible[t] ? " checked" : ""}><span>${esc(tn(G, t))} ${verb(tn(G, t), "plays", "play")}</span></label>
       <span class="fw-status">${st}</span>
       ${f.eligible[t] ? `<span class="fw-set"><input id="fw-${t}" class="wager-input sm" type="${privateView ? "number" : "password"}" inputmode="numeric" placeholder="0–${max}" data-sticky autocomplete="off"><button class="btn ghost sm" data-action="final-host-wager" data-team="${t}">Set</button></span>` : ""}
     </div>`;

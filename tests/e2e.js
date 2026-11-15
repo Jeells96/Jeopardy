@@ -14,7 +14,12 @@ const ok = (cond, name) => { if (cond) { passed++; console.log("  ✓ " + name);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const state = (page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__G.S)));
 async function until(page, fn, arg, timeout = 8000) {
-  try { return await page.waitForFunction(fn, arg, { timeout, polling: 50 }); }
+  try {
+    const r = await page.waitForFunction(fn, arg, { timeout, polling: 50 });
+    // The app repaints on the next animation frame — wait for it so DOM reads are never stale.
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    return r;
+  }
   catch (e) {
     const S = await page.evaluate(() => window.__G && window.__G.S).catch(() => null);
     const txt = await page.evaluate(() => document.querySelector("#app").innerText.slice(0, 600)).catch(() => "");
@@ -93,8 +98,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await host.click('[data-action="first-pick"][data-v="team1"]');
   await key(host, "Space");
   await until(board, () => document.querySelectorAll(".jcell .val").length === 30);
-  ok((await board.textContent(".ctrl")).includes("Team 1 picks next"), "game starts, Team 1 has control");
-  ok((await P.Jo.textContent(".ph-card h2")).includes("Your team picks next"), "Team 1 phones say they pick next");
+  ok((await board.textContent(".ctrl")).includes("Husbands pick next"), "game starts, Husbands have control");
+  ok((await P.Jo.textContent(".ph-card h2")).includes("Your team picks next"), "Husbands' phones say they pick next");
   await sleep(1200);
   await shot(board, "02-board-grid");
   await shot(host, "03-host-board");
@@ -220,7 +225,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(board, () => window.__G.S.clue.stage === "answering");
   await until(board, () => !!window.__G.S.clue.timeUp, null, 9000);
   ok(true, "spoken answer timer runs out (time's up flagged)");
-  ok((await host.textContent(".dock-status")).includes("Time's up"), "host sees 'Time's up — your call'");
+  await until(host, () => document.querySelector(".dock-status")?.textContent.includes("Time's up"));
+  ok(true, "host sees 'Time's up — your call'");
   await key(host, "s"); // skip (no penalty) → rebound to team 2
   await until(board, () => window.__G.S.clue.stage === "open");
   ok((await state(board)).scores.team1 === base.team1, "skip has no penalty");
@@ -349,7 +355,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await shot(board, "18-board-final-reveal");
   await key(host, "Space");
   await until(board, () => window.__G.S.phase === "over");
-  ok((await board.textContent(".over-title")).includes("Team 1 wins"), "winner announced");
+  ok((await board.textContent(".over-title")).includes("Husbands win!"), "winner announced (with the right grammar)");
   await sleep(800);
   await shot(board, "19-board-winner");
   await shot(P.Jo, "20-phone-winner");

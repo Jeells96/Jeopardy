@@ -7,6 +7,7 @@ import { renderRemote } from "./ui/remote.js";
 import { renderPlayer } from "./ui/player.js";
 import { renderJoin, renderGate, renderLoading, renderBoardPage } from "./ui/join.js";
 import { hostSteps } from "./ui/dock.js";
+import { PRESETS } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import * as Speech from "./speech.js";
 import { OWN, OPP, pickPunIndex } from "./puns.js";
@@ -17,7 +18,7 @@ const HOST_CODE = "2325";
 const G = {
   S: null, spoken: null, Q: [], P: [], B: [],
   me: null, deviceId: D.deviceId(),
-  ui: { firstPick: "random", ddWager: "", ddTeam: null, drawer: false, drawerTab: "game", modal: null, joinName: "", joinTeam: null },
+  ui: { firstPick: "random", ddWager: "", ddTeam: null, drawer: false, drawerTab: "game", modal: null, joinName: "", joinTeam: null, renaming: false },
   fsError: false, soundOn: false, myBuzzKey: null, lastPun: null, seenSelf: false,
   now: () => D.serverNow(),
 };
@@ -105,7 +106,46 @@ function onState(prev, S) {
     const wasMine = pc && pc.stage === "answering" && pc.locked && pc.locked.deviceId === G.deviceId && E.lockKey(pc) === E.lockKey(c);
     if (mine && !wasMine) vibrate([60, 40, 120]);
   }
+  miniPickEffect(S);
+  if (prev && S && G.me && isPlayerRoute()) {
+    const was = E.teamName(prev, G.me.team), now = E.teamName(S, G.me.team);
+    if (was !== now) toast(`Your team is now “${now}” 🎉`, "good");
+  }
+  if (S && !["lobby", "minis"].includes(S.phase)) G.ui.renaming = false;
   soundEffects(S);
+}
+
+// Mini games: when a new name is drawn, wait for the shuffle to finish, then reveal it
+// everywhere at the same moment (and buzz the phone of whoever is up).
+let lastPickKey = null;
+let pickPrimed = false; // don't re-announce a pick that was already on screen when this page loaded
+function miniPickEffect(S) {
+  if (!S) return;
+  const fresh = pickPrimed;
+  pickPrimed = true;
+  const pick = E.currentPick(S);
+  if (!pick) { lastPickKey = null; return; }
+  if (pick.key === lastPickKey) return;
+  lastPickKey = pick.key;
+  const spoken = pick.type === "best"
+    ? (pick.names[0] ? `Up next: ${pick.names[0]}!` : "")
+    : (pick.names[0] || pick.names[1] ? `Up next: ${pick.names[0] || E.teamName(S, "team1")}, versus, ${pick.names[1] || E.teamName(S, "team2")}!` : "");
+  const reveal = () => {
+    render();
+    if (isPlayerRoute() && G.me && pick.pids.includes(G.deviceId)) vibrate([80, 60, 160]);
+    // Say it out loud on the screen that has sound on (unless the pick was changed meanwhile).
+    const cur = G.S ? E.currentPick(G.S) : null;
+    if (fresh && cur && cur.key === pick.key && isHostClass() && Sounds.soundEnabled() && (G.S.settings || {}).announce !== false) Sounds.say(spoken);
+    if (!isPlayerRoute() && isHost()) {
+      // Put the cursor in the score box so the host can just type.
+      setTimeout(() => {
+        const box = document.getElementById("mini-score");
+        const busy = ["INPUT", "TEXTAREA", "SELECT"].includes((document.activeElement || {}).tagName);
+        if (box && !busy) box.focus();
+      }, 80);
+    }
+  };
+  setTimeout(reveal, Math.max(0, pick.at + E.SPIN_MS - G.now()) + 40);
 }
 function onPlayers() {
   if (!G.me) return;
@@ -150,6 +190,21 @@ function tick() {
     const left = Math.max(0, Number(el.dataset.deadline) - now);
     el.style.setProperty("--p", Math.min(1, left / (Number(el.dataset.total) || 1)).toFixed(3));
     el.classList.toggle("low", left <= 5000);
+  }
+  // "Who's up next?" — shuffle through names, then land on the pick.
+  for (const el of document.querySelectorAll(".spin[data-until]")) {
+    if (now < Number(el.dataset.until)) {
+      if (!el._names) { try { el._names = JSON.parse(el.dataset.spin || "[]"); } catch { el._names = []; } }
+      const others = el._names.filter((n) => n !== el.textContent);
+      if (others.length) el.textContent = others[Math.floor(Math.random() * others.length)];
+      el.classList.add("spinning");
+    } else if (!el._landed) {
+      el._landed = true;
+      const wasSpinning = el.classList.contains("spinning");
+      el.textContent = el.dataset.final;
+      el.classList.remove("spinning");
+      if (wasSpinning) el.classList.add("landed");
+    }
   }
 }
 
@@ -221,6 +276,13 @@ function speechEffect() {
   }
 }
 
+// When a panel closes, don't leave the keyboard focus stuck in one of its (now hidden)
+// fields — that would silently swallow the host's keyboard shortcuts.
+function releaseFocus() {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.closest && a.closest(".drawer, .modal")) a.blur();
+}
+
 // ---------------- device niceties ----------------
 function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch { /* ignore */ } }
 let wakeLock = null;
@@ -272,13 +334,27 @@ function saveFinalAnswer(text, announce) {
     .catch((e) => toast(e.message, "bad"));
 }
 
+// Clear a field right away (so the next thing typed is never wiped by a slow save),
+// and put the text back if the save fails.
+async function submitField(input, save) {
+  const typed = input.value;
+  input.value = "";
+  try { return await save(typed); }
+  catch (err) { if (input.isConnected && input.value === "") input.value = typed; throw err; }
+}
+
 // ---------------- action dispatcher ----------------
 const params = (el) => { try { return el.dataset.p ? JSON.parse(el.dataset.p) : {}; } catch { return {}; } };
 
 async function handle(a, p, el) {
   const S = G.S;
   switch (a) {
-    case "act": await D.act(p.name, p.p || {}); if (p.name === "adjustScore") render(); return;
+    case "act":
+      await D.act(p.name, p.p || {});
+      if (p.then === "modal") { releaseFocus(); G.ui.modal = null; }
+      if (p.then === "drawer") { G.ui.drawer = false; releaseFocus(); }
+      if (p.then || p.name === "adjustScore") render();
+      return;
     case "close": await D.act("closeClue"); D.clearBuzzes().catch(() => {}); return;
     case "pick": await D.act("pickClue", { qid: el.dataset.id }); return;
     case "first-pick": G.ui.firstPick = el.dataset.v; return render();
@@ -292,7 +368,7 @@ async function handle(a, p, el) {
       return;
     }
     case "drawer": G.ui.drawer = true; G.ui.drawerTab = p.tab || "game"; return render();
-    case "drawer-close": G.ui.drawer = false; return render();
+    case "drawer-close": G.ui.drawer = false; releaseFocus(); return render();
     case "toggle-sound":
       if (Sounds.soundEnabled()) Sounds.disableSound(); else Sounds.enableSound();
       G.soundOn = Sounds.soundEnabled();
@@ -307,7 +383,7 @@ async function handle(a, p, el) {
       await D.act("setScore", { team: el.dataset.team, value: Number(v && v.value) });
       G.ui.modal = null; return render();
     }
-    case "modal-close": G.ui.modal = null; return render();
+    case "modal-close": G.ui.modal = null; releaseFocus(); return render();
     case "confirm": G.ui.modal = { type: "confirm", what: p.what }; return render();
     case "confirm-yes": {
       G.ui.modal = null; G.ui.drawer = false; render();
@@ -320,15 +396,64 @@ async function handle(a, p, el) {
     case "final-host-wager": {
       const input = document.getElementById("fw-" + el.dataset.team);
       if (!input || input.value === "") return toast("Type a wager first.", "bad");
-      await D.act("finalWager", { team: el.dataset.team, amount: Number(input.value), by: "Host" });
-      input.value = "";
+      await submitField(input, (typed) => D.act("finalWager", { team: el.dataset.team, amount: Number(typed), by: "Host" }));
       return toast("Wager set ✓", "good");
     }
     case "download-template": return downloadTemplate();
+
+    // ---- mini games ----
+    case "mini-add": {
+      const input = document.getElementById("mini-new-name");
+      const name = input ? input.value.trim() : "";
+      if (!name) { if (input) input.focus(); return toast("Type a name for the game first.", "bad"); }
+      await submitField(input, () => D.act("miniAdd", { game: { name, type: el.dataset.type } }));
+      return toast(`Added “${name}” ✓`, "good");
+    }
+    case "mini-preset": {
+      const pr = PRESETS[Number(el.dataset.i)];
+      if (!pr) return;
+      await D.act("miniAdd", { game: pr });
+      return toast(`Added “${pr.name}” ✓`, "good");
+    }
+    case "mini-remove": {
+      const g = E.miniById(S, el.dataset.id);
+      if (!g) return;
+      if (g.status === "pending" && !g.matches.length && !g.entries.length) await D.act("miniRemove", { id: g.id });
+      else { G.ui.modal = { type: "miniRemove", id: g.id }; render(); }
+      return;
+    }
+    case "mini-reset-ask": G.ui.modal = { type: "miniReset", id: el.dataset.id }; return render();
+    case "mini-finish-ask": G.ui.modal = { type: "miniFinish", id: p.id }; return render();
+    case "mini-score": {
+      const input = document.getElementById("mini-score");
+      if (!input || input.value.trim() === "") { if (input) input.focus(); return toast("Type their score first.", "bad"); }
+      await submitField(input, (typed) => D.act("miniScore", { id: p.id, score: typed }));
+      input.blur();
+      return;
+    }
+    case "player-add": {
+      const input = document.getElementById("add-player-" + el.dataset.team);
+      const name = input ? input.value.trim().slice(0, 20) : "";
+      if (!name) { if (input) input.focus(); return toast("Type their name first.", "bad"); }
+      await submitField(input, () => D.addPlayer(name, el.dataset.team));
+      return;
+    }
     case "player-team": await D.updatePlayer(el.dataset.id, { team: el.dataset.team }); return;
     case "player-remove": await D.removePlayer(el.dataset.id); return;
 
     // ---- players ----
+    case "team-rename":
+      G.ui.renaming = true;
+      render();
+      setTimeout(() => { const i = document.getElementById("team-name-input"); if (i) { i.focus(); i.select(); } }, 80);
+      return;
+    case "team-rename-cancel": G.ui.renaming = false; return render();
+    case "team-rename-save": {
+      const i = document.getElementById("team-name-input");
+      await D.act("setTeamName", { team: G.me.team, name: i ? i.value : "", byPlayer: true });
+      G.ui.renaming = false;
+      return render();
+    }
     case "join-team": G.ui.joinTeam = el.dataset.team; return render();
     case "join": {
       const name = (document.getElementById("jn-name").value || "").trim().slice(0, 20);
@@ -353,8 +478,7 @@ async function handle(a, p, el) {
     case "final-wager": {
       const i = document.getElementById("fw-input");
       if (!i || i.value === "") return toast("Type your wager first.", "bad");
-      await D.act("finalWager", { team: G.me.team, amount: Number(i.value), by: G.me.name });
-      i.value = "";
+      await submitField(i, (typed) => D.act("finalWager", { team: G.me.team, amount: Number(typed), by: G.me.name }));
       return toast("Wager locked in ✓", "good");
     }
     case "final-answer": {
@@ -404,7 +528,12 @@ document.addEventListener("change", async (e) => {
     else if (k === "player-name") { const n = el.value.trim().slice(0, 20); if (n) await D.updatePlayer(el.dataset.id, { name: n }); }
     else if (k === "final-eligible") await D.act("finalSetEligible", { team: el.dataset.team, eligible: el.checked });
     else if (k === "import") await importFile(el);
-  } catch (err) { toast(err.message || String(err), "bad"); }
+    else if (k === "mini-field") await D.act("miniUpdate", { id: el.dataset.id, patch: { [el.dataset.f]: el.value } });
+    else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value });
+  } catch (err) {
+    toast(err.message || String(err), "bad");
+    if (k === "mini-field" || k === "team-name") { el.blur(); render(); } // snap the field back to the saved value
+  }
 });
 
 async function importFile(input) {
@@ -431,7 +560,14 @@ document.addEventListener("keydown", (e) => {
   const tag = (e.target.tagName || "").toLowerCase();
   if (e.key === "Enter" && e.target.id === "gate-code") { document.querySelector('[data-action="gate"]').click(); return; }
   if (e.key === "Enter" && e.target.id === "jn-name") { document.querySelector('[data-action="join"]').click(); return; }
-  if (e.key === "Escape") { G.ui.drawer = false; G.ui.modal = null; render(); return; }
+  if (e.key === "Enter" && e.target.id) {
+    const go = { "mini-score": '[data-action="mini-score"]', "team-name-input": '[data-action="team-rename-save"]', "exact-score": '[data-action="set-exact"]',
+      "add-player-team1": '[data-action="player-add"][data-team="team1"]', "add-player-team2": '[data-action="player-add"][data-team="team2"]',
+      "mini-new-name": '[data-action="mini-add"]', "dd-wager": '[data-action="dd-lock"]', "fw-input": '[data-action="final-wager"]' }[e.target.id];
+    const btn = go && document.querySelector(go);
+    if (btn) { e.preventDefault(); btn.click(); return; }
+  }
+  if (e.key === "Escape") { G.ui.drawer = false; G.ui.modal = null; releaseFocus(); render(); return; }
   if (["input", "textarea", "select"].includes(tag) || e.metaKey || e.ctrlKey || e.altKey) return;
   if (isPlayerRoute() && G.me && e.key === " ") { e.preventDefault(); buzz(); return; }
   if (!((r === "admin" || r === "remote" || r === "cheat") && isHost() && G.S) || G.ui.modal) return;
@@ -440,6 +576,7 @@ document.addEventListener("keydown", (e) => {
   if (k === "M") { handle("toggle-sound", {}, null); return; }
   if (k === "F") { toggleFullscreen(); return; }
   if (k === "?") { handle("drawer", { tab: "help" }, null); return; }
+  if (G.ui.drawer) return; // don't trigger game steps while the settings panel is open
   const b = hostSteps(G, { privateView: r !== "admin" }).buttons.find((x) => x.key === k);
   if (b) {
     e.preventDefault();

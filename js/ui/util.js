@@ -9,6 +9,10 @@ export function money(n) {
   return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-US");
 }
 
+// "Husbands win" but "Team 1 wins": pick the verb form that fits a team name.
+export const isPlural = (name) => /[^s]s$/i.test(String(name || "").trim());
+export const verb = (name, singular, plural) => (isPlural(name) ? plural : singular);
+
 export const attr = (cond, name, value = "") => (cond ? ` ${name}${value !== "" ? `="${esc(value)}"` : ""}` : "");
 export const cls = (...parts) => parts.filter(Boolean).join(" ");
 
@@ -17,7 +21,7 @@ export const cls = (...parts) => parts.filter(Boolean).join(" ");
 // existing elements in place. Preserves focus, caret and typed text in inputs,
 // and lets CSS entrance animations play only when an element first appears.
 //   data-key="..."   identifies an element across renders (re-created if it changes)
-//   data-keep        never touch this element's children (e.g. a generated QR code)
+//   data-keep        this element is managed by JS — leave its attributes and children alone
 //   data-sticky      never overwrite this input's value from the template
 // ---------------------------------------------------------------
 export function morph(container, html) {
@@ -69,6 +73,7 @@ function syncNode(f, t) {
     return;
   }
   if (f.nodeType !== 1) return;
+  if (f.hasAttribute("data-keep")) return;
   syncAttrs(f, t);
   const tag = f.tagName;
   const focused = f === document.activeElement;
@@ -85,7 +90,6 @@ function syncNode(f, t) {
     if (!focused && !f.hasAttribute("data-sticky") && f.value !== t.textContent) f.value = t.textContent;
     return;
   }
-  if (f.hasAttribute("data-keep")) return;
   syncChildren(f, t);
   if (tag === "SELECT" && !focused) {
     const sel = t.querySelector("option[selected]");

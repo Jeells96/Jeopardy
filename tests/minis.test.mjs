@@ -1,0 +1,414 @@
+// Unit tests for mini games + team names — run with:  node tests/minis.test.mjs
+import * as E from "../js/engine.js";
+
+let passed = 0, failed = 0;
+function ok(cond, name) { if (cond) passed++; else { failed++; console.log("  ✗ " + name); } }
+function eq(a, b, name) { ok(JSON.stringify(a) === JSON.stringify(b), `${name} (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`); }
+
+// Deterministic "random" so rotations are reproducible, plus many seeds for property checks.
+function rng(seed) { let x = seed >>> 0 || 1; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
+
+const QS = [
+  { id: "a1", category: "Movies", points: 100, type: "spoken", round: 1 },
+  { id: "a2", category: "Movies", points: 200, type: "spoken", round: 1 },
+  { id: "f1", category: "Poems", points: 0, type: "spoken", isFinal: true },
+];
+const roster = (h, w) => [
+  ...Array.from({ length: h }, (_, i) => ({ id: "h" + (i + 1), name: "Hub" + (i + 1), team: "team1" })),
+  ...Array.from({ length: w }, (_, i) => ({ id: "w" + (i + 1), name: "Wife" + (i + 1), team: "team2" })),
+];
+
+function world(players, seed = 7) {
+  const w = { state: E.defaultState(), qs: QS.map((q) => ({ ...q })), players, rand: rng(seed), t: 1_000_000, error: null, noop: false };
+  w.run = (name, params = {}, dt = 0) => {
+    w.t += 10 + dt;
+    const ch = E.ACTIONS[name](w.state, params, { now: w.t, questions: w.qs, players: w.players, rand: w.rand });
+    w.error = ch && ch.error ? ch.error : null;
+    w.noop = !ch;
+    if (ch && !ch.error) {
+      checkFirestoreSafe(ch.set, name);
+      w.state = { ...w.state, ...ch.set };
+      w.qs = w.qs.map((q) => { const u = (ch.questions || []).find((x) => x.id === q.id); return u ? { ...q, ...u.data } : q; });
+    }
+    return w;
+  };
+  w.game = (i = 0) => w.state.minis.list[i];
+  w.add = (game) => { w.run("miniAdd", { game }); return w.state.minis.list[w.state.minis.list.length - 1].id; };
+  return w;
+}
+// Firestore rejects `undefined` and arrays directly inside arrays.
+let unsafe = 0;
+function checkFirestoreSafe(v, where, inArray = false) {
+  if (v === undefined) { unsafe++; console.log("  ✗ undefined in change set of " + where); return; }
+  if (Array.isArray(v)) { if (inArray) { unsafe++; console.log("  ✗ nested array in " + where); } v.forEach((x) => checkFirestoreSafe(x, where, true)); return; }
+  if (v && typeof v === "object") Object.values(v).forEach((x) => checkFirestoreSafe(x, where, false));
+}
+
+console.log("mini game tests");
+
+// ---------- defaults, team names ----------
+{
+  const w = world(roster(2, 2));
+  eq(w.state.teamNames, { team1: "Husbands", team2: "Wives" }, "default team names are Husbands / Wives");
+  eq(E.teamName({}, "team2"), "Wives", "fallback name");
+  w.run("setTeamName", { team: "team1", name: "  The   Grinches ", byPlayer: true });
+  eq(w.state.teamNames.team1, "The Grinches", "a player can rename their team in the lobby");
+  w.run("setTeamName", { team: "team2", name: "the grinches", byPlayer: true });
+  ok(!!w.error, "can't copy the other team's name");
+  w.run("setTeamName", { team: "team2", name: "", byPlayer: true });
+  ok(w.noop, "blank name keeps the default");
+  w.run("setTeamName", { team: "team1", name: "", byPlayer: true });
+  eq(w.state.teamNames.team1, "Husbands", "clearing a custom name goes back to the default");
+  w.run("setSettings", { patch: { playersRename: false } });
+  w.run("setTeamName", { team: "team1", name: "Dads", byPlayer: true });
+  ok(!!w.error, "host can lock team names");
+  w.run("setTeamName", { team: "team1", name: "Dads" });
+  eq(w.state.teamNames.team1, "Dads", "host can always rename");
+  w.run("setSettings", { patch: { playersRename: true } });
+  w.run("startGame", { control: "team1" });
+  w.run("setTeamName", { team: "team2", name: "Moms", byPlayer: true });
+  ok(!!w.error, "players can't rename once Jeopardy starts");
+}
+
+// ---------- migration ----------
+{
+  const old = { ...E.defaultState(), teamNames: { team1: "Team 1", team2: "Elves" }, scores: { team1: 300, team2: 0 } };
+  delete old.minis;
+  delete old.settings.playersRename;
+  const m = E.migrate(old);
+  ok(m && m.patch && !m.full, "an in-progress older game is patched, not wiped");
+  eq(m.patch.teamNames, { team1: "Husbands", team2: "Elves" }, "old default names become Husbands/Wives, custom names kept");
+  ok(Array.isArray(m.patch.minis.list) && m.patch.settings.playersRename === true, "mini games + new setting added");
+  eq(E.migrate(E.defaultState()), null, "an up-to-date game needs no migration");
+  ok(!!E.migrate({ v: 1, teamNames: { team1: "Reds", team2: "Team 2" } }).full, "a very old game is replaced");
+  eq(E.migrate(null).full.teamNames, { team1: "Husbands", team2: "Wives" }, "brand new game uses the defaults");
+}
+
+// ---------- setup ----------
+{
+  const w = world(roster(2, 2));
+  const a = w.add({ name: "  Snowball   Toss ", type: "h2h", points: "250" });
+  const b = w.add({ name: "", type: "best", better: "low", unit: "seconds", points: "" });
+  const c = w.add({ name: "Third", type: "nonsense", points: -5, award: "match" });
+  eq([w.game(0).name, w.game(0).points, w.game(0).award], ["Snowball Toss", 250, "game"], "name/points are cleaned up");
+  eq([w.game(1).name, w.game(1).points, w.game(1).better, w.game(1).award], ["Mini game", 500, "low", "game"], "blank fields get sensible defaults");
+  eq([w.game(2).type, w.game(2).points, w.game(2).award], ["h2h", 0, "match"], "unknown type → head-to-head, negative points → 0");
+  w.run("miniMove", { id: c, dir: -1 });
+  eq(w.state.minis.list.map((g) => g.id), [a, c, b], "reorder up");
+  w.run("miniMove", { id: a, dir: -1 });
+  ok(w.noop, "can't move past the top");
+  w.run("miniUpdate", { id: b, patch: { name: "Wrap Race", points: 300 } });
+  eq([w.game(2).name, w.game(2).points, w.game(2).better, w.game(2).unit], ["Wrap Race", 300, "low", "seconds"], "editing keeps the other fields");
+  w.run("miniUpdate", { id: b, patch: { type: "h2h" } });
+  eq(w.game(2).type, "h2h", "type can change before the game starts");
+  w.run("miniRemove", { id: c });
+  eq(w.state.minis.list.length, 2, "remove a game");
+  for (let i = 0; i < 25; i++) w.run("miniAdd", { game: { name: "G" + i } });
+  eq(w.state.minis.list.length, 20, "capped at 20 mini games");
+}
+
+// ---------- flow: lobby → mini games → Jeopardy ----------
+{
+  const w = world(roster(3, 3));
+  const id = w.add({ name: "Toss", type: "h2h", points: 400 });
+  w.run("minisStart");
+  eq(w.state.phase, "minis", "mini games phase");
+  w.run("miniNext", { id });
+  ok(w.noop, "can't draw players before the game is opened");
+  w.run("miniPlay", { id });
+  eq([w.game().status, w.state.minis.current], ["active", id], "play a game");
+  w.run("miniNext", { id });
+  const m = E.openMatch(w.game());
+  ok(m.p1.id.startsWith("h") && m.p2.id.startsWith("w"), "draws one husband and one wife");
+  eq(w.state.sfx.sound, "pick", "drum-roll sound on the draw");
+  w.run("miniNext", { id });
+  ok(w.noop, "no new draw until the matchup is decided");
+  const pick = E.currentPick(w.state);
+  eq(pick.pids, [m.p1.id, m.p2.id], "currentPick lists who's up");
+  w.run("miniMatch", { id, winner: "team2" });
+  eq(E.miniStanding(w.game()).wins, { team1: 0, team2: 1, ties: 0 }, "matchup recorded");
+  eq(w.state.scores, { team1: 0, team2: 0 }, "winner-takes-all: no points until the game is finished");
+  w.run("miniFinish", { id });
+  eq(w.state.scores, { team1: 0, team2: 400 }, "the leader gets the points when the host just hits finish");
+  eq(w.game().result, { winner: "team2", team1: 0, team2: 400 }, "result stored");
+  eq(w.state.sfx.sound, "miniwin", "win sound");
+  w.run("miniClose");
+  eq(w.state.minis.current, null, "back to the list");
+  w.run("startGame", { control: "team1" });
+  eq([w.state.phase, w.state.scores.team2], ["board", 400], "mini-game points carry into Jeopardy");
+  w.run("startGame", { control: "team2" });
+  ok(w.noop, "pressing start twice doesn't restart Jeopardy");
+}
+
+// ---------- head-to-head rotation is fair for every roster shape ----------
+for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) {
+  for (const seed of [1, 2, 3, 11, 99]) {
+    const w = world(roster(h, wv), seed);
+    const id = w.add({ name: "Rot", type: "h2h" });
+    w.run("miniPlay", { id });
+    const big = Math.max(h, wv);
+    const seq = { p1: [], p2: [] };
+    for (let i = 0; i < big * 2; i++) {
+      w.run("miniNext", { id });
+      const m = E.openMatch(w.game());
+      seq.p1.push(m.p1.id); seq.p2.push(m.p2.id);
+      w.run("miniMatch", { id, winner: i % 2 ? "team1" : "team2" });
+    }
+    const label = `${h}v${wv} seed ${seed}`;
+    for (const [key, n] of [["p1", h], ["p2", wv]]) {
+      // within each block of n draws, everyone on that team appears exactly once
+      let fair = true;
+      for (let i = 0; i + n <= seq[key].length; i += n) fair = fair && new Set(seq[key].slice(i, i + n)).size === n;
+      ok(fair, `${label}: every ${key === "p1" ? "husband" : "wife"} plays once before anyone repeats`);
+      if (n > 1) ok(seq[key].every((p, i) => i === 0 || p !== seq[key][i - 1]), `${label}: nobody plays twice in a row (${key})`);
+    }
+    ok(E.miniEveryonePlayed(w.game(), w.players), `${label}: everyone has played after ${big * 2} matchups`);
+  }
+}
+
+// ---------- head-to-head with missing players ----------
+{
+  const w = world([]);
+  const id = w.add({ name: "No phones", type: "h2h", points: 300 });
+  w.run("miniPlay", { id }).run("miniNext", { id });
+  const m = E.openMatch(w.game());
+  eq([m.p1, m.p2], [null, null], "no players joined → a nameless round still works");
+  w.run("miniMatch", { id, winner: "team1" }).run("miniNext", { id }).run("miniMatch", { id, winner: "tie" });
+  eq(E.miniStanding(w.game()).wins, { team1: 1, team2: 0, ties: 1 }, "wins + ties tracked without names");
+  w.run("miniFinish", { id });
+  eq(w.state.scores.team1, 300, "nameless game still awards points");
+
+  const one = world(roster(2, 0));
+  const id2 = one.add({ name: "Half", type: "h2h" });
+  one.run("miniPlay", { id: id2 }).run("miniNext", { id: id2 });
+  const m2 = E.openMatch(one.game());
+  ok(m2.p1 && m2.p2 === null, "one empty team: named husband vs the Wives");
+  one.run("miniMatch", { id: id2, winner: "team2" });
+  eq(E.miniStanding(one.game()).wins.team2, 1, "the empty team can still win a round");
+}
+
+// ---------- re-picks and hand-picking ----------
+{
+  const w = world(roster(3, 3), 5);
+  const id = w.add({ name: "Swap", type: "h2h" });
+  w.run("miniPlay", { id }).run("miniNext", { id });
+  const m0 = E.openMatch(w.game());
+  w.run("miniRepick", { id, team: "team1" });
+  const m1 = E.openMatch(w.game());
+  ok(m1.p1.id !== m0.p1.id && m1.p2.id === m0.p2.id && m1.p2.at === m0.p2.at, "re-pick one side: new husband, same wife (no re-spin)");
+  w.run("miniRepick", { id });
+  const m2 = E.openMatch(w.game());
+  ok(m2.p1.id !== m1.p1.id && m2.p2.id !== m1.p2.id, "re-pick both sides");
+  w.run("miniSetPlayer", { id, team: "team2", pid: "w3" });
+  eq([E.openMatch(w.game()).p2.id, E.openMatch(w.game()).p2.at], ["w3", 0], "host hand-picks a player (shown instantly)");
+  w.run("miniSetPlayer", { id, team: "team2", pid: "h1" });
+  ok(w.noop, "can't put a husband on the wives' side");
+  w.run("miniSetPlayer", { id, team: "team1", pid: "nobody" });
+  ok(w.noop, "unknown player ignored");
+  // only the people who actually played are marked as played
+  const final = E.openMatch(w.game());
+  w.run("miniMatch", { id, winner: "team1" });
+  eq(w.game().played, { team1: [final.p1.id], team2: ["w3"] }, "re-picked (skipped) players stay in the pool");
+  const solo = world(roster(1, 1));
+  const sid = solo.add({ name: "Solo", type: "h2h" });
+  solo.run("miniPlay", { id: sid }).run("miniNext", { id: sid }).run("miniRepick", { id: sid });
+  eq(E.openMatch(solo.game()).p1.id, "h1", "re-pick with a team of one keeps that player");
+}
+
+// ---------- points per matchup ----------
+{
+  const w = world(roster(2, 2));
+  const id = w.add({ name: "Per round", type: "h2h", points: 100, award: "match" });
+  w.run("miniPlay", { id });
+  w.run("miniNext", { id }).run("miniMatch", { id, winner: "team1" });
+  eq(w.state.scores, { team1: 100, team2: 0 }, "points land as each matchup is won");
+  w.run("miniNext", { id }).run("miniMatch", { id, winner: "tie" });
+  eq(w.state.scores, { team1: 100, team2: 0 }, "a tied matchup gives no points");
+  w.run("miniNext", { id }).run("miniMatch", { id, winner: "team2" });
+  w.run("miniNext", { id }).run("miniMatch", { id, winner: "team2" });
+  eq(w.state.scores, { team1: 100, team2: 200 }, "running totals");
+  w.run("undo");
+  eq(w.state.scores.team2, 100, "undo takes the matchup points back");
+  ok(!!E.openMatch(w.game()), "…and re-opens that matchup to be judged again");
+  w.run("miniMatch", { id, winner: "team1" });
+  eq(w.state.scores, { team1: 200, team2: 100 }, "re-judged the other way");
+  const firstMatch = w.game().matches[0].id;
+  w.run("miniMatchRemove", { id, matchId: firstMatch });
+  eq([w.state.scores.team1, w.game().matches.length], [100, 3], "removing a matchup hands its points back");
+  w.run("miniUpdate", { id, patch: { award: "game" } });
+  ok(!!w.error, "can't switch scoring style mid-game");
+  w.run("miniFinish", { id, winner: "team2" });
+  eq(w.state.scores, { team1: 100, team2: 100 }, "finishing a per-matchup game adds nothing extra");
+  eq(w.game().result, { winner: "team2", team1: 100, team2: 100 }, "result shows the points each team earned");
+  w.run("miniMatchRemove", { id, matchId: w.game().matches[0].id });
+  ok(!!w.error, "finished games are locked");
+  w.run("miniReset", { id });
+  eq([w.state.scores, w.game().status, w.game().matches.length], [{ team1: 0, team2: 0 }, "pending", 0], "reset hands back every point and clears the game");
+  w.run("miniReset", { id });
+  eq(w.state.scores, { team1: 0, team2: 0 }, "resetting twice doesn't double-refund");
+}
+
+// ---------- finishing: every outcome ----------
+{
+  const mk = (pts = 500) => { const w = world(roster(2, 2)); const id = w.add({ name: "Fin", type: "h2h", points: pts }); w.run("miniPlay", { id }); return [w, id]; };
+  let [w, id] = mk();
+  w.run("miniFinish", { id, winner: "team1" });
+  eq(w.state.scores, { team1: 500, team2: 0 }, "host declares a winner with no matchups tracked");
+  [w, id] = mk(501);
+  w.run("miniFinish", { id, winner: "tie" });
+  eq(w.state.scores, { team1: 251, team2: 251 }, "a tie splits the points (rounded)");
+  w.run("undo");
+  eq([w.state.scores, w.game().status, w.game().result], [{ team1: 0, team2: 0 }, "active", null], "one undo reverses both halves of a split and re-opens the game");
+  w.run("miniFinish", { id, winner: "none" });
+  eq([w.state.scores, w.game().result.winner], [{ team1: 0, team2: 0 }, "none"], "no winner → no points");
+  [w, id] = mk();
+  w.run("miniFinish", { id });
+  eq(w.game().result.winner, "none", "finishing an unplayed game without choosing → nobody");
+  [w, id] = mk();
+  w.run("miniNext", { id }).run("miniMatch", { id, winner: "team1" }).run("miniNext", { id }).run("miniMatch", { id, winner: "team2" });
+  w.run("miniNext", { id }); // an undecided matchup is on screen
+  w.run("miniFinish", { id });
+  eq([w.game().result.winner, w.state.scores, w.game().matches.length], ["tie", { team1: 250, team2: 250 }, 2], "level on matchups → tie; the undecided matchup is dropped");
+  w.run("miniFinish", { id, winner: "team1" });
+  ok(w.noop, "can't finish twice");
+  [w, id] = mk();
+  w.run("miniNext", { id }).run("miniMatch", { id, winner: "team1" });
+  w.run("miniFinish", { id, winner: "team2" });
+  eq(w.state.scores, { team1: 0, team2: 500 }, "host can overrule the standings");
+  [w, id] = mk(0);
+  w.run("miniFinish", { id, winner: "team1" });
+  eq([w.state.history.length, w.game().result.winner], [0, "team1"], "a 0-point game records a winner with no score change");
+}
+
+// ---------- best overall ----------
+{
+  const w = world(roster(2, 4), 3);
+  const id = w.add({ name: "Stack", type: "best", points: 600, unit: "cups" });
+  w.run("miniPlay", { id });
+  const order = [];
+  const scores = [5, 9, 7, 9.456, 3, 8];
+  for (const sc of scores) {
+    w.run("miniNext", { id });
+    order.push(w.game().turn);
+    w.run("miniScore", { id, score: sc });
+  }
+  eq(order.map((t) => t.team).slice(0, 4), order[0].team === "team1" ? ["team1", "team2", "team1", "team2"] : ["team2", "team1", "team2", "team1"], "turns alternate teams while both have players waiting");
+  eq(new Set(order.map((t) => t.pid)).size, 6, "all 6 players get exactly one turn (uneven teams)");
+  ok(E.miniEveryonePlayed(w.game(), w.players), "everyone has played");
+  const st = E.miniStanding(w.game());
+  eq(st.sorted[0].score, 9.46, "scores keep 2 decimals; highest is on top");
+  ok(["team1", "team2", "tie"].includes(st.leader), "there is a leader");
+  w.run("miniNext", { id });
+  ok(!!w.game().turn && !w.error, "a second lap is allowed");
+  w.run("miniScore", { id, score: "" });
+  ok(!!w.error, "blank score rejected");
+  w.run("miniScore", { id, score: "abc" });
+  ok(!!w.error, "non-numeric score rejected");
+  w.run("miniScore", { id, score: "12.5" });
+  eq(E.miniStanding(w.game()).sorted[0].score, 12.5, "text numbers are accepted");
+  const top = E.miniStanding(w.game()).sorted[0];
+  w.run("miniFinish", { id });
+  eq(w.state.scores[top.team], 600, "best single score wins it for their team");
+  w.run("miniEntryRemove", { id, entryId: top.id });
+  ok(!!w.error, "finished game's scores are locked");
+}
+{
+  // lowest wins + ties + removing a score
+  const w = world(roster(2, 2), 9);
+  const id = w.add({ name: "Wrap", type: "best", better: "low", unit: "seconds", points: 200 });
+  w.run("miniPlay", { id });
+  for (const sc of [30, 22, 22, 41]) { w.run("miniNext", { id }); w.run("miniScore", { id, score: sc }); }
+  const st = E.miniStanding(w.game());
+  eq(st.sorted.map((e) => e.score), [22, 22, 30, 41], "fastest first");
+  const teams22 = st.sorted.slice(0, 2).map((e) => e.team);
+  eq(st.leader, teams22[0] === teams22[1] ? teams22[0] : "tie", "equal best scores on different teams = tie");
+  w.run("miniEntryRemove", { id, entryId: st.sorted[0].id });
+  eq(E.miniStanding(w.game()).sorted.length, 3, "remove a mistyped score");
+  w.run("miniNext", { id });
+  const t0 = w.game().turn;
+  w.run("miniRepick", { id });
+  ok(w.game().turn.pid !== t0.pid && w.game().turn.team === t0.team, "re-pick swaps in a teammate");
+  w.run("miniSetPlayer", { id, pid: "w2" });
+  eq([w.game().turn.pid, w.game().turn.team], ["w2", "team2"], "hand-pick anyone for the turn");
+  w.run("miniFinish", { id, winner: "tie" });
+  eq(w.state.scores, { team1: 100, team2: 100 }, "tie splits");
+  eq(w.game().turn, null, "the open turn is cleared on finish");
+}
+{
+  const w = world([]);
+  const id = w.add({ name: "Empty", type: "best" });
+  w.run("miniPlay", { id }).run("miniNext", { id });
+  ok(!!w.error && /Players/.test(w.error), "best-overall with nobody joined explains what to do");
+  w.run("miniFinish", { id, winner: "team2" });
+  eq(w.state.scores.team2, 500, "…but the host can still just pick the winner");
+  const half = world(roster(0, 3));
+  const hid = half.add({ name: "Half", type: "best" });
+  half.run("miniPlay", { id: hid });
+  for (let i = 0; i < 3; i++) { half.run("miniNext", { id: hid }); half.run("miniScore", { id: hid, score: i }); }
+  eq(new Set(half.game().entries.map((e) => e.pid)).size, 3, "one-sided roster still rotates through everyone");
+}
+
+// ---------- undo / reset / new game ----------
+{
+  const w = world(roster(2, 2));
+  const a = w.add({ name: "A", type: "h2h", points: 300 });
+  const b = w.add({ name: "B", type: "best", points: 200 });
+  w.run("minisStart").run("miniPlay", { id: a }).run("miniFinish", { id: a, winner: "team1" }).run("miniClose");
+  w.run("miniPlay", { id: b }).run("miniNext", { id: b }).run("miniScore", { id: b, score: 4 }).run("miniFinish", { id: b }).run("miniClose");
+  const leader = w.game(1).result.winner;
+  eq(w.state.scores[leader], leader === "team1" ? 500 : 200, "two games' points add up");
+  w.run("miniReset", { id: a });
+  eq([w.state.scores.team1, w.game(0).status], [leader === "team1" ? 200 : 0, "pending"], "reset one finished game → its points come back");
+  w.run("undo");
+  eq(w.state.scores.team1, leader === "team1" ? 500 : 300, "undo of a reset restores the points");
+  w.run("adjustScore", { team: "team2", delta: 50 });
+  w.run("newGame");
+  eq([w.state.phase, w.state.scores, w.state.minis.list.map((g) => [g.name, g.points, g.status, g.entries.length, g.result])],
+    ["lobby", { team1: 0, team2: 0 }, [["A", 300, "pending", 0, null], ["B", 200, "pending", 0, null]]],
+    "new game keeps the mini-game setup but clears results");
+}
+
+// ---------- mini game in the middle of Jeopardy ----------
+{
+  const w = world(roster(2, 2));
+  const id = w.add({ name: "Break game", type: "h2h", points: 150 });
+  w.run("startGame", { control: "team2" });
+  w.run("pickClue", { qid: "a1" });
+  w.run("minisStart");
+  ok(!!w.error, "can't jump to mini games with a clue open");
+  w.run("miniPlay", { id });
+  ok(!!w.error, "…or start one directly");
+  w.run("closeClue");
+  w.run("miniPlay", { id });
+  eq([w.state.phase, w.state.minis.back], ["minis", "board"], "from the board, a mini game remembers to come back");
+  w.run("miniFinish", { id, winner: "team1" }).run("miniClose");
+  w.run("minisEnd");
+  eq([w.state.phase, w.state.round, w.state.control, w.state.scores.team1, w.qs.find((q) => q.id === "a1").used],
+    ["board", 1, "team2", 150, true], "back to the same board: round, control and used clues untouched");
+  w.run("minisEnd");
+  ok(w.noop, "nothing to return to twice");
+  w.run("finalStart");
+  w.run("minisStart");
+  ok(!!w.error, "no mini games during Final Jeopardy");
+  w.run("endGame");
+  const w2 = world(roster(1, 1));
+  const g2 = w2.add({ name: "Only minis", type: "h2h", points: 100 });
+  w2.run("minisStart").run("miniPlay", { id: g2 }).run("miniFinish", { id: g2, winner: "team2" });
+  w2.run("endGame");
+  eq([w2.state.phase, w2.state.scores.team2], ["over", 100], "a mini-games-only night can end with a winner");
+  w2.run("miniPlay", { id: g2 });
+  ok(!!w2.error, "no mini games after the game is over");
+}
+
+// ---------- removing the game on screen ----------
+{
+  const w = world(roster(1, 1));
+  const id = w.add({ name: "Gone", type: "h2h" });
+  w.run("miniPlay", { id }).run("miniRemove", { id });
+  eq([w.state.minis.current, w.state.minis.list.length], [null, 0], "deleting the game being played returns to the list");
+  eq(E.currentPick(w.state), null, "no pick when nothing is being played");
+}
+
+ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
+console.log(`\n${passed} passed, ${failed} failed`);
+process.exit(failed ? 1 : 0);

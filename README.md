@@ -1,8 +1,9 @@
 # 🎄 Christmas Jeopardy 🎅
 
-A show-style, real-time Jeopardy game for a Christmas party: two teams, everyone buzzes
-in from their own phone, a projector board, a host console, and a private **host remote**
-for your phone with the answer key and every control.
+A show-style, real-time game night for a Christmas party — **Husbands vs Wives** by
+default. Play **mini games** for team points, then **Jeopardy**: everyone buzzes in from
+their own phone, with a projector board, a host console, and a private **host remote** for
+your phone with the answer key and every control.
 
 **Live site:** https://Jeells96.github.io/Jeopardy/
 
@@ -16,9 +17,46 @@ for your phone with the answer key and every control.
 2. **Sound:** tap **🔊** on whichever screen is connected to speakers.
 3. **Your phone:** open **📱 Remote** (same code). It shows the answer to every clue,
    who's buzzed, wagers, and all the buttons — host from anywhere in the room.
-4. **Players** scan the QR code on the lobby screen, type their name, pick a team and tap
-   **Enable microphone**.
-5. **Follow the gold button.** It always shows the next step (keyboard: **Space**).
+4. **Players** scan the QR code on the lobby screen, type their name, pick **Husbands** or
+   **Wives** and tap **Enable microphone**. (A team can rename itself from a phone.)
+5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
+   mini games first if you've set any up, then Jeopardy.
+
+---
+
+## 🎯 Mini games (before Jeopardy)
+
+Set them up in **⚙ Settings → Mini games**: type a name and tap **+ Head-to-head** or
+**+ Best overall** (or tap one of the ready-made ideas). Each game has its own point value,
+and the points go straight onto the team's score and carry into Jeopardy.
+
+| Type | How it plays | What you do |
+|---|---|---|
+| ⚔️ **Head-to-head** | One husband faces one wife each round | Tap who won (keys **1** / **2**, **T** for a tie) |
+| 🏅 **Best overall** | Everyone takes a turn; best single score wins it for their team | Type each score and press Enter |
+
+- **Who's up next?** Press the gold button and the big screen shuffles through the names,
+  lands on the pick with a drum-roll, and **says it out loud** ("Up next: Jake versus
+  Sarah!"). The picked players' phones buzz with **You're up!**
+- **Fair rotation:** nobody is drawn twice until everyone on their team has had a go, and
+  nobody plays twice in a row. Uneven teams are fine.
+- **Don't like the draw?** Tap 🎲 to re-draw one side, or choose a person from the list.
+- **Points:** head-to-head games can give the points to the team that wins the game, or
+  *for every matchup win*. Best-overall games can be highest-wins or lowest-wins (fastest
+  time), with a unit like "seconds".
+- **Finishing:** the game suggests the winner from what you tracked; you can overrule it,
+  call a **tie** (points split) or give no points. You can also skip the tracking entirely
+  and just declare who won.
+- **Fixing mistakes:** remove a wrong result with ✕, **Undo** the last points, or **↺ Reset**
+  a game to hand its points back.
+- **No phone?** Add people by hand in **Settings → Players** — they're drawn like anyone else.
+- **Mid-game bonus round:** Settings → Jump to → **Mini games** pauses Jeopardy; the gold
+  button brings you back to the same board.
+
+### Team names
+Teams start as **Husbands** and **Wives**. Until Jeopardy starts, anyone on a team can tap
+**✏️ Rename our team** on their phone. You can always rename teams in Settings → Game, and
+switch off phone renaming there too.
 
 ---
 
@@ -111,6 +149,8 @@ sound):
 | Someone buzzed in | `buzz-in.mp3` |
 | Board appears / new round | `board-fill.mp3` |
 | Winner announced | `winner.mp3` |
+| Mini games: drawing who's up next (~2 s) | `up-next.mp3` |
+| Mini games: a team wins a mini game | `mini-game-win.mp3` |
 
 > The official *Jeopardy!* sounds and music are copyrighted and aren't included. Use audio
 > you have the rights to use.
@@ -171,15 +211,18 @@ Static site, no build step. Firebase and SheetJS load from CDNs.
 | `js/engine.js` | Pure game rules — every action is `(state, params) → changes` |
 | `js/data.js` | Firestore I/O; runs engine actions inside transactions; server-clock sync |
 | `js/app.js` | Routing, live subscriptions, rendering, actions, automations, sounds, mic |
-| `js/ui/*.js` | Screens: `stage` (show display), `host`, `dock` (next-step logic), `remote`, `player`, `join` |
+| `js/ui/*.js` | Screens: `stage` (show display), `host`, `dock` (next-step logic), `remote`, `player`, `join`, `minis` (all mini-game screens), `team` (phone renaming) |
 | `js/xlsx.js` | Template download + spreadsheet import |
 | `tools/make_template.py` | Regenerates the sample template (`python3 tools/make_template.py`) |
 
 **Tests**
 ```
-node tests/engine.test.mjs        # rules unit tests
+node tests/engine.test.mjs        # Jeopardy rules
+node tests/minis.test.mjs         # mini games, rotation fairness, team names, upgrades
 node tests/server.js &            # local site + in-memory Firestore stand-in (port 8123)
-node tests/e2e.js [shotsDir]      # full game: host, board, remote and 4 phones
+node tests/e2e.js [shotsDir]      # full Jeopardy game: host, board, remote and 4 phones
+node tests/e2e-minis.js [shots]   # Husbands vs Wives night: mini games → Jeopardy,
+                                  # a phone-free night, and upgrading an older saved game
 ```
 
 Firestore layout: `state/game` (the whole game), `state/spoken` (live transcript),
