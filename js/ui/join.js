@@ -32,7 +32,7 @@ export function renderGate(G, target) {
   return `<div class="join">
     <div class="join-card">
       ${logo}
-      <h2 class="gate-title">🔒 ${target === "remote" ? "Host remote" : "Jaren's View"}</h2>
+      <h2 class="gate-title">🔒 ${target === "remote" ? "Host remote" : target === "questions" ? "Question library" : "Jaren's View"}</h2>
       <p class="muted">Enter the host code.</p>
       <input id="gate-code" class="join-input code" type="password" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off" data-sticky>
       <div class="err" role="alert">${esc(G.ui.gateErr || "")}</div>

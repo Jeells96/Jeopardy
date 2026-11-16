@@ -110,26 +110,53 @@ switch off phone renaming there too.
 
 ---
 
-## 📝 Writing your questions
+## 📝 Writing your questions — the Question library
 
-In Jaren's View → **⚙ Settings → Questions → ⬇ Download the template** (or grab
-[`christmas-jeopardy-template.xlsx`](./christmas-jeopardy-template.xlsx)). It comes with a
-full sample game (60 clues + Final) you can play as-is or edit. Built for the Excel /
-Google Sheets phone apps:
+Open **⚙ Settings → Questions → 📚 Open the question library** (or go to `#/questions`, host
+code 2325). Every set of questions is kept there — one per year — so you can look back at
+past years, search them, and reuse a good question.
 
-- **Each category is its own tab** — the tab name is the category on the board.
-  Add a tab = new category, delete = remove, rename = rename.
-- Start a tab name with **`DJ `** (e.g. `DJ Sweet Treats`) to put it in **Double
-  Jeopardy**. No DJ tabs → the game goes straight from round one to Final.
-- Columns: `Points · Question · Answer · Other choices · Daily Double`
-  - Most clues only need **Question + Answer**.
-  - **Points** blank → auto ($100–$500, or $200–$1,000 in Double Jeopardy).
-  - **Other choices**: the *wrong* options separated by `;` makes it multiple choice
-    (e.g. `Elf; The Grinch; Klaus`). The game shuffles in your Answer.
-  - **Daily Double**: pick **Yes** (the show has 1 in round one, 2 in Double Jeopardy).
-- **Final Jeopardy tab:** `Category · Question · Answer` in the first row.
+- **+ New question set** — start empty, from what's in the game now, or from the sample game.
+- **📋 Paste questions** — mass input. Paste a whole batch and you see a live preview of
+  what was understood before anything is saved. The tidiest format:
 
-Then **⬆ Import your spreadsheet**. The board updates for everyone instantly.
+  ```
+  == Jeopardy ==
+  ## Christmas Movies
+  100 | Who lives on Mount Crumpit? | The Grinch
+  300 | Which store introduced Rudolph in 1939? | Montgomery Ward | Macy's; Sears; Woolworth's | DD
+  == Double Jeopardy ==
+  ## History
+  200 | Which president made Christmas a federal holiday? | Ulysses S. Grant
+  == Final Jeopardy ==
+  ## Famous Poems
+  This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nicholas
+  ```
+
+  Each line is `points | question | answer`. A 4th part with wrong options (separated by
+  `;`) makes it **multiple choice**; `DD` marks a Daily Double; a 6th part is a host note.
+  Leave points blank to fill them in automatically. It also understands
+  `Question? Answer: X`, numbered lists with A) B) C) D) options, tables, rows copied
+  from a spreadsheet, and JSON.
+- **🤖 Ask AI for questions** — builds a request to paste into ChatGPT or Claude (number of
+  categories, round, topics) that comes back in exactly the paste format, and tells it not
+  to reuse answers from your past years.
+- **Edit in place** — every question, answer, value and category is editable right on the
+  page. **⋯** opens wrong options (multiple choice), Daily Double, round, a **host note**
+  (shown only on your phone remote — e.g. "also accept St. Nick"), move, copy to another
+  set, and delete (with Undo).
+- **♻ Also asked in Christmas 2025** — repeats from past years are flagged automatically.
+- **🔎 Search every year** — questions, answers, categories and notes across all sets;
+  copy any result into this year's set.
+- **Readiness check** — what's still missing (unfinished questions, short categories, no
+  Final Jeopardy, Daily Double count). The **Unfinished** filter shows only what needs work;
+  half-written ideas are kept but never put on the board.
+- **▶ Use in the game** — puts the set's finished questions on the board.
+- **⋯ More** — download as a spreadsheet or text file, add questions from a spreadsheet,
+  duplicate, **lock** a past year so it can't be changed by accident, delete.
+
+The spreadsheet template still works (Settings → Questions → Spreadsheet) if you prefer it.
+Questions live in Firestore under `state/set-*`, which the existing rules already allow.
 
 ---
 
@@ -212,17 +239,21 @@ Static site, no build step. Firebase and SheetJS load from CDNs.
 | `js/data.js` | Firestore I/O; runs engine actions inside transactions; server-clock sync |
 | `js/app.js` | Routing, live subscriptions, rendering, actions, automations, sounds, mic |
 | `js/ui/*.js` | Screens: `stage` (show display), `host`, `dock` (next-step logic), `remote`, `player`, `join`, `minis` (all mini-game screens), `team` (phone renaming) |
-| `js/xlsx.js` | Template download + spreadsheet import |
+| `js/bank.js` | Question library logic: paste parser, checks, search, repeats, export |
+| `js/libctl.js` + `js/ui/library.js` | Question library screen |
+| `js/xlsx.js` | Spreadsheet template, import and export |
 | `tools/make_template.py` | Regenerates the sample template (`python3 tools/make_template.py`) |
 
 **Tests**
 ```
 node tests/engine.test.mjs        # Jeopardy rules
 node tests/minis.test.mjs         # mini games, rotation fairness, team names, upgrades
+node tests/bank.test.mjs          # question library: paste formats, checks, export, search
 node tests/server.js &            # local site + in-memory Firestore stand-in (port 8123)
 node tests/e2e.js [shotsDir]      # full Jeopardy game: host, board, remote and 4 phones
 node tests/e2e-minis.js [shots]   # Husbands vs Wives night: mini games → Jeopardy,
                                   # a phone-free night, and upgrading an older saved game
+node tests/e2e-library.js [shots] # question library: paste, edit, search, lock, load into the game
 ```
 
 Firestore layout: `state/game` (the whole game), `state/spoken` (live transcript),

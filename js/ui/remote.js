@@ -50,7 +50,8 @@ function secret(G) {
     return `<div class="secret">
       <div class="s-head"><span>${esc(q.category)}</span><span>${c.dd ? `Daily Double${c.dd.wager ? " · " + money(c.dd.wager) : ""}` : money(q.points)}</span></div>
       <div class="s-q">${esc(q.question)}</div>
-      <div class="s-ans"><small>Answer</small>${esc(q.answer || "(no answer in spreadsheet)")}</div>
+      <div class="s-ans"><small>Answer</small>${esc(q.answer || "(no answer written)")}</div>
+      ${q.note ? `<div class="s-note">📝 ${esc(q.note)}</div>` : ""}
       ${extra}
     </div>`;
   }

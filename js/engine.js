@@ -54,6 +54,7 @@ export function defaultState(keep = {}) {
     clue: null,
     final: freshFinal(),
     minis: freshMinis(),
+    loaded: null, // which question set from the library is on the board: { id, name, at }
     history: [],
     sfx: null,
   };
@@ -507,9 +508,16 @@ export function setSettings(s, { patch }, ctx) {
 export function newGame(s, _p, ctx) {
   const fresh = defaultState({ teamNames: s.teamNames, settings: s.settings });
   fresh.minis = { list: minisOf(s).list.map((g) => ({ ...g, ...blankProgress() })), current: null, back: null };
+  fresh.loaded = s.loaded || null; // the questions themselves stay loaded
   const b = builder(s, ctx);
   for (const [k, v] of Object.entries(fresh)) b.field(k, v);
   return b.done();
+}
+
+// Remember which library set was put on the board (null = loaded some other way).
+export function setLoaded(s, { id, name } = {}, ctx) {
+  const loaded = id ? { id: String(id), name: String(name || "").slice(0, 60), at: ctx.now } : null;
+  return builder(s, ctx).field("loaded", loaded).done();
 }
 
 // =================================================================
@@ -826,7 +834,7 @@ export const ACTIONS = {
   autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, answerTimeout, buzzWindowTimeout, nobody,
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
-  setTeamName, setSettings, newGame,
+  setTeamName, setSettings, newGame, setLoaded,
   miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

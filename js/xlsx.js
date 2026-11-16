@@ -36,6 +36,36 @@ export async function downloadTemplate() {
   XLSX.writeFile(wb, "christmas-jeopardy-template.xlsx");
 }
 
+// Save a library set as a spreadsheet in the same tab layout the importer reads
+// (one tab per category, "DJ " tabs for Double Jeopardy, a Final Jeopardy tab).
+export function exportSetXlsx(set, grouped) {
+  const wb = XLSX.utils.book_new();
+  const taken = new Set();
+  const tab = (name) => {
+    const clean = String(name).replace(/[:\\/?*[\]]/g, " ").replace(/\s+/g, " ").trim() || "Category";
+    let n = clean.slice(0, 31);
+    for (let i = 2; taken.has(n.toLowerCase()); i++) n = clean.slice(0, 28) + " " + i;
+    taken.add(n.toLowerCase());
+    return n;
+  };
+  const add = (name, rows, widths) => {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = widths.map((wch) => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, ws, tab(name));
+  };
+  for (const slot of ["r1", "r2"]) {
+    for (const cat of grouped.rounds[slot]) {
+      add((slot === "r2" ? "DJ " : "") + cat.name,
+        [COLUMNS, ...cat.clues.map((c) => [c.pts, c.question, c.answer, c.wrong.join("; "), c.dd ? "Yes" : ""])], [8, 50, 28, 36, 13]);
+    }
+  }
+  if (grouped.final.length) add("Final Jeopardy", [["Category", "Question", "Answer"], ...grouped.final.map((c) => [c.category, c.question, c.answer])], [24, 50, 28]);
+  if (grouped.loose.length) add("Notes - unsorted ideas", [["Idea / question", "Answer"], ...grouped.loose.map((c) => [c.question, c.answer])], [60, 30]);
+  if (!wb.SheetNames.length) add("My Category", [COLUMNS], [8, 50, 28, 36, 13]);
+  const file = String(set.name || "questions").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "questions";
+  XLSX.writeFile(wb, file + ".xlsx");
+}
+
 const truthy = (v) => ["yes", "y", "true", "1", "x", "✓", "dd"].includes(String(v || "").trim().toLowerCase());
 const letterToIndex = (s) => (s == null ? -1 : "ABCDEF".indexOf(String(s).trim().toUpperCase()));
 const isSkippableTab = (name) => /read ?me|instruction|notes|^help$|^info$|^how to/i.test(name);

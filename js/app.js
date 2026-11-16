@@ -9,6 +9,8 @@ import { renderJoin, renderGate, renderLoading, renderBoardPage } from "./ui/joi
 import { hostSteps } from "./ui/dock.js";
 import { PRESETS } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
+import { renderLibrary } from "./ui/library.js";
+import { initLibrary, libClick, libChange, libInput } from "./libctl.js";
 import * as Speech from "./speech.js";
 import { OWN, OPP, pickPunIndex } from "./puns.js";
 import { downloadTemplate, parseWorkbook } from "./xlsx.js";
@@ -22,6 +24,7 @@ const G = {
   fsError: false, soundOn: false, myBuzzKey: null, lastPun: null, seenSelf: false,
   now: () => D.serverNow(),
 };
+initLibrary(G);
 window.__G = G; // handy for debugging in the console
 
 const appEl = document.getElementById("app");
@@ -55,6 +58,9 @@ function doRender() {
   } else if (r === "remote" || r === "cheat") {
     if (!isHost()) { html = renderGate(G, "remote"); view = "join"; }
     else { html = G.S ? renderRemote(G) : renderLoading(G); view = G.S ? "remote" : "join"; }
+  } else if (r === "questions") {
+    if (!isHost()) { html = renderGate(G, "questions"); view = "join"; }
+    else { watchSets(); html = renderLibrary(G); view = "library"; }
   } else if (r === "board") {
     html = G.S ? renderBoardPage(G) : renderLoading(G); view = G.S ? "board" : "join";
   } else if (!G.me) {
@@ -165,6 +171,15 @@ function onPlayers() {
     G.ui.kicked = true;
   }
 }
+// The question library is only loaded on the screen that uses it.
+let setsWatched = false;
+function watchSets() {
+  if (setsWatched) return;
+  setsWatched = true;
+  D.subscribeSets((sets) => { G.sets = sets; G.setsReady = true; render(); }, onErr);
+}
+const libCtx = { G, D, toast, render };
+
 function startSubscriptions() {
   D.subscribeState((s) => { const prev = G.S; G.S = s; G.fsError = false; onState(prev, s); render(); }, onErr);
   D.subscribeSpoken((s) => { G.spoken = s; render(); }, onErr);
@@ -498,7 +513,10 @@ async function handle(a, p, el) {
 document.addEventListener("click", async (e) => {
   const el = e.target.closest("[data-action]");
   if (!el || el.disabled || el.dataset.action === "buzz") return;
-  try { await handle(el.dataset.action, params(el), el); }
+  try {
+    if (el.dataset.action.startsWith("lib-")) await libClick(el.dataset.action, el, libCtx);
+    else await handle(el.dataset.action, params(el), el);
+  }
   catch (err) { toast(err.message || String(err), "bad"); }
 });
 // Buzz on pointerdown — noticeably faster than waiting for a full click.
@@ -512,6 +530,7 @@ document.addEventListener("pointerdown", (e) => {
 document.addEventListener("input", (e) => {
   const el = e.target;
   const k = el.dataset && el.dataset.input;
+  if (k && k.startsWith("lib-")) return libInput(k, el, libCtx);
   if (k === "dd-wager") { G.ui.ddWager = el.value; render(); }
   else if (k === "join-name") { G.ui.joinName = el.value; render(); }
   else if (k === "final-answer") { clearTimeout(faTimer); const v = el.value; faTimer = setTimeout(() => saveFinalAnswer(v, false), 700); }
@@ -522,7 +541,8 @@ document.addEventListener("change", async (e) => {
   const k = el.dataset && el.dataset.change;
   if (!k) return;
   try {
-    if (k === "setting") await D.act("setSettings", { patch: { [el.dataset.key]: Number(el.value) } });
+    if (k.startsWith("lib-")) await libChange(k, el, libCtx);
+    else if (k === "setting") await D.act("setSettings", { patch: { [el.dataset.key]: Number(el.value) } });
     else if (k === "setting-bool") await D.act("setSettings", { patch: { [el.dataset.key]: el.checked } });
     else if (k === "team-name") await D.act("setTeamName", { team: el.dataset.team, name: el.value });
     else if (k === "player-name") { const n = el.value.trim().slice(0, 20); if (n) await D.updatePlayer(el.dataset.id, { name: n }); }
@@ -532,7 +552,7 @@ document.addEventListener("change", async (e) => {
     else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value });
   } catch (err) {
     toast(err.message || String(err), "bad");
-    if (k === "mini-field" || k === "team-name") { el.blur(); render(); } // snap the field back to the saved value
+    if (k === "mini-field" || k === "team-name" || k.startsWith("lib-")) { el.blur(); render(); } // snap the field back to the saved value
   }
 });
 
@@ -544,6 +564,7 @@ async function importFile(input) {
     const { rows, error, summary } = parseWorkbook(await file.arrayBuffer());
     if (error) { G.ui.importMsg = "⚠️ " + error; toast(error, "bad"); return; }
     await D.replaceAllQuestions(rows);
+    D.act("setLoaded", {}).catch(() => {}); // loaded from a spreadsheet, not a library set
     G.ui.importMsg = "✅ " + summary;
     toast("Questions imported ✓", "good");
   } catch (err) {
@@ -561,7 +582,9 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.id === "gate-code") { document.querySelector('[data-action="gate"]').click(); return; }
   if (e.key === "Enter" && e.target.id === "jn-name") { document.querySelector('[data-action="join"]').click(); return; }
   if (e.key === "Enter" && e.target.id) {
-    const go = { "mini-score": '[data-action="mini-score"]', "team-name-input": '[data-action="team-rename-save"]', "exact-score": '[data-action="set-exact"]',
+    const go = { "ns-name": '[data-action="lib-new-create"]', "ns-year": '[data-action="lib-new-create"]',
+      "new-cat-r1": '[data-action="lib-add-cat"][data-slot="r1"]', "new-cat-r2": '[data-action="lib-add-cat"][data-slot="r2"]',
+      "mini-score": '[data-action="mini-score"]', "team-name-input": '[data-action="team-rename-save"]', "exact-score": '[data-action="set-exact"]',
       "add-player-team1": '[data-action="player-add"][data-team="team1"]', "add-player-team2": '[data-action="player-add"][data-team="team2"]',
       "mini-new-name": '[data-action="mini-add"]', "dd-wager": '[data-action="dd-lock"]', "fw-input": '[data-action="final-wager"]' }[e.target.id];
     const btn = go && document.querySelector(go);
@@ -602,6 +625,6 @@ function boot() {
   if (G.me) D.registerSelf().catch(() => {});
   setInterval(() => { tick(); automations(); speechEffect(); }, 100);
   // Re-render once a second so time-based bits (e.g. the board fill animation) settle.
-  setInterval(render, 1000);
+  setInterval(() => { if (route() !== "questions") render(); }, 1000);
 }
 boot();

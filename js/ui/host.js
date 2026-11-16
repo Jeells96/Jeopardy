@@ -118,13 +118,16 @@ function questionsTab(G) {
     ${G.Q.length ? `${row("Jeopardy!", r1)}${row("Double Jeopardy!", r2)}${fq ? `<div class="qstat"><b>Final Jeopardy!</b><span>${esc(fq.category)}</span></div>` : `<div class="qstat warn">No Final Jeopardy tab found.</div>`}` : `<p class="muted">No questions loaded yet.</p>`}
     <div class="import-msg" role="status">${esc(G.ui.importMsg || "")}</div>
   </section>
-  <section class="sect"><h4>Load questions</h4>
-    <ol class="howto">
-      <li><button class="btn ghost sm" data-action="download-template">⬇ Download the template</button></li>
-      <li>Fill it in (works great in the Excel or Google Sheets phone app)</li>
-      <li><label class="btn primary sm file">⬆ Import your spreadsheet<input type="file" accept=".xlsx,.xls" hidden data-change="import"></label></li>
-    </ol>
-    <small class="muted">Importing replaces all current questions. Each category is its own tab; add “DJ ” to the start of a tab name to put it in Double Jeopardy.</small>
+  <section class="sect"><h4>Question library</h4>
+    ${G.S.loaded ? `<p class="muted">On the board: <b>${esc(G.S.loaded.name)}</b></p>` : ""}
+    <a class="btn primary" href="#/questions">📚 Open the question library</a>
+    <p class="muted"><small>Type or paste questions in bulk, mark the hard ones multiple choice, and keep every year's set to look back on.</small></p>
+  </section>
+  <section class="sect"><h4>Spreadsheet <small>optional</small></h4>
+    <div class="btnrow">
+      <button class="btn ghost sm" data-action="download-template">⬇ Template</button>
+      <label class="btn ghost sm file">⬆ Import straight into the game<input type="file" accept=".xlsx,.xls" hidden data-change="import"></label>
+    </div>
   </section>
   <section class="sect"><h4>Board</h4>
     <button class="btn ghost sm" data-action="confirm" data-p='{"what":"resetBoard"}'>Put every clue back on the board</button>

@@ -47,10 +47,17 @@ function syncChildren(from, to) {
       // Try to find a matching keyed sibling further along before replacing.
       const key = t.nodeType === 1 && t.getAttribute("data-key");
       const match = key ? fromKids.slice(i + 1).find((n) => n.nodeType === 1 && n.getAttribute("data-key") === key && n.nodeName === t.nodeName) : null;
+      // The current node is still wanted further down: insert the new one in front of it
+      // instead of replacing it (replacing would lose focus and anything half-typed).
+      const fKey = f.nodeType === 1 && f.getAttribute("data-key");
+      const fLater = fKey && toKids.slice(i + 1).some((n) => n.nodeType === 1 && n.getAttribute("data-key") === fKey && n.nodeName === f.nodeName);
       if (match) {
         from.insertBefore(match, f);
         fromKids = Array.from(from.childNodes);
         syncNode(match, t);
+      } else if (fLater) {
+        from.insertBefore(t.cloneNode(true), f);
+        fromKids = Array.from(from.childNodes);
       } else {
         from.replaceChild(t.cloneNode(true), f);
       }

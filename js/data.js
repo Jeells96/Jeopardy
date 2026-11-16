@@ -1,6 +1,7 @@
 // Data layer: Firestore I/O, clock sync, and running engine actions in transactions.
 import { db } from "./firebase.js";
 import * as E from "./engine.js";
+import * as B from "./bank.js";
 import {
   doc, getDoc, setDoc, updateDoc, onSnapshot, collection, addDoc, getDocs, writeBatch,
   query, where, runTransaction, serverTimestamp, deleteDoc,
@@ -181,4 +182,55 @@ export async function newGameFull() {
   await resetUsed();
   await clearBuzzes();
   await writeSpoken({ key: "" }).catch(() => {});
+}
+
+// ---------------- question library ----------------
+// Each set is one document: state/set-<id>. (The `state` collection is already allowed by
+// the Firestore rules, so the library needs no rule changes.)
+const stateCol = collection(db, "state");
+const setRef = (id) => doc(db, "state", "set-" + id);
+
+export function subscribeSets(cb, err) {
+  return onSnapshot(query(stateCol, where("kind", "==", "set")), (snap) => {
+    const sets = snap.docs.map((d) => d.data()).filter((s) => s && s.id && Array.isArray(s.clues));
+    sets.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.createdAt || 0) - (a.createdAt || 0));
+    cb(sets);
+  }, err);
+}
+export async function createSet(set) {
+  await setDoc(setRef(set.id), set);
+  return set;
+}
+export async function deleteSet(id) {
+  await deleteDoc(setRef(id));
+}
+// Apply one edit to a set atomically, so two devices (or two quick edits) never overwrite
+// each other. Returns true if something changed.
+// Edits from this device are queued per set, so quick back-to-back changes (tabbing through
+// fields) apply in order instead of racing each other.
+const setQueues = new Map();
+export function setOp(id, op, params = {}) {
+  const run = (setQueues.get(id) || Promise.resolve()).catch(() => {}).then(() => setOpNow(id, op, params));
+  setQueues.set(id, run);
+  return run;
+}
+async function setOpNow(id, op, params) {
+  let outcome = null;
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(setRef(id));
+    if (!snap.exists()) throw new GameError("That question set no longer exists.");
+    outcome = B.applyOp(snap.data(), op, params);
+    if (!outcome || outcome.error) return;
+    tx.set(setRef(id), outcome);
+  });
+  if (outcome && outcome.error) throw new GameError(outcome.error);
+  return !!outcome;
+}
+// Put a set's finished clues on the board (replaces the game's current questions).
+export async function loadSetIntoGame(set) {
+  const { rows, skipped, counts } = B.toGameRows(set);
+  if (!counts.r1) throw new GameError("This set has no finished Jeopardy-round clues yet.");
+  await replaceAllQuestions(rows);
+  await act("setLoaded", { id: set.id, name: set.name });
+  return { rows: rows.length, skipped, counts };
 }

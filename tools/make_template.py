@@ -196,3 +196,23 @@ body(fj, [FINAL], 3, set())
 
 wb.save(OUT)
 print("wrote", os.path.normpath(OUT), "tabs:", wb.sheetnames)
+
+# Also write the same game as plain text for the website's question library.
+lines = ["# Sample game", "", "== Jeopardy =="]
+def dump(groups):
+    for name, rows in groups.items():
+        lines.append("## " + (name[3:] if name.startswith("DJ ") else name))
+        for p, q, a, wrong, dd in rows:
+            parts = [str(p), q, a]
+            if wrong or dd: parts.append(wrong)
+            if dd: parts.append("DD")
+            lines.append(" | ".join(parts))
+        lines.append("")
+dump(ROUND1)
+lines.append("== Double Jeopardy ==")
+dump(ROUND2)
+lines += ["== Final Jeopardy ==", "## " + FINAL[0], FINAL[1] + " | " + FINAL[2], ""]
+os.makedirs(os.path.join(HERE, "..", "sets"), exist_ok=True)
+with open(os.path.join(HERE, "..", "sets", "sample-game.txt"), "w", encoding="utf-8") as f:
+    f.write("\n".join(lines))
+print("wrote sets/sample-game.txt")
