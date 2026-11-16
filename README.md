@@ -86,6 +86,13 @@ switch off phone renaming there too.
 - Phones buzz on touch-down for speed, vibrate when buzzers open / when you're up, and
   stay awake during the game.
 
+**🎅 Santa reads the questions**
+- When a question is picked, the screen with 🔊 on reads it aloud in a deep, slow Santa
+  voice (with the odd "Ho ho ho!"), including multiple-choice options, Daily Doubles and
+  the Final. He stops as soon as someone buzzes in. Switch it off in Settings → Game.
+  The voice comes from the device's built-in voices, so it sounds best on a computer
+  with a male English voice installed.
+
 **Answering**
 - **Typed answers:** whoever wins the buzz gets a text box, already open and ready to
   type. Their answer appears on the board and your screen says whether it matches. You tap
@@ -166,6 +173,11 @@ past years, search them, and reuse a good question.
   Double, round, a **host note**
   (shown only on your phone remote — e.g. "also accept St. Nick"), move, copy to another
   set, and delete (with Undo).
+- **✂ Copy / move questions** — tap ✂ on any question (or **✂ All** on a category) to pick
+  it, choose **Move** or **Copy** in the bar that appears, then tap **📥 Paste here** in any
+  category, Final or Unsorted — or type a name and **Paste into a new category**. Works
+  between sets too (e.g. copy last year's favourites into this year).
+- **🗑 Delete a whole category** from its header (with Undo).
 - **♻ Also asked in Christmas 2025** — repeats from past years are flagged automatically.
 - **🔎 Search every year** — questions, answers, categories and notes across all sets;
   copy any result into this year's set.

@@ -146,6 +146,37 @@ export function play(name) {
   if (SYNTH[name]) SYNTH[name]();
 }
 
+// Read a question out loud in a deep, slow, jolly "Santa" voice. Uses the best male
+// English voice the device has; the pitch and pace do the rest.
+const SANTA_NO = /female|woman|girl|samantha|victoria|karen|zira|susan|moira|tessa|fiona|veena|kathy|allison|ava|serena|kate|catherine|hazel|libby|sonia|jenny|aria/i;
+const SANTA_YES = /male|man\b|daniel|fred|alex|david|mark|george|james|arthur|aaron|ralph|guy|thomas|ryan|rishi|oliver|gordon|lee|bruce|junior/i;
+function santaVoice() {
+  const all = (window.speechSynthesis.getVoices && window.speechSynthesis.getVoices()) || [];
+  const en = all.filter((v) => /^en/i.test(v.lang || ""));
+  const male = en.filter((v) => SANTA_YES.test(v.name) && !SANTA_NO.test(v.name));
+  const pick = (list) => list.find((v) => /en[-_](GB|UK)/i.test(v.lang)) || list.find((v) => /en[-_]US/i.test(v.lang)) || list[0];
+  return pick(male) || pick(en.filter((v) => !SANTA_NO.test(v.name))) || null;
+}
+if (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.getVoices) {
+  try { window.speechSynthesis.getVoices(); } catch { /* voices load later on some browsers */ }
+}
+export function santa(text) {
+  if (!enabled || !text || !("speechSynthesis" in window) || !window.SpeechSynthesisUtterance) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = santaVoice();
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.pitch = 0.45;  // deep
+    u.rate = 0.86;   // unhurried
+    u.volume = 1;
+    window.speechSynthesis.speak(u);
+  } catch { /* no voice available — the question is on screen anyway */ }
+}
+export function hush() {
+  try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch { /* ignore */ }
+}
+
 // Read a short line out loud with the browser's built-in voice (mini games: "who's up next").
 export function say(text) {
   if (!enabled || !text || !("speechSynthesis" in window) || !window.SpeechSynthesisUtterance) return;

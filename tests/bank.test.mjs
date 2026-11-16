@@ -317,5 +317,25 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
   eq(bad, [], "sets and game rows never contain undefined or nested arrays");
 }
 
+// ---------- move questions, delete a category ----------
+{
+  let set = mk([
+    { category: "A", question: "a1", answer: "x", points: 100 },
+    { category: "A", question: "a2", answer: "x", points: 200, dd: true },
+    { category: "B", question: "b1", answer: "x" },
+  ]);
+  const [a1, a2] = set.clues;
+  set = B.applyOp(set, "moveClues", { ids: [a1.id, a2.id], slot: "r1", category: "B" });
+  eq(set.clues.map((c) => [c.question, c.category, c.points]), [["b1", "B", null], ["a1", "B", null], ["a2", "B", null]], "moved questions join the end of the new category with auto values");
+  set = B.applyOp(set, "moveClues", { ids: [a2.id], slot: "final", category: "F" });
+  eq([set.clues[2].slot, set.clues[2].dd], ["final", false], "moving to Final drops the Daily Double");
+  eq(B.applyOp(set, "moveClues", { ids: ["nope"], slot: "r1", category: "B" }), null, "moving nothing changes nothing");
+  const before = set.clues.length;
+  set = B.applyOp(set, "removeCategory", { slot: "r1", name: "b" });
+  eq([set.clues.length, before], [1, 3], "deleting a category removes all its questions");
+  eq(B.applyOp(set, "removeCategory", { slot: "r1", name: "Gone" }), null, "deleting a missing category is a no-op");
+  ok(!!B.applyOp({ ...set, locked: true }, "removeCategory", { slot: "final", name: "F" }).error, "locked sets can't lose a category");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

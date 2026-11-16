@@ -29,7 +29,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   async function device(name, viewport) {
     const page = await (await browser.newContext({ viewport, hasTouch: viewport.width < 600 })).newPage();
     page.on("pageerror", (e) => errors.push(`[${name}] ${e.message}`));
-    page.on("console", (m) => { if (m.type() === "error" && !/favicon|409/.test(m.text())) errors.push(`[${name}] ${m.text()}`); });
+    page.on("console", (m) => { const url = (m.location() && m.location().url) || ""; if (m.type() === "error" && !/favicon|409/.test(m.text()) && !url.endsWith(".mp3")) errors.push(`[${name}] ${m.text()}`); });
     page.name = name;
     return page;
   }
@@ -50,6 +50,34 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(!/christmas|santa|reindeer|elf/i.test(JSON.stringify(set.clues)), "test game has nothing Christmas in it");
   const fin = set.clues.find((c) => c.slot === "final");
   ok(fin.wrong.length === 3, "its Final is multiple choice");
+  // ---- copy / move questions, delete a category ----
+  const ids = set.clues.filter((c) => c.slot === "r1").map((c) => c.id);
+  await host.click(`[data-action="lib-pick"][data-id="${ids[0]}"]`);
+  await host.click(`[data-action="lib-pick"][data-id="${ids[1]}"]`);
+  await until(host, () => !!document.querySelector(".clipbar"));
+  ok((await host.textContent(".clipbar")).includes("2 questions"), "picking questions shows the clipboard bar");
+  await host.fill("#new-cat-r1", "Moved Over");
+  await host.click('[data-action="lib-paste-newcat"][data-slot="r1"]');
+  await until(host, () => window.__G.sets[0].clues.filter((c) => c.category === "Moved Over").length === 2);
+  ok((await host.evaluate(() => window.__G.sets[0].clues.length)) === 6 && !(await host.$(".clipbar")), "Move: the two questions moved into a new category (nothing duplicated)");
+  await host.click('[data-action="lib-cat-pick"][data-name="Moved Over"]');
+  await host.click('[data-action="lib-clip-mode"][data-v="copy"]');
+  await host.click('[data-action="lib-paste-here"][data-cat="Animal Kingdom"]');
+  await until(host, () => window.__G.sets[0].clues.length === 8);
+  ok((await host.evaluate(() => window.__G.sets[0].clues.filter((c) => c.category === "Animal Kingdom").length)) === 5, "Copy: a whole category's questions copied into another");
+  await shot(host, "x00-library-clipboard");
+  await host.click('[data-action="lib-clip-clear"]');
+  await host.click('[data-action="lib-cat-del-ask"][data-name="Moved Over"]');
+  await host.click('[data-action="lib-cat-del-yes"]');
+  await until(host, () => window.__G.sets[0].clues.length === 6);
+  ok(!(await host.evaluate(() => window.__G.sets[0].clues.some((c) => c.category === "Moved Over"))), "a whole category can be deleted");
+  await host.click('[data-action="lib-undo-del"]');
+  await until(host, () => window.__G.sets[0].clues.length === 8);
+  ok(true, "…and Undo brings it back");
+  await host.click('[data-action="lib-cat-del-ask"][data-name="Moved Over"]');
+  await host.click('[data-action="lib-cat-del-yes"]');
+  await until(host, () => window.__G.sets[0].clues.length === 6);
+
   await host.click('[data-action="lib-use"]');
   await host.click('[data-action="lib-use-go"]');
   await until(host, () => window.__G.Q.length === 6);
@@ -60,8 +88,15 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await host.goto(URL + "#/admin");
   await host.waitForSelector(".remote");
   const board = await device("board", { width: 1600, height: 900 });
+  await board.addInitScript(() => {
+    window.__said = [];
+    const fake = { speak: (u) => window.__said.push({ text: u.text, pitch: u.pitch }), cancel() { window.__hushed = (window.__hushed || 0) + 1; }, getVoices: () => [] };
+    try { Object.defineProperty(window, "speechSynthesis", { value: fake, configurable: true }); } catch (e) { window.speechSynthesis = fake; }
+    window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+  });
   await board.goto(URL + "#/board");
   await board.waitForSelector(".stage");
+  await board.click('.board-tools [data-action="toggle-sound"]');
   const P = {};
   for (const [n, t] of [["Jen", "team1"], ["Kim", "team2"]]) {
     const p = await device(n, { width: 390, height: 844 });
@@ -109,6 +144,32 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   console.log("Final Jeopardy multiple choice");
   ok(!!(await host.evaluate(() => window.__G.S.settings.doubleJeopardy !== false)), "Double Jeopardy is on by default");
   await act(host, "startGame", { control: "team1" });
+  // ---- Santa reads the question ----
+  const elephant = await host.evaluate(() => window.__G.Q.find((q) => q.points === 100 && !q.isFinal).id);
+  const santaSaid = () => board.evaluate(() => window.__said.filter((x) => x.pitch < 0.6).map((x) => x.text));
+  await act(host, "pickClue", { qid: elephant });
+  await until(board, () => window.__said.some((x) => x.pitch < 0.6 && x.text.includes("largest land animal")), null, 5000);
+  ok(true, "Santa reads the picked question out loud (deep voice)");
+  await act(host, "openBuzzers");
+  await P.Jen.dispatchEvent('[data-action="buzz"]', "pointerdown");
+  await until(board, () => window.__G.S.clue && window.__G.S.clue.stage === "answering");
+  await until(board, () => (window.__hushed || 0) > 0);
+  ok(true, "Santa stops talking when someone buzzes in");
+  await act(host, "judge", { result: "correct" });
+  await act(host, "closeClue");
+  const crows = await host.evaluate(() => window.__G.Q.find((q) => q.points === 200 && !q.isFinal && q.type === "mcq").id);
+  await act(host, "pickClue", { qid: crows });
+  await until(board, () => window.__said.some((x) => x.text.includes("Is it: A,")), null, 5000);
+  ok(true, "multiple-choice options are read out too");
+  await act(host, "unpickClue");
+  await act(host, "setSettings", { patch: { readAloud: false } });
+  const n = (await santaSaid()).length;
+  await act(host, "pickClue", { qid: crows });
+  await sleep(1500);
+  ok((await santaSaid()).length === n, "switched off in Settings, Santa stays quiet");
+  await act(host, "unpickClue");
+  await act(host, "setSettings", { patch: { readAloud: true } });
+
   await act(host, "setScore", { team: "team1", value: 500 });
   await act(host, "setScore", { team: "team2", value: 400 });
   await act(host, "finalStart");
@@ -120,6 +181,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "phones get the Final as four choices");
   await until(board, () => document.querySelectorAll(".bchoice").length === 4);
   ok(true, "board shows the four choices");
+  await until(board, () => window.__said.some((x) => x.pitch < 0.6 && x.text.includes("Final") && x.text.includes("Red Planet")), null, 5000);
+  ok(true, "Santa reads the Final Jeopardy question");
   await P.Jen.click('[data-action="final-choice"][data-v="Mars"]');
   await P.Kim.click('[data-action="final-choice"][data-v="Venus"]');
   await until(host, () => window.__G.S.final.answers.team1 && window.__G.S.final.answers.team2);

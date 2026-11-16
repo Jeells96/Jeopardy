@@ -10,6 +10,7 @@ import { hostSteps } from "./ui/dock.js";
 import { PRESETS, pickSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import { renderLibrary } from "./ui/library.js";
+import { findQ } from "./ui/stage.js";
 import { initLibrary, libClick, libChange, libInput } from "./libctl.js";
 import { OWN, OPP, pickPunIndex } from "./puns.js";
 import { downloadTemplate, parseWorkbook } from "./xlsx.js";
@@ -131,6 +132,45 @@ function onState(prev, S) {
   }
   if (S && !["lobby", "minis"].includes(S.phase)) G.ui.renaming = false;
   soundEffects(S);
+  santaReads(S);
+}
+
+// ---------------- Santa reads the question ----------------
+const SANTA_INTROS = ["Ho ho ho! ", "Ho ho ho! Listen closely. ", "", "", "Ho ho! ", "", "Ho ho ho! Here we go. ", "", "Ah, a good one! ", ""];
+const SANTA_FINAL = ["Ho ho ho! Here is your Final Jeopardy question. ", "Ho ho ho! The Final question. Good luck, my dears! "];
+let santaKey;             // which question reveal was read last (undefined until the first state arrives)
+let santaActive = false;  // Santa is (or may be) mid-sentence
+function santaLine(q, intro) {
+  if (!q) return "";
+  let text = intro + q.question;
+  if (q.type === "mcq" && q.choices && q.choices.length) {
+    text += " Is it: " + q.choices.map((ch, i) => `${"ABCDEF"[i]}, ${ch}`).join(". ") + "?";
+  }
+  return text;
+}
+function santaReads(S) {
+  if (!S) return;
+  const c = S.clue;
+  const f = S.final;
+  let key = null, text = "";
+  if (S.phase === "clue" && c && c.stage === "reading") key = "c" + c.id + c.pickedAt;
+  else if (S.phase === "clue" && c && c.dd && c.dd.wager != null && c.stage === "answering") key = "d" + c.id + c.pickedAt;
+  else if (S.phase === "final" && f && f.stage === "clue") key = "f" + f.deadline;
+  const first = santaKey === undefined;
+  if (key && key !== santaKey && !first) {
+    const canPlay = isHostClass() && Sounds.soundEnabled() && (S.settings || {}).readAloud !== false;
+    if (canPlay) {
+      if (key[0] === "f") text = santaLine(E.finalClue(G.Q), SANTA_FINAL[Math.floor(Math.random() * SANTA_FINAL.length)]);
+      else text = santaLine(findQ(G, c.id), key[0] === "d" ? "Ho ho ho! For the Daily Double: " : SANTA_INTROS[Math.floor(Math.random() * SANTA_INTROS.length)]);
+      const want = key;
+      // A short pause so the pick / Daily Double sound plays first.
+      setTimeout(() => { if (santaKey === want && text) { santaActive = true; Sounds.santa(text); } }, key[0] === "d" ? 300 : 900);
+    }
+  }
+  if (key || first) santaKey = key || santaKey || null;
+  // Stop talking once someone is answering, the question is over, or the screen moved on.
+  const live = (S.phase === "clue" && c && c.stage !== "done" && !(c.stage === "answering" && !c.dd)) || (S.phase === "final" && f && f.stage === "clue");
+  if (!live && santaActive) { santaActive = false; Sounds.hush(); }
 }
 
 // Mini games: when a new name is drawn, wait for the shuffle to finish, then reveal it

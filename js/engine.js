@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS = {
   finalNeedsPositive: true, // official rule: only teams with $1+ play Final Jeopardy
   playersRename: true,    // players may rename their own team before Jeopardy starts
   doubleJeopardy: true,   // play the Double Jeopardy round (off = skip it; the questions are kept)
+  readAloud: true,        // read each question out loud in a Santa voice on the screen with sound on
   announce: true,         // mini games: read "who's up next" out loud on the screen with sound on
 };
 

@@ -93,6 +93,7 @@ function setView(G, set) {
       ${set.locked || todo ? "" : `<div class="newcat">
         <input id="new-cat-${slot}" maxlength="60" placeholder="New category name" aria-label="New ${B.SLOT_LABEL[slot]} category" data-sticky>
         <button class="btn ghost sm" data-action="lib-add-cat" data-slot="${slot}">+ Add category</button>
+        ${L.clip.items.length ? `<button class="btn primary sm" data-action="lib-paste-newcat" data-slot="${slot}">📥 Paste ${L.clip.items.length} into a new category</button>` : ""}
       </div>`}
     </section>`;
   };
@@ -124,7 +125,8 @@ function setView(G, set) {
     </button>
     ${L.showChecks && checks.length ? `<ul class="checks">${checks.map((c) => `<li class="${c.level}">${esc(c.text)}</li>`).join("")}</ul>` : ""}
   </div>
-  ${L.undo && L.undo.setId === set.id ? `<div class="undobar">Deleted “${esc((L.undo.clue.question || L.undo.clue.answer).slice(0, 60))}” <button class="btn ghost sm" data-action="lib-undo-del">↩ Undo</button></div>` : ""}
+  ${L.undo && L.undo.setId === set.id ? `<div class="undobar">Deleted ${esc(L.undo.label)} <button class="btn ghost sm" data-action="lib-undo-del">↩ Undo</button></div>` : ""}
+  ${clipBar(G, set)}
   <div class="set-filter">
     <div class="seg">
       <button class="${cls("seg-btn", !todo && "on")}" data-action="lib-filter" data-v="all">All ${st.total}</button>
@@ -137,11 +139,13 @@ function setView(G, set) {
   ${todo && !finals.length ? "" : `<section class="lib-round" data-key="round-final">
     <h3>Final Jeopardy <small>one question; teams wager and write their answer</small></h3>
     ${finals.map((c) => clueCard(G, set, c, "final")).join("")}
+    ${pasteHere(G, set, "final", "")}
     ${set.locked || todo || g.final.length ? "" : `<button class="addclue" data-action="lib-add-clue" data-slot="final" data-cat="">+ Add the Final Jeopardy question</button>`}
   </section>`}
   ${todo && !loose.length ? "" : `<section class="lib-round" data-key="round-loose">
     <h3>Unsorted <small>not on the board until they have a category</small></h3>
     ${loose.map((c) => clueCard(G, set, c, "loose")).join("") || `<p class="muted pad">Questions you paste without a category land here.</p>`}
+    ${pasteHere(G, set, "r1", "")}
     ${set.locked || todo ? "" : `<button class="addclue" data-action="lib-add-clue" data-slot="r1" data-cat="">+ Add a question</button>`}
   </section>`}`;
 }
@@ -154,8 +158,11 @@ function catBlock(G, set, cat, i, total, show) {
       <input class="cat-name" value="${esc(cat.name)}" maxlength="60" aria-label="Category name" data-change="lib-cat-rename" data-slot="${cat.slot}" data-from="${esc(cat.name)}"${dis}>
       <span class="${cls("cat-count", n >= 5 && "ok")}">${plural(n, "question")}</span>
       ${set.locked ? "" : `<button class="btn ghost sm" data-action="lib-cat-move" data-slot="${cat.slot}" data-name="${esc(cat.name)}" data-dir="-1" title="Move category earlier"${i === 0 ? " disabled" : ""}>▲</button>
-      <button class="btn ghost sm" data-action="lib-cat-move" data-slot="${cat.slot}" data-name="${esc(cat.name)}" data-dir="1" title="Move category later"${i === total - 1 ? " disabled" : ""}>▼</button>`}
+      <button class="btn ghost sm" data-action="lib-cat-move" data-slot="${cat.slot}" data-name="${esc(cat.name)}" data-dir="1" title="Move category later"${i === total - 1 ? " disabled" : ""}>▼</button>
+      <button class="btn ghost sm" data-action="lib-cat-pick" data-slot="${cat.slot}" data-name="${esc(cat.name)}" title="Pick every question in this category to copy or move">✂ All</button>
+      <button class="btn bad sm" data-action="lib-cat-del-ask" data-slot="${cat.slot}" data-name="${esc(cat.name)}" title="Delete this whole category">🗑</button>`}
     </div>
+    ${pasteHere(G, set, cat.slot, cat.name)}
     ${cat.clues.filter(show).map((c) => clueCard(G, set, c, "cat")).join("")}
     ${set.locked ? "" : `<button class="addclue" data-action="lib-add-clue" data-slot="${cat.slot}" data-cat="${esc(cat.name)}">+ Add a question</button>`}
   </div>`;
@@ -167,6 +174,7 @@ function clueCard(G, set, c, where) {
   const issues = B.clueIssues(c);
   const dis = set.locked ? " disabled" : "";
   const id = esc(c.id);
+  const picked = L.clip.items.some((x) => x.id === c.id);
   const f = (name) => `data-change="lib-clue" data-id="${id}" data-f="${name}" data-key="f-${id}-${name}"`;
   const flags = [];
   if (issues.includes("question")) flags.push(`<span class="flag todo">Needs a question</span>`);
@@ -192,13 +200,14 @@ function clueCard(G, set, c, where) {
       ${set.locked ? "" : `<button class="btn bad sm" data-action="lib-clue-del" data-id="${id}">🗑 Delete</button>`}
     </div>
   </div>`;
-  return `<div class="${cls("qc", where, issues.length && "todo", open && "open")}" data-key="qc-${id}">
+  return `<div class="${cls("qc", where, issues.length && "todo", open && "open", picked && "picked")}" data-key="qc-${id}">
     <div class="qc-row" data-key="r-${id}">
       ${where === "cat" ? `<input class="qc-pts" inputmode="numeric" value="${c.points == null ? "" : c.points}" placeholder="${c.pts || ""}" title="Points — leave blank and it's set automatically" aria-label="Points" ${f("points")}${dis}>` : ""}
       <textarea class="qc-q auto" rows="1" maxlength="400" placeholder="Question" aria-label="Question" ${f("question")}${dis}>${esc(c.question)}</textarea>
       <textarea class="qc-a auto" rows="1" maxlength="200" placeholder="Answer" aria-label="Answer" ${f("answer")}${dis}>${esc(c.answer)}</textarea>
       ${where === "cat" ? "" : `<input class="qc-c" list="lib-cats" value="${esc(c.category)}" maxlength="60" placeholder="${where === "final" ? "Final category" : "Category"}" aria-label="Category" ${f("category")}${dis}>`}
-      <button class="qc-more" data-action="lib-toggle" data-id="${id}" title="More: multiple choice, Daily Double, note, move, delete" aria-expanded="${open}">${open ? "▴" : "⋯"}</button>
+      <div class="qc-btns" data-key="b-${id}"><button class="${cls("qc-pick", picked && "on")}" data-action="lib-pick" data-id="${id}" title="${picked ? "Picked — tap again to un-pick" : "Copy or move this question"}" aria-pressed="${picked}">${picked ? "✓" : "✂"}</button>
+      <button class="qc-more" data-action="lib-toggle" data-id="${id}" title="More: multiple choice, Daily Double, note, move, delete" aria-expanded="${open}">${open ? "▴" : "⋯"}</button></div>
     </div>
     ${flags.length ? `<div class="qc-flags" data-key="fl-${id}">${flags.join("")}</div>` : ""}
     ${extra}
@@ -338,9 +347,38 @@ function libModal(G, cur) {
       </div>
       <div class="btnrow end">${cancel("Close")}</div>`);
   }
+  if (m.type === "libCatDelete") {
+    const n = cur.clues.filter((c) => c.slot === m.slot && c.category.toLowerCase() === String(m.name).toLowerCase()).length;
+    return wrap(`<h3>Delete the “${esc(m.name)}” category?</h3><p>Its ${plural(n, "question")} will be removed from this set. You can tap Undo right after if you change your mind.</p>
+      <div class="btnrow end">${cancel()}<button class="btn bad" data-action="lib-cat-del-yes">Delete category</button></div>`);
+  }
   if (m.type === "libDelete") {
     return wrap(`<h3>Delete “${esc(cur.name)}”?</h3><p>All ${plural(cur.clues.length, "question")} in this set are removed from your library for good. The game's current board isn't affected.</p>
       <div class="btnrow end">${cancel()}<button class="btn bad" data-action="lib-delete-yes">Delete set</button></div>`);
   }
   return "";
+}
+
+// ---------------- copy / move (the "clipboard") ----------------
+function clipBar(G, set) {
+  const C = G.ui.lib.clip;
+  if (!C.items.length) return "";
+  const n = C.items.length;
+  const fromHere = C.items.every((x) => x.setId === set.id);
+  return `<div class="clipbar" data-key="clipbar">
+    <span>📋 <b>${plural(n, "question")}</b> picked${fromHere ? "" : " (from another set)"}</span>
+    <div class="seg">
+      <button class="${cls("seg-btn", C.mode === "move" && "on")}" data-action="lib-clip-mode" data-v="move"${set.locked ? " disabled" : ""}>✂ Move</button>
+      <button class="${cls("seg-btn", C.mode === "copy" && "on")}" data-action="lib-clip-mode" data-v="copy">📄 Copy</button>
+    </div>
+    <span class="muted">${set.locked ? "Unlock this set to paste here." : "Now tap <b>📥 Paste here</b> in any category."}</span>
+    <button class="btn ghost sm" data-action="lib-clip-clear">✕ Clear</button>
+  </div>`;
+}
+function pasteHere(G, set, slot, category) {
+  const C = G.ui.lib.clip;
+  if (!C.items.length || set.locked) return "";
+  const already = C.items.every((x) => x.setId === set.id && x.slot === slot && (x.category || "").toLowerCase() === category.toLowerCase());
+  if (already && C.mode === "move") return "";
+  return `<button class="pastehere" data-action="lib-paste-here" data-slot="${slot}" data-cat="${esc(category)}">📥 Paste here — ${C.mode === "move" ? "move" : "copy"} ${plural(C.items.length, "question")}</button>`;
 }

@@ -85,6 +85,7 @@ function gameTab(G) {
     ${toggle("finalNeedsPositive", "Official Final Jeopardy rule", st.finalNeedsPositive, "Only teams above $0 can play Final")}
     ${toggle("doubleJeopardy", "Play Double Jeopardy", st.doubleJeopardy !== false, E.hasRound2(G.Q) ? "Off = skip that round. Its questions stay in your set." : "No Double Jeopardy questions loaded right now")}
     ${toggle("playersRename", "Teams can rename themselves", st.playersRename !== false, "From their phones, until Jeopardy starts")}
+    ${toggle("readAloud", "Read questions aloud (Santa voice) 🎅", st.readAloud !== false, "The screen with 🔊 on reads each question out loud when it's picked")}
     ${toggle("announce", "Announce who's up out loud", st.announce !== false, "Mini games: the screen with 🔊 on reads the names aloud")}
   </section>
   <section class="sect"><h4>Scores</h4>

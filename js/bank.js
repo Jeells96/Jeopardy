@@ -238,6 +238,24 @@ export const OPS = {
     [clues[a], clues[b]] = [clues[b], clues[a]];
     return touch(set, clues);
   },
+  // Move questions to another category/round (they go to the end of it, values re-numbered).
+  moveClues(set, { ids = [], slot, category = "" }) {
+    if (!SLOTS.includes(slot)) return null;
+    const want = new Set(ids);
+    const moving = set.clues.filter((c) => want.has(c.id));
+    if (!moving.length) return null;
+    const cat = str(category, 60);
+    const moved = moving.map((c) => {
+      const same = c.slot === slot && lc(c.category) === lc(cat);
+      return cleanClue({ ...c, slot, category: cat, points: same ? c.points : null });
+    });
+    return touch(set, [...set.clues.filter((c) => !want.has(c.id)), ...moved]);
+  },
+  removeCategory(set, { slot, name }) {
+    const keep = set.clues.filter((c) => !(c.slot === slot && c.category && lc(c.category) === lc(name)));
+    if (keep.length === set.clues.length) return null;
+    return touch(set, keep);
+  },
   renameCategory(set, { slot, from, to }) {
     const name = str(to, 60);
     if (!name || name === from) return null;
