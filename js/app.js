@@ -405,6 +405,7 @@ async function handle(a, p, el) {
       if (p.what === "newGame") { await D.newGameFull(); toast("New game ready 🎄", "good"); }
       else if (p.what === "clearPlayers") { await D.clearPlayers(); toast("All players removed", "good"); }
       else if (p.what === "resetBoard") { await D.resetUsed(); toast("Every clue is back on the board", "good"); }
+      else if (p.what === "startGame") await D.act("startGame", { control: G.ui.firstPick || "random" });
       else await D.act(p.what);
       return;
     }

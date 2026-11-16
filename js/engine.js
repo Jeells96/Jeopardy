@@ -55,6 +55,7 @@ export function defaultState(keep = {}) {
     final: freshFinal(),
     minis: freshMinis(),
     loaded: null, // which question set from the library is on the board: { id, name, at }
+    jStarted: false, // Jeopardy has been started at least once (so "Start" means resume)
     history: [],
     sfx: null,
   };
@@ -68,6 +69,7 @@ export function migrate(old) {
   }
   const patch = {};
   if (!old.minis) patch.minis = freshMinis();
+  if (old.jStarted === undefined) patch.jStarted = !["lobby", "minis"].includes(old.phase);
   const names = modernNames(old.teamNames || {});
   if (JSON.stringify(names) !== JSON.stringify(old.teamNames || {})) patch.teamNames = names;
   if (!old.settings || old.settings.playersRename === undefined) patch.settings = { ...DEFAULT_SETTINGS, ...(old.settings || {}) };
@@ -139,12 +141,31 @@ const findQ = (ctx, id) => (ctx.questions || []).find((q) => q.id === id) || nul
 export function startGame(s, { control } = {}, ctx) {
   if (!["lobby", "minis"].includes(s.phase)) return null;
   if (!boardClues(ctx.questions, 1).length) return fail("Load your questions first (⚙ Settings → Questions).");
+  const minis = { ...minisOf(s), current: null, back: null };
+  // Already started earlier and the host stepped away: carry on where they left off.
+  if (s.jStarted) return builder(s, ctx).field("phase", "board").field("clue", null).field("minis", minis).done();
   const ctrl = control === "random" ? TEAMS[Math.floor(Math.random() * 2)] : TEAMS.includes(control) ? control : null;
   return builder(s, ctx)
-    .field("phase", "board").field("round", 1).field("control", ctrl)
+    .field("phase", "board").field("round", 1).field("control", ctrl).field("jStarted", true)
     .field("clue", null).field("final", freshFinal())
-    .field("minis", { ...minisOf(s), current: null, back: null })
+    .field("minis", minis)
     .sfx("fill").done();
+}
+
+// Step away from the Jeopardy board (back to the lobby or the mini games) without losing
+// anything: scores, used clues, round and whose turn it is all stay for when you resume.
+export function leaveJeopardy(s, { to } = {}, ctx) {
+  if (s.phase === "clue") return fail("Finish or close the current clue first.");
+  if (s.phase !== "board") return null;
+  const phase = to === "minis" ? "minis" : "lobby";
+  return builder(s, ctx).field("phase", phase).field("minis", { ...minisOf(s), current: null, back: null }).done();
+}
+// From the mini-games list back to the lobby (or to Jeopardy if it was paused for a mini game).
+export function leaveMinis(s, _p, ctx) {
+  const M = minisOf(s);
+  if (s.phase !== "minis") return null;
+  const phase = M.back === "board" ? "board" : "lobby";
+  return builder(s, ctx).field("phase", phase).field("minis", { ...M, current: null, back: null }).done();
 }
 
 export function setControl(s, { team }, ctx) {
@@ -834,7 +855,7 @@ export const ACTIONS = {
   autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, answerTimeout, buzzWindowTimeout, nobody,
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
-  setTeamName, setSettings, newGame, setLoaded,
+  setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
   miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

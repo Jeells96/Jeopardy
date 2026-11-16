@@ -173,7 +173,9 @@ export function miniSteps(G, { privateView = false } = {}) {
     const kind = primary ? "primary" : "ghost";
     const key = primary ? "Space" : "";
     if (M.back === "board") btn("↩ Back to Jeopardy", "act", act("minisEnd"), kind, key);
-    else if (hasClues) btn("▶ Start Jeopardy!", "act", act("startGame", { control: G.ui.firstPick || "random" }), kind, key);
+    else if (hasClues && S.jStarted) btn("▶ Resume Jeopardy", "act", act("startGame"), kind, key);
+    else if (hasClues && primary) btn("▶ Start Jeopardy!", "act", act("startGame", { control: G.ui.firstPick || "random" }), kind, key);
+    else if (hasClues) btn("Skip to Jeopardy", "confirm", { what: "startGame" }, kind, key);
     else btn("📥 Load Jeopardy questions", "drawer", { tab: "questions" }, kind, key);
   };
 
@@ -196,6 +198,7 @@ export function miniSteps(G, { privateView = false } = {}) {
       jeopardy(true);
       btn("✏️ Edit mini games", "drawer", { tab: "minis" });
     }
+    if (M.back !== "board") btn("↩ Back to lobby", "act", act("leaveMinis"));
     return { status, panel, buttons: B, wantFirstPick };
   }
 

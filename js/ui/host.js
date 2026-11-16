@@ -173,6 +173,7 @@ const CONFIRMS = {
   startRound2: ["Jump to Double Jeopardy?", "Any clues left in this round are skipped.", "Start Double Jeopardy"],
   finalStart: ["Jump to Final Jeopardy?", "Any clues left on the board are skipped.", "Start Final Jeopardy"],
   endGame: ["End the game now?", "Shows the final scores.", "End game"],
+  startGame: ["Start Jeopardy now?", "The mini games you haven't played yet will be skipped (you can come back to them any time from the board).", "Start Jeopardy"],
 };
 
 export function modal(G) {

@@ -34,13 +34,19 @@ export function hostSteps(G, { privateView = false } = {}) {
       ${item(G.soundOn, G.soundOn ? "Sound is on" : "Turn on 🔊 on the screen connected to speakers")}
     </ul>`;
     const fp = G.ui.firstPick || "random";
+    const resume = S.jStarted;
+    if (resume) status += `<div class="muted">Jeopardy is paused — scores and the board are saved.</div>`;
     if (todo) {
       // Mini games come first; their points carry into Jeopardy.
       btn("▶ Start the mini games", "act", act("minisStart"), "primary", "Space");
-      if (n1) btn("Skip to Jeopardy", "act", act("startGame", { control: fp }));
+      if (n1) {
+        if (resume) btn("▶ Resume Jeopardy", "act", act("startGame"));
+        else btn("Skip to Jeopardy", "confirm", { what: "startGame" }); // asks first, so it can't happen by accident
+      }
       btn("🎯 Edit mini games", "drawer", { tab: "minis" });
     } else {
-      if (n1) { panel = firstPickPanel(G); btn("▶ Start Jeopardy!", "act", act("startGame", { control: fp }), "primary", "Space"); }
+      if (n1 && resume) btn("▶ Resume Jeopardy", "act", act("startGame"), "primary", "Space");
+      else if (n1) { panel = firstPickPanel(G); btn("▶ Start Jeopardy!", "act", act("startGame", { control: fp }), "primary", "Space"); }
       else btn("📥 Load questions", "drawer", { tab: "questions" }, "primary", "Space");
       btn("🎯 Add mini games", "drawer", { tab: "minis" });
     }
@@ -69,6 +75,8 @@ export function hostSteps(G, { privateView = false } = {}) {
       status = "The board is clear!";
       btn("🏁 End the game", "act", act("endGame"), "primary", "Space");
     }
+    if (E.minisOf(S).list.length) btn("🎯 Mini games", "act", act("leaveJeopardy", { to: "minis" }));
+    btn("↩ Back to lobby", "act", act("leaveJeopardy", { to: "lobby" }));
     return { status, panel, buttons: B };
   }
 

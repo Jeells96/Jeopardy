@@ -409,6 +409,40 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq(E.currentPick(w.state), null, "no pick when nothing is being played");
 }
 
+// ---------- stepping away from Jeopardy and back ----------
+{
+  const w = world(roster(2, 2));
+  const id = w.add({ name: "Later", type: "h2h", points: 200 });
+  w.run("startGame", { control: "team2" }).run("pickClue", { qid: "a1" });
+  w.run("leaveJeopardy", { to: "lobby" });
+  ok(!!w.error, "can't leave Jeopardy with a clue open");
+  w.run("closeClue").run("adjustScore", { team: "team1", delta: 300 });
+  w.run("leaveJeopardy", { to: "lobby" });
+  eq([w.state.phase, w.state.jStarted, w.state.round, w.state.control], ["lobby", true, 1, "team2"], "back to the lobby keeps round + who picks");
+  w.run("leaveJeopardy", { to: "lobby" });
+  ok(w.noop, "leaving twice is a no-op");
+  w.run("minisStart").run("miniPlay", { id }).run("miniFinish", { id, winner: "team2" }).run("miniClose");
+  w.run("startGame", { control: "team1" });
+  eq([w.state.phase, w.state.control, w.state.scores, w.qs.find((q) => q.id === "a1").used],
+    ["board", "team2", { team1: 300, team2: 200 }, true], "Start after stepping away RESUMES: same control, scores and used clues");
+  w.run("leaveJeopardy", { to: "minis" });
+  eq([w.state.phase, w.state.minis.back], ["minis", null], "board → mini games list");
+  w.run("leaveMinis");
+  eq(w.state.phase, "lobby", "mini games list → lobby");
+  w.run("leaveMinis");
+  ok(w.noop, "leaveMinis only from the mini games");
+  w.run("minisStart"); // from the lobby
+  w.run("startGame");
+  w.run("minisStart"); // from the board: remembers to come back
+  w.run("leaveMinis");
+  eq(w.state.phase, "board", "a mini-game break from the board goes back to the board");
+  w.run("newGame");
+  eq([w.state.phase, w.state.jStarted], ["lobby", false], "new game starts Jeopardy fresh again");
+  const old = { ...E.defaultState(), phase: "board" };
+  delete old.jStarted;
+  eq(E.migrate(old).patch.jStarted, true, "upgrade: a game already on the board counts as started");
+}
+
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
