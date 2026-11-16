@@ -7,11 +7,10 @@ import { renderRemote } from "./ui/remote.js";
 import { renderPlayer } from "./ui/player.js";
 import { renderJoin, renderGate, renderLoading, renderBoardPage } from "./ui/join.js";
 import { hostSteps } from "./ui/dock.js";
-import { PRESETS } from "./ui/minis.js";
+import { PRESETS, pickSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import { renderLibrary } from "./ui/library.js";
 import { initLibrary, libClick, libChange, libInput } from "./libctl.js";
-import * as Speech from "./speech.js";
 import { OWN, OPP, pickPunIndex } from "./puns.js";
 import { downloadTemplate, parseWorkbook } from "./xlsx.js";
 
@@ -54,7 +53,7 @@ function doRender() {
   let html, view;
   if (r === "admin") {
     if (!isHost()) { html = renderGate(G, "admin"); view = "join"; }
-    else { html = G.S ? renderHost(G) : renderLoading(G); view = G.S ? "host" : "join"; }
+    else { html = G.S ? renderRemote(G) : renderLoading(G); view = G.S ? "remote" : "join"; }
   } else if (r === "remote" || r === "cheat") {
     if (!isHost()) { html = renderGate(G, "remote"); view = "join"; }
     else { html = G.S ? renderRemote(G) : renderLoading(G); view = G.S ? "remote" : "join"; }
@@ -70,9 +69,20 @@ function doRender() {
   }
   if (document.body.dataset.view !== view) document.body.dataset.view = view;
   morph(appEl, html);
+  autosizeAll();
   mountQR();
   tick();
 }
+
+// Text boxes marked .auto grow to fit everything typed in them (question library).
+function autosize(el) {
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + 2 + "px";
+}
+function autosizeAll() {
+  for (const el of document.querySelectorAll("textarea.auto")) autosize(el);
+}
+window.addEventListener("resize", () => { if (route() === "questions") autosizeAll(); });
 
 // ---------------- toasts ----------------
 let toastTimer = 0;
@@ -110,7 +120,9 @@ function onState(prev, S) {
     if (opened && !c.blocked.includes(G.me.team)) vibrate(35);
     const mine = c.stage === "answering" && c.locked && c.locked.deviceId === G.deviceId;
     const wasMine = pc && pc.stage === "answering" && pc.locked && pc.locked.deviceId === G.deviceId && E.lockKey(pc) === E.lockKey(c);
-    if (mine && !wasMine) vibrate([60, 40, 120]);
+    if (mine && !wasMine) { vibrate([60, 40, 120]); focusAnswerBox(); }
+    const ddMine = c.stage === "answering" && c.dd && c.dd.team === G.me.team && !(pc && pc.stage === "answering");
+    if (ddMine) focusAnswerBox();
   }
   miniPickEffect(S);
   if (prev && S && G.me && isPlayerRoute()) {
@@ -133,9 +145,10 @@ function miniPickEffect(S) {
   if (!pick) { lastPickKey = null; return; }
   if (pick.key === lastPickKey) return;
   lastPickKey = pick.key;
-  const spoken = pick.type === "best"
+  const summon = pickSummon(S).replace(/[^\p{L}\p{N}\s.,!?'’:;—–-]/gu, "").replace(/\s+/g, " ").trim();
+  const spoken = summon || (pick.type === "best"
     ? (pick.names[0] ? `Up next: ${pick.names[0]}!` : "")
-    : (pick.names[0] || pick.names[1] ? `Up next: ${pick.names[0] || E.teamName(S, "team1")}, versus, ${pick.names[1] || E.teamName(S, "team2")}!` : "");
+    : (pick.names[0] || pick.names[1] ? `Up next: ${pick.names[0] || E.teamName(S, "team1")}, versus, ${pick.names[1] || E.teamName(S, "team2")}!` : ""));
   const reveal = () => {
     render();
     if (isPlayerRoute() && G.me && pick.pids.includes(G.deviceId)) vibrate([80, 60, 160]);
@@ -244,6 +257,7 @@ function automations() {
     if (c.stage === "answering" && c.locked && c.timeUp !== key && now >= c.locked.at + (set.answerSeconds || 15) * 1000) fire("at" + key + c.locked.at, "answerTimeout", { key });
   }
   if (S.phase === "final" && S.final.stage === "clue" && now >= S.final.deadline) fire("fl" + S.final.deadline, "finalLock", {});
+  if (S.phase === "over" && S.vote && S.vote.stage === "open" && E.voteProgress(S, G.P).all) fire("vr" + S.vote.openedAt, "voteReveal", {});
 }
 
 // ---------------- sounds ----------------
@@ -259,36 +273,20 @@ function soundEffects(S) {
   Sounds.setFinalMusic(canPlay && S.phase === "final" && S.final && S.final.stage === "clue");
 }
 
-// ---------------- speech capture (answering player's phone) ----------------
-let listenKey = null;
-let lastSpokenWrite = 0;
-let lastListenTry = 0;
-function speechEffect() {
-  const S = G.S;
-  const c = S && S.clue;
-  const q = c && G.Q.find((x) => x.id === c.id);
-  const key = c ? E.lockKey(c) : "";
-  const should = isPlayerRoute() && G.me && c && c.stage === "answering" && !c.dd && c.locked &&
-    c.locked.deviceId === G.deviceId && q && q.type !== "mcq" && c.timeUp !== key &&
-    Speech.micSupported() && Speech.micEnabled() && !Speech.speechDenied();
-  if (!should) {
-    if (listenKey) { Speech.stopListening(); listenKey = null; }
-    return;
-  }
-  if (listenKey !== key) { listenKey = key; lastSpokenWrite = 0; }
-  if (!Speech.isListening() && Date.now() - lastListenTry > 900) {
-    lastListenTry = Date.now();
-    const base = { key, deviceId: G.deviceId, name: G.me.name, team: G.me.team };
-    Speech.startListening({
-      onTranscript: (text) => {
-        if (Date.now() - lastSpokenWrite < 350) return;
-        lastSpokenWrite = Date.now();
-        D.writeSpoken({ ...base, text, at: G.now(), final: false }).catch(() => {});
-      },
-      onEnd: (text) => { if (text) D.writeSpoken({ ...base, text, at: G.now(), final: true }).catch(() => {}); },
-      onError: () => {},
-    });
-  }
+// ---------------- typed answers ----------------
+async function submitTyped() {
+  const box = document.getElementById("typed-answer");
+  const c = G.S && G.S.clue;
+  const text = box ? box.value.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+  if (!text) { if (box) box.focus(); return toast("Type your answer first.", "bad"); }
+  if (!c || c.stage !== "answering" || !G.me) return toast("Too late — the answer is closed.", "bad");
+  box.value = "";
+  box.blur();
+  await D.writeSpoken({ key: E.lockKey(c), deviceId: G.deviceId, name: G.me.name, team: G.me.team, text, at: G.now(), final: true });
+  toast("Answer sent ✓", "good");
+}
+function focusAnswerBox() {
+  setTimeout(() => { const b = document.getElementById("typed-answer"); if (b) b.focus(); }, 120);
 }
 
 // When a panel closes, don't leave the keyboard focus stuck in one of its (now hidden)
@@ -404,7 +402,7 @@ async function handle(a, p, el) {
       G.ui.modal = null; G.ui.drawer = false; render();
       if (p.what === "newGame") { await D.newGameFull(); toast("New game ready 🎄", "good"); }
       else if (p.what === "clearPlayers") { await D.clearPlayers(); toast("All players removed", "good"); }
-      else if (p.what === "resetBoard") { await D.resetUsed(); toast("Every clue is back on the board", "good"); }
+      else if (p.what === "resetBoard") { await D.resetUsed(); toast("Every question is back on the board", "good"); }
       else if (p.what === "startGame") await D.act("startGame", { control: G.ui.firstPick || "random" });
       else await D.act(p.what);
       return;
@@ -481,14 +479,12 @@ async function handle(a, p, el) {
       try { await D.joinGame(name, G.me.team); } catch (e) { console.warn(e); }
       return;
     }
-    case "enable-mic": {
-      el.textContent = "…";
-      const ok = await Speech.requestMicPermission();
-      render();
-      if (!ok) toast("Microphone blocked — you can still answer out loud.", "bad");
-      else toast("Mic ready 🎙️", "good");
+    case "typed-submit": return submitTyped();
+    case "final-choice": return saveFinalAnswer(el.dataset.v, true);
+    case "vote-cast":
+      if (!G.me) return;
+      await D.act("castVote", { voter: G.deviceId, pick: el.dataset.pid });
       return;
-    }
     case "mcq": await D.act("mcqPick", { index: Number(el.dataset.i), me: { deviceId: G.deviceId, name: G.me.name, team: G.me.team } }); return;
     case "fw-quick": { const i = document.getElementById("fw-input"); if (i) i.value = el.dataset.v; return; }
     case "final-wager": {
@@ -530,6 +526,7 @@ document.addEventListener("pointerdown", (e) => {
 
 document.addEventListener("input", (e) => {
   const el = e.target;
+  if (el.classList && el.classList.contains("auto")) autosize(el);
   const k = el.dataset && el.dataset.input;
   if (k && k.startsWith("lib-")) return libInput(k, el, libCtx);
   if (k === "dd-wager") { G.ui.ddWager = el.value; render(); }
@@ -550,6 +547,7 @@ document.addEventListener("change", async (e) => {
     else if (k === "final-eligible") await D.act("finalSetEligible", { team: el.dataset.team, eligible: el.checked });
     else if (k === "import") await importFile(el);
     else if (k === "mini-field") await D.act("miniUpdate", { id: el.dataset.id, patch: { [el.dataset.f]: el.value } });
+    else if (k === "mini-tables") await D.act("miniTables", { tables: el.value });
     else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value });
   } catch (err) {
     toast(err.message || String(err), "bad");
@@ -583,6 +581,9 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.id === "gate-code") { document.querySelector('[data-action="gate"]').click(); return; }
   if (e.key === "Enter" && e.target.id === "jn-name") { document.querySelector('[data-action="join"]').click(); return; }
   if (e.key === "Enter" && e.target.id) {
+    if (e.target.id === "typed-answer" && !e.shiftKey) { e.preventDefault(); submitTyped(); return; }
+    // Library boxes: Enter saves (the text wraps on its own); Shift+Enter is ignored too.
+    if (e.target.classList && e.target.classList.contains("auto") && e.target.dataset.change) { e.preventDefault(); e.target.blur(); return; }
     const go = { "ns-name": '[data-action="lib-new-create"]', "ns-year": '[data-action="lib-new-create"]',
       "new-cat-r1": '[data-action="lib-add-cat"][data-slot="r1"]', "new-cat-r2": '[data-action="lib-add-cat"][data-slot="r2"]',
       "mini-score": '[data-action="mini-score"]', "team-name-input": '[data-action="team-rename-save"]', "exact-score": '[data-action="set-exact"]',
@@ -601,7 +602,7 @@ document.addEventListener("keydown", (e) => {
   if (k === "F") { toggleFullscreen(); return; }
   if (k === "?") { handle("drawer", { tab: "help" }, null); return; }
   if (G.ui.drawer) return; // don't trigger game steps while the settings panel is open
-  const b = hostSteps(G, { privateView: r !== "admin" }).buttons.find((x) => x.key === k);
+  const b = hostSteps(G, { privateView: true }).buttons.find((x) => x.key === k);
   if (b) {
     e.preventDefault();
     if (e.target.closest && e.target.closest("button")) e.target.blur();
@@ -623,8 +624,8 @@ function boot() {
   D.ensureState().catch(onErr);
   D.syncClock().then(render);
   setInterval(() => D.syncClock(), 180000);
-  if (G.me) D.registerSelf().catch(() => {});
-  setInterval(() => { tick(); automations(); speechEffect(); }, 100);
+  if (G.me) D.registerSelf().then((ok) => { if (!ok) { G.me = null; G.seenSelf = false; G.ui.kicked = true; render(); } }).catch(() => {});
+  setInterval(() => { tick(); automations(); }, 100);
   // Re-render once a second so time-based bits (e.g. the board fill animation) settle.
   setInterval(() => { if (route() !== "questions") render(); }, 1000);
 }

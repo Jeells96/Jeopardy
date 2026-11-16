@@ -2,6 +2,7 @@
 // the finish dialog, and what players see on their phones.
 import { esc, money, cls, verb } from "./util.js";
 import * as E from "../engine.js";
+import { summonText } from "../summons.js";
 
 const tn = (G, t) => E.teamName(G.S || {}, t);
 export const TYPE_LABEL = { h2h: "Head-to-head", best: "Best overall" };
@@ -12,6 +13,17 @@ const scoreText = (g, v) => `${num(v)}${g.unit ? " " + esc(g.unit) : ""}`;
 const prize = (g) => (g.type === "h2h" && g.award === "match" ? `${money(g.points)} per matchup win` : `${money(g.points)} to the winners`);
 const namesOn = (G, team) => G.P.filter((p) => !team || p.team === team).map((p) => p.name);
 const currentGame = (M) => (M.current ? M.list.find((x) => x.id === M.current) : null) || null;
+// The Christmas summon for the current draw (only when tables are set up), as plain text.
+export function pickSummon(S) {
+  const pick = E.currentPick(S);
+  if (!pick || !pick.table || pick.summon == null) return "";
+  return summonText(pick.summon, pick.names, pick.table);
+}
+const tableTag = (pick) => (pick && pick.table ? `<span class="tabletag">📍 ${esc(pick.table)}</span>` : "");
+function summonBanner(G) {
+  const text = pickSummon(G.S);
+  return text && !isSpinning(G) ? `<div class="summon" data-key="summon-${esc(E.currentPick(G.S).key)}">${esc(text)}</div>` : "";
+}
 
 // Ideas the host can add with one tap.
 export const PRESETS = [
@@ -109,6 +121,7 @@ function h2hView(G, M, g) {
   return `<div class="mgame" data-key="mg-${esc(g.id)}">
     ${gameHead(M, g)}
     ${center}
+    ${m ? summonBanner(G) : ""}
     <div class="tally">
       <span class="t team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span>
       <span class="t-sep">–</span>
@@ -129,7 +142,7 @@ function bestView(G, M, g) {
   return `<div class="mgame mgame--best" data-key="mg-${esc(g.id)}">
     ${gameHead(M, g)}
     <div class="best-cols">
-      ${up}
+      <div class="upcol">${up}${t ? summonBanner(G) : ""}</div>
       <div class="lboard" style="--rows:${Math.max(3, Math.min(8, st.sorted.length))}"><div class="lb-head">Leaderboard${st.sorted.length > 8 ? ` <small>top 8 of ${st.sorted.length}</small>` : ""}</div>${rows || `<div class="lb-empty">No scores yet</div>`}</div>
     </div>
   </div>`;
@@ -225,7 +238,7 @@ export function miniSteps(G, { privateView = false } = {}) {
       if (spinning) {
         status = `🎲 Drawing names… <span class="muted">${tally}</span>`;
       } else {
-        status = `<b>${esc(a)}</b> vs <b>${esc(b)}</b> — who won? <span class="muted">${tally}</span>`;
+        status = `<b>${esc(a)}</b> vs <b>${esc(b)}</b>${m.table ? ` at <b>${esc(m.table)}</b>` : ""} — who won? <span class="muted">${tally}</span>`;
         btn(`🏆 ${esc(a)}`, "act", act("miniMatch", { id: g.id, winner: "team1" }), "t1", "1");
         btn(`🏆 ${esc(b)}`, "act", act("miniMatch", { id: g.id, winner: "team2" }), "t2", "2");
         btn("🤝 Tie", "act", act("miniMatch", { id: g.id, winner: "tie" }), "ghost", "T");
@@ -252,7 +265,7 @@ export function miniSteps(G, { privateView = false } = {}) {
     if (spinning) {
       status = `🎲 Drawing a name… <span class="muted">${leaderTxt}</span>`;
     } else {
-      status = `<b>${esc(g.turn.name)}</b> <span class="muted">(${esc(tn(G, g.turn.team))})</span> is up — type their score. <span class="muted">${leaderTxt}</span>`;
+      status = `<b>${esc(g.turn.name)}</b> <span class="muted">(${esc(tn(G, g.turn.team))})</span> is up${g.turn.table ? ` at <b>${esc(g.turn.table)}</b>` : ""} — type their score. <span class="muted">${leaderTxt}</span>`;
       btn("✓ Save score", "mini-score", { id: g.id }, "primary", "Space");
       panel = `<div class="mpanel">
         <label class="score-box"><input id="mini-score" class="wager-input" type="number" step="any" inputmode="decimal" placeholder="Score" autocomplete="off" data-sticky>${g.unit ? `<span>${esc(g.unit)}</span>` : ""}</label>
@@ -331,6 +344,7 @@ export function miniModal(G, m) {
 export function minisTab(G) {
   const M = E.minisOf(G.S);
   const [n1, n2] = [tn(G, "team1"), tn(G, "team2")];
+  const tables = E.minisTables(G.S);
   const field = (g, f) => `data-change="mini-field" data-id="${esc(g.id)}" data-f="${f}" data-key="mf-${esc(g.id)}-${f}"`;
   const cards = M.list.map((g, i) => {
     const r = resultBits(G, g);
@@ -363,6 +377,10 @@ export function minisTab(G) {
            <input class="unit" value="${esc(g.unit)}" maxlength="16" placeholder="unit, e.g. seconds" aria-label="Unit" ${field(g, "unit")}>`}
       </div>
       <input class="desc" value="${esc(g.desc)}" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>
+      ${tables.length ? `<div class="mini-row"><span class="muted">Played at</span><select class="grow" aria-label="Which table" ${field(g, "table")}>
+        <option value=""${tables.includes(g.table) ? "" : " selected"}>🎲 Any table — drawn each time</option>
+        ${tables.map((t) => `<option value="${esc(t)}"${g.table === t ? " selected" : ""}>📍 ${esc(t)}</option>`).join("")}
+      </select></div>` : ""}
       <div class="mini-row foot">${state}<span class="grow"></span>
         ${started ? `<button class="btn ghost sm" data-action="mini-reset-ask" data-id="${esc(g.id)}">↺ Reset</button>` : ""}
         ${g.status !== "done" ? `<button class="btn ghost sm" ${actAttr("miniPlay", { id: g.id }, { then: "drawer" })}>▶ Play</button>` : ""}
@@ -370,6 +388,10 @@ export function minisTab(G) {
     </div>`;
   }).join("");
   return `
+  <section class="sect"><h4>Tables <small>optional</small></h4>
+    <input class="newname" value="${esc(tables.join(", "))}" maxlength="240" placeholder="e.g. Kitchen table, Living room, Garage" aria-label="Table names" data-change="mini-tables" data-key="mini-tables">
+    <p class="muted small">Playing at more than one spot? Name the tables, separated by commas. When a name is drawn, everyone is told which table they're summoned to (a different Christmas summons every time). Leave empty for one spot.</p>
+  </section>
   <section class="sect"><h4>Your mini games <small>${M.list.length ? `(${M.list.length})` : ""}</small></h4>
     ${cards || `<p class="muted">None yet. Mini games are played before Jeopardy and the points count toward each team's score.</p>`}
   </section>
@@ -446,14 +468,15 @@ export function playerMinis(G, extra = "") {
     const b = m.p2 ? m.p2.name : tn(G, "team2");
     const rival = me.team === "team1" ? b : a;
     now = mine
-      ? `<div class="youup big">🎯 You're up!<small>You vs ${esc(rival)}</small></div>`
-      : `<div class="ph-versus"><span class="team1">${esc(a)}</span><i>vs</i><span class="team2">${esc(b)}</span></div>`;
+      ? `<div class="youup big">🎯 You're up!<small>You vs ${esc(rival)}</small>${tableTag(pick)}</div>`
+      : `<div class="ph-versus"><span class="team1">${esc(a)}</span><i>vs</i><span class="team2">${esc(b)}</span></div>${tableTag(pick)}`;
   } else {
     const t = g.turn;
     now = mine
-      ? `<div class="youup big">🎯 You're up!<small>${g.better === "low" ? "Lowest" : "Highest"} score wins</small></div>`
-      : `<div class="ph-versus solo"><small>Up now</small><span class="${t.team}">${esc(t.name)}</span></div>`;
+      ? `<div class="youup big">🎯 You're up!<small>${g.better === "low" ? "Lowest" : "Highest"} score wins</small>${tableTag(pick)}</div>`
+      : `<div class="ph-versus solo"><small>Up now</small><span class="${t.team}">${esc(t.name)}</span></div>${tableTag(pick)}`;
   }
+  if (pick && !spinning && pickSummon(S)) now += `<div class="ph-summon">${esc(pickSummon(S))}</div>`;
   let board;
   if (g.type === "h2h") {
     board = `<div class="ph-tally"><span class="team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span><span>–</span><span class="team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span></div>`;

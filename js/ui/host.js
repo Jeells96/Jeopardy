@@ -35,7 +35,7 @@ export function renderHost(G) {
 }
 
 // ---------------- settings drawer ----------------
-function drawer(G) {
+export function drawer(G) {
   const open = !!G.ui.drawer;
   const tab = G.ui.drawerTab || "game";
   const nMinis = E.minisOf(G.S).list.length;
@@ -67,7 +67,7 @@ function toggle(id, label, on, hint) {
 function gameTab(G) {
   const S = G.S;
   const st = S.settings || E.DEFAULT_SETTINGS;
-  const r2 = E.hasRound2(G.Q), fq = E.finalClue(G.Q);
+  const r2 = E.r2On(S, G.Q), fq = E.finalClue(G.Q);
   return `
   <section class="sect"><h4>Teams</h4>
     ${E.TEAMS.map((t) => `<label class="field"><span class="dot ${t}"></span><input value="${esc(tn(G, t))}" maxlength="24" data-change="team-name" data-team="${t}" aria-label="Team name"></label>`).join("")}
@@ -83,6 +83,7 @@ function gameTab(G) {
   <section class="sect"><h4>Rules</h4>
     ${toggle("autoRebound", "Auto-rebound", st.autoRebound, "After a miss, the other team can buzz in right away")}
     ${toggle("finalNeedsPositive", "Official Final Jeopardy rule", st.finalNeedsPositive, "Only teams above $0 can play Final")}
+    ${toggle("doubleJeopardy", "Play Double Jeopardy", st.doubleJeopardy !== false, E.hasRound2(G.Q) ? "Off = skip that round. Its questions stay in your set." : "No Double Jeopardy questions loaded right now")}
     ${toggle("playersRename", "Teams can rename themselves", st.playersRename !== false, "From their phones, until Jeopardy starts")}
     ${toggle("announce", "Announce who's up out loud", st.announce !== false, "Mini games: the screen with 🔊 on reads the names aloud")}
   </section>
@@ -112,7 +113,7 @@ function questionsTab(G) {
   const dd = (list) => list.filter((q) => q.dailyDouble).length;
   const mc = (list) => list.filter((q) => q.type === "mcq").length;
   const row = (label, list) => list.length
-    ? `<div class="qstat"><b>${label}</b><span>${list.length} clues · ${cats(list).length} categories · ${dd(list)} Daily Double${dd(list) === 1 ? "" : "s"} · ${mc(list)} multiple choice</span><small>${cats(list).map(esc).join(" · ")}</small></div>` : "";
+    ? `<div class="qstat"><b>${label}</b><span>${list.length} questions · ${cats(list).length} categories · ${dd(list)} Daily Double${dd(list) === 1 ? "" : "s"} · ${mc(list)} multiple choice</span><small>${cats(list).map(esc).join(" · ")}</small></div>` : "";
   return `
   <section class="sect"><h4>Your questions</h4>
     ${G.Q.length ? `${row("Jeopardy!", r1)}${row("Double Jeopardy!", r2)}${fq ? `<div class="qstat"><b>Final Jeopardy!</b><span>${esc(fq.category)}</span></div>` : `<div class="qstat warn">No Final Jeopardy tab found.</div>`}` : `<p class="muted">No questions loaded yet.</p>`}
@@ -130,7 +131,7 @@ function questionsTab(G) {
     </div>
   </section>
   <section class="sect"><h4>Board</h4>
-    <button class="btn ghost sm" data-action="confirm" data-p='{"what":"resetBoard"}'>Put every clue back on the board</button>
+    <button class="btn ghost sm" data-action="confirm" data-p='{"what":"resetBoard"}'>Put every question back on the board</button>
   </section>`;
 }
 
@@ -158,7 +159,7 @@ function helpTab() {
   <section class="sect"><h4>Running the game</h4>
     <ol class="howto">
       <li>Put <b>this screen</b> (or 📺 Board) on the projector. Turn 🔊 sound on for whichever screen has speakers.</li>
-      <li>Open <b>📱 Remote</b> on your phone — it shows the answer for each clue and has every control, so you can host from anywhere in the room.</li>
+      <li>This host screen and <b>📱 Remote</b> are the same private view — open it on your phone or laptop. It shows the answer for each question and has every control; put <b>📺 Board</b> on the projector.</li>
       <li>Players scan the QR code in the lobby, join a team and enable their mic.</li>
       <li><b>Mini games</b> (optional) come first: set them up in the Mini games tab. Their points carry into Jeopardy.</li>
       <li>Just follow the gold button. It always shows the next step.</li>
@@ -169,9 +170,10 @@ function helpTab() {
 const CONFIRMS = {
   newGame: ["Start a new game?", "Scores and the board reset. Players, team names, settings and questions stay.", "Start new game"],
   clearPlayers: ["Remove all players?", "Everyone will need to rejoin from their phone.", "Remove everyone"],
-  resetBoard: ["Put every clue back?", "All clues become available again. Scores don't change.", "Reset board"],
-  startRound2: ["Jump to Double Jeopardy?", "Any clues left in this round are skipped.", "Start Double Jeopardy"],
-  finalStart: ["Jump to Final Jeopardy?", "Any clues left on the board are skipped.", "Start Final Jeopardy"],
+  voteReveal: ["Reveal the sweater vote now?", "Not everyone has voted yet — anyone who hasn't won't get a say.", "Reveal now"],
+  resetBoard: ["Put every question back?", "All questions become available again. Scores don't change.", "Reset board"],
+  startRound2: ["Jump to Double Jeopardy?", "Any questions left in this round are skipped.", "Start Double Jeopardy"],
+  finalStart: ["Jump to Final Jeopardy?", "Any questions left on the board are skipped.", "Start Final Jeopardy"],
   endGame: ["End the game now?", "Shows the final scores.", "End game"],
   startGame: ["Start Jeopardy now?", "The mini games you haven't played yet will be skipped (you can come back to them any time from the board).", "Start Jeopardy"],
 };

@@ -147,7 +147,16 @@ An unfinished thought about reindeer
   const c = B.cleanClue({ slot: "nope", points: "$1,000", question: "  Q   with   spaces ", answer: "Right", wrong: "Right; A) Wrong one; wrong one; Other", dd: 1 });
   eq(brief(c), ["r1", "", 1000, "Q with spaces", "Right", ["Wrong one", "Other"], true], "clean clue: slot fallback, $ points, whitespace, wrong options de-duplicated and never equal to the answer");
   eq(B.cleanClue({ points: "abc" }).points, null, "junk points → auto");
-  eq(B.cleanClue({ slot: "final", wrong: "a;b", dd: true }).wrong.length + Number(B.cleanClue({ slot: "final", dd: true }).dd), 0, "final clues can't be multiple choice or Daily Doubles");
+  eq(Number(B.cleanClue({ slot: "final", dd: true }).dd), 0, "final questions can't be Daily Doubles");
+  eq(B.isMC(B.cleanClue({ slot: "final", question: "q", answer: "a", wrong: "b;c" })), true, "final questions can be multiple choice");
+  eq(B.isMC(B.cleanClue({ question: "q", answer: "a", wrong: "b;c", mcOff: true })), false, "multiple choice can be switched off");
+  eq(B.cleanClue({ question: "q", answer: "a", wrong: "b;c", mcOff: true }).wrong.length, 2, "switching multiple choice off keeps the options");
+  {
+    const { rows } = B.toGameRows({ clues: [B.cleanClue({ slot: "r1", category: "A", question: "q", answer: "a" }), B.cleanClue({ slot: "final", category: "F", question: "fq", answer: "fa", wrong: "x;y" })] });
+    const f = rows.find((r) => r.isFinal);
+    eq(f && f.type, "mcq", "final multiple choice goes to the game");
+    eq(f && f.choices[f.correctIndex], "fa", "final correct choice is the answer");
+  }
   eq(B.cleanWrong("a;b;c;d;e;f;g").length, 5, "at most 5 wrong options");
 }
 
@@ -168,16 +177,16 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
   eq([g.loose.length, g.final.length], [1, 1], "unsorted and final are separate");
   eq(B.setStats(set), { total: 6, ready: 5, ideas: 1, r1: 3, r2: 1, final: 1, mc: 0, dd: 0 }, "stats");
   const notes = B.checkSet(set).map((n) => n.text);
-  ok(notes.some((t) => t.includes("Jeopardy › A: 3 of 5 clues written")), "check: short category");
+  ok(notes.some((t) => t.includes("Jeopardy › A: 3 of 5 questions written")), "check: short category");
   ok(notes.some((t) => t.includes("1 category (the show uses 6")), "check: category count with correct grammar");
   ok(notes.some((t) => t.includes("0 Daily Doubles (the show has 1)")), "check: daily double count");
   ok(notes.some((t) => t.includes("1 unsorted idea — give it a category")), "check: unsorted ideas (singular)");
   ok(!notes.some((t) => t.includes("No Final")), "check: final present");
   const empty = B.checkSet(mk([])).map((n) => n.text);
-  ok(empty.includes("The Jeopardy round has no categories yet.") && empty.includes("No Final Jeopardy clue yet."), "check: empty set");
+  ok(empty.includes("The Jeopardy round has no categories yet.") && empty.includes("No Final Jeopardy question yet."), "check: empty set");
   const dup = B.checkSet(mk([{ category: "A", points: 100, question: "x", answer: "y" }, { category: "A", points: 100, question: "x2", answer: "y2" }, { category: "A", question: "half", answer: "" }]));
   ok(dup.some((n) => n.level === "warn" && n.text.includes("same point value")), "check: duplicate values");
-  ok(dup.some((n) => n.level === "warn" && n.text.includes("1 clue still unfinished")), "check: unfinished clue in a category");
+  ok(dup.some((n) => n.level === "warn" && n.text.includes("1 question still unfinished")), "check: unfinished clue in a category");
 }
 
 // ---------- into the game and back ----------
@@ -286,7 +295,7 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
 // ---------- AI prompt ----------
 {
   const p = B.aiPrompt({ categories: 4, perCategory: 5, slot: "r2", topics: "The Grinch, Elf", avoid: ["Max", "Clarice"] });
-  ok(p.includes("4 categories with 5 clues each") && p.includes("200, 400, 600, 800, 1000"), "prompt states the size and Double Jeopardy values");
+  ok(p.includes("4 categories with 5 questions each") && p.includes("200, 400, 600, 800, 1000"), "prompt states the size and Double Jeopardy values");
   ok(p.includes("The Grinch, Elf") && p.includes("Max; Clarice"), "prompt carries the topics and the answers to avoid");
   const sample = p.split("\n").filter((l) => /^(##|\d+ \|)/.test(l)).join("\n");
   const parsed = B.parsePaste(sample);

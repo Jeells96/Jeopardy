@@ -65,6 +65,7 @@ function emptyView() {
     <div class="btnrow center">
       <button class="btn primary" data-action="lib-new">+ New question set</button>
       <button class="btn ghost" data-action="lib-add-sample">Add the sample game to look around</button>
+      <button class="btn ghost" data-action="lib-add-test">Add a quick test game (not Christmas)</button>
     </div>
   </div>`;
 }
@@ -87,7 +88,7 @@ function setView(G, set) {
     const count = g.rounds[slot].reduce((n, c) => n + c.clues.length, 0);
     if (todo && !list.length) return "";
     return `<section class="lib-round" data-key="round-${slot}">
-      <h3>${B.SLOT_LABEL[slot]} round <small>${g.rounds[slot].length ? `${plural(g.rounds[slot].length, "category", "categories")} · ${plural(count, "clue")} · values ${slot === "r2" ? "$200–$1,000" : "$100–$500"}` : slot === "r2" ? "optional — add a category to include it" : "no categories yet"}</small></h3>
+      <h3>${B.SLOT_LABEL[slot]} round <small>${g.rounds[slot].length ? `${plural(g.rounds[slot].length, "category", "categories")} · ${plural(count, "question")} · values ${slot === "r2" ? "$200–$1,000" : "$100–$500"}` : slot === "r2" ? "optional — add a category to include it" : "no categories yet"}</small></h3>
       ${list.map((cat, i) => catBlock(G, set, cat, i, g.rounds[slot].length, show)).join("")}
       ${set.locked || todo ? "" : `<div class="newcat">
         <input id="new-cat-${slot}" maxlength="60" placeholder="New category name" aria-label="New ${B.SLOT_LABEL[slot]} category" data-sticky>
@@ -134,9 +135,9 @@ function setView(G, set) {
   ${round("r1")}
   ${round("r2")}
   ${todo && !finals.length ? "" : `<section class="lib-round" data-key="round-final">
-    <h3>Final Jeopardy <small>one clue; teams wager and write their answer</small></h3>
+    <h3>Final Jeopardy <small>one question; teams wager and write their answer</small></h3>
     ${finals.map((c) => clueCard(G, set, c, "final")).join("")}
-    ${set.locked || todo || g.final.length ? "" : `<button class="addclue" data-action="lib-add-clue" data-slot="final" data-cat="">+ Add the Final Jeopardy clue</button>`}
+    ${set.locked || todo || g.final.length ? "" : `<button class="addclue" data-action="lib-add-clue" data-slot="final" data-cat="">+ Add the Final Jeopardy question</button>`}
   </section>`}
   ${todo && !loose.length ? "" : `<section class="lib-round" data-key="round-loose">
     <h3>Unsorted <small>not on the board until they have a category</small></h3>
@@ -151,12 +152,12 @@ function catBlock(G, set, cat, i, total, show) {
   return `<div class="lib-cat" data-key="cat-${cat.slot}-${esc(cat.name.toLowerCase())}">
     <div class="cat-head">
       <input class="cat-name" value="${esc(cat.name)}" maxlength="60" aria-label="Category name" data-change="lib-cat-rename" data-slot="${cat.slot}" data-from="${esc(cat.name)}"${dis}>
-      <span class="${cls("cat-count", n >= 5 && "ok")}">${plural(n, "clue")}</span>
+      <span class="${cls("cat-count", n >= 5 && "ok")}">${plural(n, "question")}</span>
       ${set.locked ? "" : `<button class="btn ghost sm" data-action="lib-cat-move" data-slot="${cat.slot}" data-name="${esc(cat.name)}" data-dir="-1" title="Move category earlier"${i === 0 ? " disabled" : ""}>▲</button>
       <button class="btn ghost sm" data-action="lib-cat-move" data-slot="${cat.slot}" data-name="${esc(cat.name)}" data-dir="1" title="Move category later"${i === total - 1 ? " disabled" : ""}>▼</button>`}
     </div>
     ${cat.clues.filter(show).map((c) => clueCard(G, set, c, "cat")).join("")}
-    ${set.locked ? "" : `<button class="addclue" data-action="lib-add-clue" data-slot="${cat.slot}" data-cat="${esc(cat.name)}">+ Add a clue</button>`}
+    ${set.locked ? "" : `<button class="addclue" data-action="lib-add-clue" data-slot="${cat.slot}" data-cat="${esc(cat.name)}">+ Add a question</button>`}
   </div>`;
 }
 
@@ -172,18 +173,20 @@ function clueCard(G, set, c, where) {
   if (issues.includes("answer")) flags.push(`<span class="flag todo">Needs an answer</span>`);
   if (where === "loose" && c.question && c.answer) flags.push(`<span class="flag todo">Needs a category</span>`);
   if (B.isMC(c)) flags.push(`<span class="flag mc">Multiple choice: ${esc(c.wrong.join(" · "))}</span>`);
+  else if (c.wrong.length) flags.push(`<span class="flag">Multiple choice off (options kept)</span>`);
   if (c.dd) flags.push(`<span class="flag dd">⭐ Daily Double</span>`);
   if (c.note) flags.push(`<span class="flag note">📝 ${esc(c.note)}</span>`);
   for (const r of B.repeatsFor(c, set.id, repeats(G))) flags.push(`<span class="flag rep">♻ Also asked in ${esc(r.setName)}</span>`);
   const others = G.sets.filter((s) => s.id !== set.id && !s.locked);
   const extra = !open ? "" : `<div class="qc-extra" data-key="x-${id}">
-    ${where === "final" ? "" : `<label class="xf wide"><span>Wrong options <small>fill these in to make it multiple choice — separate with a semicolon ;</small></span>
-      <input value="${esc(c.wrong.join("; "))}" placeholder="Wrong 1; Wrong 2; Wrong 3" ${f("wrong")}${dis}></label>`}
-    ${where === "cat" ? `<label class="xf"><span>Category</span><input list="lib-cats" value="${esc(c.category)}" maxlength="60" ${f("category")}${dis}></label>` : ""}
-    <label class="xf"><span>Round</span><select ${f("slot")}${dis}>${B.SLOTS.map((s) => `<option value="${s}"${c.slot === s ? " selected" : ""}>${B.SLOT_LABEL[s]}</option>`).join("")}</select></label>
-    ${where === "final" ? "" : `<label class="toggle"><input type="checkbox" data-change="lib-clue-bool" data-id="${id}" data-f="dd"${c.dd ? " checked" : ""}${dis}><span>⭐ Daily Double</span></label>`}
-    <label class="xf wide"><span>Host note <small>only shown on your phone remote</small></span><input value="${esc(c.note)}" maxlength="300" placeholder="e.g. also accept “St. Nick”" ${f("note")}${dis}></label>
-    <div class="qc-tools">
+    ${`<label class="xf wide" data-key="lw-${id}"><span>Wrong options <small>fill these in to make it multiple choice — separate with a semicolon ;</small></span>
+      <textarea class="auto" rows="1" placeholder="Wrong 1; Wrong 2; Wrong 3" ${f("wrong")}${dis}>${esc(c.wrong.join("; "))}</textarea></label>`}
+    ${where === "cat" ? `<label class="xf" data-key="lc-${id}"><span>Category</span><input list="lib-cats" value="${esc(c.category)}" maxlength="60" ${f("category")}${dis}></label>` : ""}
+    <label class="xf" data-key="ls-${id}"><span>Round</span><select ${f("slot")}${dis}>${B.SLOTS.map((s) => `<option value="${s}"${c.slot === s ? " selected" : ""}>${B.SLOT_LABEL[s]}</option>`).join("")}</select></label>
+    ${where === "final" ? "" : `<label class="toggle" data-key="ld-${id}"><input type="checkbox" data-change="lib-clue-bool" data-id="${id}" data-f="dd"${c.dd ? " checked" : ""}${dis}><span>⭐ Daily Double</span></label>`}
+    ${c.wrong.length ? `<label class="toggle" data-key="lm-${id}"><input type="checkbox" data-change="lib-clue-bool" data-id="${id}" data-f="mcOff" data-invert="1"${c.mcOff ? "" : " checked"}${dis}><span>Multiple choice <small class="muted">(off = ask it as a normal question; the options are kept)</small></span></label>` : ""}
+    <label class="xf wide" data-key="ln-${id}"><span>Host note <small>only shown on your host screen</small></span><textarea class="auto" rows="1" maxlength="300" placeholder="e.g. also accept “St. Nick”" ${f("note")}${dis}>${esc(c.note)}</textarea></label>
+    <div class="qc-tools" data-key="lt-${id}">
       ${where === "cat" && !set.locked ? `<button class="btn ghost sm" data-action="lib-clue-move" data-id="${id}" data-dir="-1" title="Earlier in this category">▲</button><button class="btn ghost sm" data-action="lib-clue-move" data-id="${id}" data-dir="1" title="Later in this category">▼</button>` : ""}
       ${others.length ? `<select class="copyto" data-change="lib-copy" data-id="${id}" aria-label="Copy this question to another set"><option value="">Copy to another set…</option>${others.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</select>` : ""}
       ${set.locked ? "" : `<button class="btn bad sm" data-action="lib-clue-del" data-id="${id}">🗑 Delete</button>`}
@@ -192,8 +195,8 @@ function clueCard(G, set, c, where) {
   return `<div class="${cls("qc", where, issues.length && "todo", open && "open")}" data-key="qc-${id}">
     <div class="qc-row" data-key="r-${id}">
       ${where === "cat" ? `<input class="qc-pts" inputmode="numeric" value="${c.points == null ? "" : c.points}" placeholder="${c.pts || ""}" title="Points — leave blank and it's set automatically" aria-label="Points" ${f("points")}${dis}>` : ""}
-      <textarea class="qc-q" rows="1" maxlength="400" placeholder="Question" aria-label="Question" ${f("question")}${dis}>${esc(c.question)}</textarea>
-      <input class="qc-a" value="${esc(c.answer)}" maxlength="200" placeholder="Answer" aria-label="Answer" ${f("answer")}${dis}>
+      <textarea class="qc-q auto" rows="1" maxlength="400" placeholder="Question" aria-label="Question" ${f("question")}${dis}>${esc(c.question)}</textarea>
+      <textarea class="qc-a auto" rows="1" maxlength="200" placeholder="Answer" aria-label="Answer" ${f("answer")}${dis}>${esc(c.answer)}</textarea>
       ${where === "cat" ? "" : `<input class="qc-c" list="lib-cats" value="${esc(c.category)}" maxlength="60" placeholder="${where === "final" ? "Final category" : "Category"}" aria-label="Category" ${f("category")}${dis}>`}
       <button class="qc-more" data-action="lib-toggle" data-id="${id}" title="More: multiple choice, Daily Double, note, move, delete" aria-expanded="${open}">${open ? "▴" : "⋯"}</button>
     </div>
@@ -242,7 +245,8 @@ function libModal(G, cur) {
       <div class="field"><span>Start with</span>
         ${radio("empty", "An empty set")}
         ${G.Q.length ? radio("game", `The ${G.Q.length} questions that are in the game right now`) : ""}
-        ${radio("sample", "The sample game (60 clues + Final) to edit")}
+        ${radio("sample", "The sample game (60 questions + Final) to edit")}
+        ${radio("test", "A quick test game — 1 non-Christmas category + Final, for trying things out")}
       </div>
       <div class="btnrow end">${cancel()}<button class="btn primary" data-action="lib-new-create">Create set</button></div>`);
   }
@@ -293,7 +297,7 @@ function libModal(G, cur) {
       <p class="muted">Copy this request into your AI chat. Paste what it writes back into <b>📋 Paste questions</b> — it comes back in exactly the right format.</p>
       <div class="paste-opts three">
         <label class="xf"><span>Categories</span><input type="number" inputmode="numeric" min="1" max="12" value="${P.categories}" data-input="lib-prompt" data-f="categories" data-sticky></label>
-        <label class="xf"><span>Clues in each</span><input type="number" inputmode="numeric" min="1" max="10" value="${P.perCategory}" data-input="lib-prompt" data-f="perCategory" data-sticky></label>
+        <label class="xf"><span>Questions in each</span><input type="number" inputmode="numeric" min="1" max="10" value="${P.perCategory}" data-input="lib-prompt" data-f="perCategory" data-sticky></label>
         <label class="xf"><span>Round</span><select data-change="lib-prompt-slot"><option value="r1"${P.slot === "r1" ? " selected" : ""}>Jeopardy</option><option value="r2"${P.slot === "r2" ? " selected" : ""}>Double Jeopardy</option></select></label>
       </div>
       <label class="xf wide"><span>Topics or categories you want <small>optional</small></span><input maxlength="300" value="${esc(P.topics)}" placeholder="e.g. The Grinch, Elf, classic TV specials, Christmas history" data-input="lib-prompt" data-f="topics" data-sticky></label>
@@ -307,12 +311,12 @@ function libModal(G, cur) {
     const warns = B.checkSet(cur).filter((c) => c.level === "warn");
     const playing = G.S && !["lobby", "minis"].includes(G.S.phase);
     if (!counts.r1) {
-      return wrap(`<h3>Not ready yet</h3><p>“${esc(cur.name)}” has no finished Jeopardy-round clues. A clue needs a question, an answer and a category before it can go on the board.</p>
+      return wrap(`<h3>Not ready yet</h3><p>“${esc(cur.name)}” has no finished Jeopardy-round questions. A question needs a question, an answer and a category before it can go on the board.</p>
         <div class="btnrow end">${cancel("OK")}</div>`);
     }
     return wrap(`<h3>Put “${esc(cur.name)}” on the board?</h3>
       <ul class="uselist">
-        <li><b>${counts.r1}</b> Jeopardy clues${counts.r2 ? ` + <b>${counts.r2}</b> Double Jeopardy` : ""} ${counts.final ? "+ Final Jeopardy" : "— <b>no Final Jeopardy</b>"}</li>
+        <li><b>${counts.r1}</b> Jeopardy questions${counts.r2 ? ` + <b>${counts.r2}</b> Double Jeopardy` : ""} ${counts.final ? "+ Final Jeopardy" : "— <b>no Final Jeopardy</b>"}</li>
         <li><b>${rows.filter((x) => x.type === "mcq").length}</b> multiple choice · <b>${rows.filter((x) => x.dailyDouble).length}</b> Daily Double</li>
         ${skipped ? `<li class="warn"><b>${skipped}</b> unfinished or unsorted ${skipped === 1 ? "question is" : "questions are"} left out</li>` : ""}
         ${warns.map((w) => `<li class="warn">${esc(w.text)}</li>`).join("")}

@@ -53,8 +53,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   console.log("Setup");
   const host = await device("host", { width: 1440, height: 900 });
   await hostLogin(host, "#/admin");
-  await host.waitForSelector(".host");
-  ok(true, "host console opens with code 2325");
+  await host.waitForSelector(".remote");
+  ok(true, "host opens with code 2325 (same view as the remote)");
   await host.click('[data-action="drawer"][data-p*="game"]');
   await host.click('.tab:has-text("Questions")');
   await host.setInputFiles('input[data-change="import"]', TEMPLATE);
@@ -108,7 +108,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   const q = async (cat, pts, round = 1) => host.evaluate(([c, p, r]) => window.__G.Q.find((x) => x.category === c && x.points === p && (x.round || 1) === r), [cat, pts, round]);
   const pick = async (cat, pts, round) => {
     const x = await q(cat, pts, round);
-    await host.click(`.jcell[data-id="${x.id}"]`);
+    await host.click(`.r-cell[data-id="${x.id}"]`);
     await until(host, (id) => window.__G.S.clue && window.__G.S.clue.id === id, x.id);
     return x;
   };
@@ -118,7 +118,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok((await board.textContent(".clue-text")).includes("Kevin McCallister"), "clue shows on the board");
   ok(await P.Rick.isVisible(".buzz.wait"), "phones show a WAIT buzzer while the clue is read");
   ok((await remote.textContent(".s-ans")).includes("Home Alone"), "remote shows the secret answer");
-  ok(!(await host.textContent(".stage")).includes("Home Alone"), "answer is NOT on the mirrored host screen");
+  ok(!(await board.textContent(".stage")).includes("Home Alone"), "answer is NOT on the projector");
   await key(host, "Space"); // open buzzers
   await until(P.Jo, () => !!document.querySelector(".buzz.live"));
   await Promise.all(Object.values(P).map((p) => p.dispatchEvent('[data-action="buzz"]', "pointerdown")));
@@ -223,9 +223,18 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(P.Amy, () => !!document.querySelector(".buzz.live"));
   await P.Amy.dispatchEvent('[data-action="buzz"]', "pointerdown");
   await until(board, () => window.__G.S.clue.stage === "answering");
+  await until(P.Amy, () => document.activeElement && document.activeElement.id === "typed-answer");
+  ok(true, "winning the buzz opens a text box, ready to type");
+  ok(!(await P.Amy.$('[data-action="enable-mic"]')), "no microphone button");
+  await P.Amy.fill("#typed-answer", "Jingle Bells");
+  await P.Amy.press("#typed-answer", "Enter");
+  await until(remote, () => document.querySelector(".secret")?.textContent.includes("Jingle Bells"));
+  ok(true, "typed answer shows up for the host");
+  await until(board, () => document.querySelector(".stage")?.textContent.includes("Jingle Bells"));
+  ok(true, "typed answer shows on the board");
   await until(board, () => !!window.__G.S.clue.timeUp, null, 9000);
   ok(true, "spoken answer timer runs out (time's up flagged)");
-  await until(host, () => document.querySelector(".dock-status")?.textContent.includes("Time's up"));
+  await until(host, () => document.querySelector(".r-status")?.textContent.includes("Time's up"));
   ok(true, "host sees 'Time's up — your call'");
   await key(host, "s"); // skip (no penalty) → rebound to team 2
   await until(board, () => window.__G.S.clue.stage === "open");
@@ -250,7 +259,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await key(host, "u");
   await until(board, (n) => window.__G.S.history.length === n - 1, s0.history.length);
   ok(true, "U undoes the last score change");
-  await host.click('.podium.team1 .pscore');
+  await host.click('.r-score.team1');
   await host.click('.modal .btn.good:has-text("$500")');
   await until(board, (v) => window.__G.S.scores.team1 === v + 500, (await state(board)).scores.team1);
   ok(true, "host adjusts a score from the podium");
@@ -266,7 +275,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "host renames a player and their phone updates");
   await host.click(`[data-action="player-remove"][data-id="${amyId}"]`);
   await until(P.Amy, () => !!document.querySelector("#jn-name"));
-  ok((await P.Amy.textContent(".note")).includes("reset your player"), "removed player goes back to the join screen");
+  ok((await P.Amy.textContent(".note")).includes("removed from the game"), "removed player goes back to the join screen");
   await P.Amy.fill("#jn-name", "Amy");
   await P.Amy.click(".teambtn.team1");
   await P.Amy.click('[data-action="join"]');
@@ -325,7 +334,6 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await P.Rick.fill("#fw-input", "300");
   await P.Rick.click('[data-action="final-wager"]');
   await until(board, () => !!window.__G.S.final.wagers.team2);
-  ok(!(await host.textContent(".dock")).includes("$300"), "wager amounts stay hidden on the host screen");
   await until(remote, () => document.querySelector(".secret")?.textContent.includes("$300"));
   ok(true, "remote shows the wagers privately");
   await key(host, "Space");
@@ -360,8 +368,40 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await shot(board, "19-board-winner");
   await shot(P.Jo, "20-phone-winner");
 
+  // ---------------- ugly sweater vote ----------------
+  console.log("Ugly sweater vote");
+  await host.locator('.r-buttons .btn', { hasText: "Ugly sweater vote" }).click();
+  await until(host, () => document.querySelectorAll(".vchip.on").length === 4);
+  ok(true, "host sees everyone, all eligible to start");
+  await until(P.Jo, () => document.body.textContent.includes("checking who's in the running"));
+  ok(true, "phones wait while the host checks the list");
+  await host.locator(".vchip", { hasText: "Bea" }).click();
+  await until(host, () => window.__G.S.vote.candidates.length === 3);
+  ok(true, "host removes someone who isn't eligible");
+  await host.locator('.r-buttons .btn', { hasText: "Start voting" }).click();
+  await until(P.Jo, () => document.querySelectorAll('[data-action="vote-cast"]').length === 2);
+  ok((await P.Bea.$$('[data-action="vote-cast"]')).length === 3, "people who aren't in the running can still vote");
+  ok((await P.Jo.$$eval('[data-action="vote-cast"]', (b) => b.map((x) => x.textContent))).every((t) => !t.includes("Jo")), "you can't vote for yourself");
+  const voteFor = async (page, name) => { await page.locator('[data-action="vote-cast"]', { hasText: name }).click(); };
+  await voteFor(P.Jo, "Rick");
+  await voteFor(P.Amy, "Rick");
+  await voteFor(P.Rick, "Jo");
+  await until(board, () => Object.keys(window.__G.S.vote.votes).length === 3);
+  ok(!(await board.textContent(".stage")).includes("👑") && !(await board.$(".vote-rows")), "nothing is revealed until everyone votes");
+  ok((await board.textContent(".stage")).includes("3 of 4"), "board shows how many votes are in");
+  await shot(board, "21-board-vote");
+  await voteFor(P.Bea, "Rick");
+  await until(board, () => window.__G.S.vote.stage === "reveal");
+  await until(board, () => !!document.querySelector(".vote-rows"));
+  ok((await board.textContent(".over-title")).includes("Rick"), "winner revealed once everyone voted");
+  await sleep(600);
+  await shot(board, "22-board-vote-winner");
+  await shot(P.Rick, "23-phone-vote-winner");
+  await host.locator('.r-buttons .btn', { hasText: "Back to final scores" }).click();
+  await until(board, () => window.__G.S.vote.stage === "off");
+
   // ---------------- new game ----------------
-  await host.click('[data-action="confirm"]');
+  await host.click('[data-action="confirm"][data-p*="newGame"]');
   await host.click('[data-action="confirm-yes"]');
   await until(board, () => window.__G.S.phase === "lobby" && window.__G.S.scores.team1 === 0);
   await until(board, () => window.__G.Q.every((x) => !x.used));

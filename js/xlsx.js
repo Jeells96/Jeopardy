@@ -30,9 +30,9 @@ export async function downloadTemplate() {
   const wb = XLSX.utils.book_new();
   const add = (name, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), name);
   add("Read me first", [["Each tab is a category. Start a tab name with 'DJ ' for Double Jeopardy. See the README for details."]]);
-  add("My Category", [COLUMNS, [100, "Your clue here", "The answer", "", ""], [200, "A multiple-choice clue", "Right answer", "Wrong 1; Wrong 2; Wrong 3", ""]]);
-  add("DJ My Category", [COLUMNS, [200, "A Double Jeopardy clue", "The answer", "", ""]]);
-  add("Final Jeopardy", [["Category", "Question", "Answer"], ["Final category", "The final clue", "The answer"]]);
+  add("My Category", [COLUMNS, [100, "Your question here", "The answer", "", ""], [200, "A multiple-choice question", "Right answer", "Wrong 1; Wrong 2; Wrong 3", ""]]);
+  add("DJ My Category", [COLUMNS, [200, "A Double Jeopardy question", "The answer", "", ""]]);
+  add("Final Jeopardy", [["Category", "Question", "Answer"], ["Final category", "The final question", "The answer"]]);
   XLSX.writeFile(wb, "christmas-jeopardy-template.xlsx");
 }
 
@@ -59,7 +59,7 @@ export function exportSetXlsx(set, grouped) {
         [COLUMNS, ...cat.clues.map((c) => [c.pts, c.question, c.answer, c.wrong.join("; "), c.dd ? "Yes" : ""])], [8, 50, 28, 36, 13]);
     }
   }
-  if (grouped.final.length) add("Final Jeopardy", [["Category", "Question", "Answer"], ...grouped.final.map((c) => [c.category, c.question, c.answer])], [24, 50, 28]);
+  if (grouped.final.length) add("Final Jeopardy", [["Category", "Question", "Answer", "Other choices"], ...grouped.final.map((c) => [c.category, c.question, c.answer, c.wrong.join("; ")])], [24, 50, 28, 36]);
   if (grouped.loose.length) add("Notes - unsorted ideas", [["Idea / question", "Answer"], ...grouped.loose.map((c) => [c.question, c.answer])], [60, 30]);
   if (!wb.SheetNames.length) add("My Category", [COLUMNS], [8, 50, 28, 36, 13]);
   const file = String(set.name || "questions").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "questions";
@@ -83,6 +83,11 @@ function splitChoices(s) {
     if (v && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); out.push(v); }
   }
   return out;
+}
+function finalChoices(answer, other) {
+  if (!other.length || !answer) return { type: "spoken", choices: [], correctIndex: -1 };
+  const choices = shuffle([answer, ...other.filter((o) => o.toLowerCase() !== answer.toLowerCase())]);
+  return { type: "mcq", choices, correctIndex: choices.indexOf(answer) };
 }
 function shuffle(arr) {
   const a = arr.slice();
@@ -143,7 +148,7 @@ export function parseWorkbook(arrayBuffer) {
           const cat = String(get("category") || "").trim();
           finalRow = {
             category: cat && !FINAL_RE.test(cat) ? cat : "Final Jeopardy",
-            points: 0, question, answer, type: "spoken", choices: [], correctIndex: -1,
+            points: 0, question, answer, ...finalChoices(answer, splitChoices(get("other"))),
             dailyDouble: false, isFinal: true, round: 0, order: order++, used: false,
           };
         }
@@ -186,10 +191,10 @@ export function parseWorkbook(arrayBuffer) {
   if (finalRow) rows.push(finalRow);
   const r1 = rows.filter((r) => !r.isFinal && r.round === 1).length;
   const r2 = rows.filter((r) => !r.isFinal && r.round === 2).length;
-  if (!r1 && !r2) return { error: "No clues found. Each category should be its own tab with a 'Question' column." };
+  if (!r1 && !r2) return { error: "No questions found. Each category should be its own tab with a 'Question' column." };
   if (!r1 && r2) return { error: "Only Double Jeopardy tabs were found — add at least one regular category tab (without “DJ ”)." };
-  const parts = [`${r1} clues in ${cats[1].length} categories`];
-  if (r2) parts.push(`${r2} Double Jeopardy clues in ${cats[2].length} categories`);
+  const parts = [`${r1} questions in ${cats[1].length} categories`];
+  if (r2) parts.push(`${r2} Double Jeopardy questions in ${cats[2].length} categories`);
   parts.push(finalRow ? "Final Jeopardy ✓" : "no Final Jeopardy tab");
   return { rows, summary: "Imported " + parts.join(" · ") + "." };
 }

@@ -2,8 +2,8 @@
 
 A show-style, real-time game night for a Christmas party — **Husbands vs Wives** by
 default. Play **mini games** for team points, then **Jeopardy**: everyone buzzes in from
-their own phone, with a projector board, a host console, and a private **host remote** for
-your phone with the answer key and every control.
+their own phone, with a projector board and a private **host screen** (on your phone or
+laptop) with the answer key and every control. Finish with an **ugly sweater vote**.
 
 **Live site:** https://Jeells96.github.io/Jeopardy/
 
@@ -11,14 +11,14 @@ your phone with the answer key and every control.
 
 ## ⚡ Host quick start (game night)
 
-1. **Projector:** open the site, tap **Host login**, enter **2325** → *Jaren's View*.
-   Mirror this screen (it never shows answers or wagers). Or open **📺 Board** on the
-   projector computer instead.
-2. **Sound:** tap **🔊** on whichever screen is connected to speakers.
-3. **Your phone:** open **📱 Remote** (same code). It shows the answer to every clue,
-   who's buzzed, wagers, and all the buttons — host from anywhere in the room.
-4. **Players** scan the QR code on the lobby screen, type their name, pick **Husbands** or
-   **Wives** and tap **Enable microphone**. (A team can rename itself from a phone.)
+1. **Projector:** open **📺 Board** on the projector computer. It only ever shows what
+   you've started — the lobby, the mini games or the Jeopardy board — never answers.
+2. **You:** open the site, tap **Host login**, enter **2325**. Host and Remote are the same
+   private screen: the answer to every question, who's buzzed, wagers, and all the
+   buttons. Keep it to yourself and host from anywhere in the room.
+3. **Sound:** tap **🔊** on whichever screen is connected to speakers.
+4. **Players** scan the QR code on the lobby screen, type their name and pick **Husbands**
+   or **Wives**. (A team can rename itself from a phone.)
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
    mini games first if you've set any up, then Jeopardy.
 
@@ -50,6 +50,11 @@ and the points go straight onto the team's score and carry into Jeopardy.
 - **Fixing mistakes:** remove a wrong result with ✕, **Undo** the last points, or **↺ Reset**
   a game to hand its points back.
 - **No phone?** Add people by hand in **Settings → Players** — they're drawn like anyone else.
+- **More than one table?** In **Settings → Mini games → Tables**, name your stations
+  (e.g. "Kitchen, Living room"). Each game can be set to one table or *any table* (drawn
+  each time). When names are drawn, the board, the phones and the announcer tell people
+  which table they're summoned to — with a different Christmas summons every time
+  ("🦌 Rudolph's nose is pointing straight at Jake — guide your sleigh to the Kitchen!").
 - **Mid-game bonus round:** Settings → Jump to → **Mini games** pauses Jeopardy; the gold
   button brings you back to the same board.
 
@@ -64,9 +69,10 @@ switch off phone renaming there too.
 
 **The board**
 - Jeopardy round + optional **Double Jeopardy** round (doubled values) + **Final Jeopardy**.
+  Switch Double Jeopardy off in Settings → Game to skip it — its questions are kept.
 - **Board control:** the team that answered correctly picks next (shown on the board and
   phones). In Double Jeopardy the trailing team picks first, like the show.
-- Clues zoom in full-screen; categories, values and podium scores styled like the show.
+- Questions zoom in full-screen; categories, values and podium scores styled like the show.
 
 **Buzzing**
 - The **first buzz wins**, decided by a database transaction, so it's exact even with 50
@@ -81,8 +87,9 @@ switch off phone renaming there too.
   stay awake during the game.
 
 **Answering**
-- **Spoken clues:** the buzzed-in player's mic transcribes their answer live onto the
-  board; your remote says whether it "sounds right". You tap Correct / Wrong / Skip.
+- **Typed answers:** whoever wins the buzz gets a text box, already open and ready to
+  type. Their answer appears on the board and your screen says whether it matches. You tap
+  Correct / Wrong / Skip.
 - **Multiple choice:** the player taps an option and it's scored automatically. A wrong
   option is crossed off for the rebound team.
 - **Answer timer** with show-style countdown lights. Spoken: time's up → your call.
@@ -97,16 +104,25 @@ switch off phone renaming there too.
 - Only teams above $0 play (official rule — you can override per team).
 - Teams **lock their wager secretly on their phones** (teammates see it, the other team
   and the projector don't). You can also enter wagers by hand.
-- Think music + timer; teams type their answer on their phones (auto-saves).
+- Think music + timer; teams type their answer on their phones (auto-saves) — or, if the
+  Final has wrong options, it's **multiple choice** and they tap one.
 - Dramatic reveal, lowest score first: answer → you judge → wager → new score. Winner
   screen with confetti.
 
 **Host tools**
-- **Undo** the last score change (U), adjust any score from its podium, "put a clue back"
+- **Undo** the last score change (U), adjust any score from its podium, "put a question back"
   if you misclick, switch who picks, jump to Double/Final, new game.
-- Rename or move players between teams (their phone updates instantly) or remove them.
+- Rename or move players between teams (their phone updates instantly) or remove them —
+  a removed player's phone is released and has to enter a name again to rejoin.
 - Keyboard: Space next step · C correct · W wrong · S skip · N nobody · P pause buzzers ·
   R show answer · U undo · M sound · F fullscreen · Esc close.
+
+**🧶 Ugly sweater vote (after Jeopardy)**
+- On the final-scores screen tap **🧶 Ugly sweater vote**. You get the list of everyone —
+  untick anyone who isn't in the running, then **Start voting**.
+- Everyone votes on their phone (not for themselves) and can change their vote until the
+  last one is in. The board shows only how many votes are in — nothing is revealed until
+  every phone has voted (or you tap **Reveal now**). Then the winner gets the crown.
 
 ---
 
@@ -116,7 +132,9 @@ Open **⚙ Settings → Questions → 📚 Open the question library** (or go to
 code 2325). Every set of questions is kept there — one per year — so you can look back at
 past years, search them, and reuse a good question.
 
-- **+ New question set** — start empty, from what's in the game now, or from the sample game.
+- **+ New question set** — start empty, from what's in the game now, from the sample game,
+  or from the **quick test game**: one non-Christmas category plus a multiple-choice
+  Final, for trying out every feature without seeing the real questions.
 - **📋 Paste questions** — mass input. Paste a whole batch and you see a live preview of
   what was understood before anything is saved. The tidiest format:
 
@@ -134,7 +152,8 @@ past years, search them, and reuse a good question.
   ```
 
   Each line is `points | question | answer`. A 4th part with wrong options (separated by
-  `;`) makes it **multiple choice**; `DD` marks a Daily Double; a 6th part is a host note.
+  `;`) makes it **multiple choice** (Final Jeopardy too: `question | answer | wrong; wrong`);
+  `DD` marks a Daily Double; a 6th part is a host note.
   Leave points blank to fill them in automatically. It also understands
   `Question? Answer: X`, numbered lists with A) B) C) D) options, tables, rows copied
   from a spreadsheet, and JSON.
@@ -142,7 +161,9 @@ past years, search them, and reuse a good question.
   categories, round, topics) that comes back in exactly the paste format, and tells it not
   to reuse answers from your past years.
 - **Edit in place** — every question, answer, value and category is editable right on the
-  page. **⋯** opens wrong options (multiple choice), Daily Double, round, a **host note**
+  page, and the boxes grow so you can read everything at once. **⋯** opens wrong options
+  (multiple choice — with a switch to turn it off without deleting the options), Daily
+  Double, round, a **host note**
   (shown only on your phone remote — e.g. "also accept St. Nick"), move, copy to another
   set, and delete (with Undo).
 - **♻ Also asked in Christmas 2025** — repeats from past years are flagged automatically.
@@ -237,7 +258,8 @@ Static site, no build step. Firebase and SheetJS load from CDNs.
 |---|---|
 | `js/engine.js` | Pure game rules — every action is `(state, params) → changes` |
 | `js/data.js` | Firestore I/O; runs engine actions inside transactions; server-clock sync |
-| `js/app.js` | Routing, live subscriptions, rendering, actions, automations, sounds, mic |
+| `js/app.js` | Routing, live subscriptions, rendering, actions, automations, sounds, typed answers |
+| `js/summons.js` | Christmas summon lines for mini games played at several tables |
 | `js/ui/*.js` | Screens: `stage` (show display), `host`, `dock` (next-step logic), `remote`, `player`, `join`, `minis` (all mini-game screens), `team` (phone renaming) |
 | `js/bank.js` | Question library logic: paste parser, checks, search, repeats, export |
 | `js/libctl.js` + `js/ui/library.js` | Question library screen |
@@ -254,7 +276,8 @@ node tests/e2e.js [shotsDir]      # full Jeopardy game: host, board, remote and 
 node tests/e2e-minis.js [shots]   # Husbands vs Wives night: mini games → Jeopardy,
                                   # a phone-free night, and upgrading an older saved game
 node tests/e2e-library.js [shots] # question library: paste, edit, search, lock, load into the game
+node tests/e2e-extras.js [shots]  # test game, mini-game tables, multiple-choice Final
 ```
 
-Firestore layout: `state/game` (the whole game), `state/spoken` (live transcript),
+Firestore layout: `state/game` (the whole game, incl. the sweater vote), `state/spoken` (typed answer),
 `state/clock-*` (clock sync), `questions/*`, `players/*`, `buzzes/*`.

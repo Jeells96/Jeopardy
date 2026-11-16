@@ -147,7 +147,7 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   await page.fill('[data-input="lib-prompt"][data-f="topics"]', "The Grinch, Elf");
   await until(page, () => document.getElementById("lib-prompt-text").value.includes("The Grinch, Elf"));
   const prompt = await page.inputValue("#lib-prompt-text");
-  ok(prompt.includes("6 categories with 5 clues each") && prompt.includes("Don't reuse") && prompt.includes("Eggnog"), "the AI request includes size, topics and past answers to avoid");
+  ok(prompt.includes("6 categories with 5 questions each") && prompt.includes("Don't reuse") && prompt.includes("Eggnog"), "the AI request includes size, topics and past answers to avoid");
   await page.click('[data-action="lib-prompt-copy"]');
   await toast("Copied");
   eq(await page.evaluate(() => navigator.clipboard.readText()), prompt, "…and copies to the clipboard");
@@ -174,16 +174,16 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   eq(Q.filter((q) => q[4]).length + "/" + Q.filter((q) => q[3] === "mcq").length + "/" + Q.filter((q) => q[0] === 2).length, "1/3/1", "the game now has the set's finished clues: Final, multiple choice and Double Jeopardy");
   ok((await page.textContent(".set-stats")).includes("In the game now"), "the library shows which set is on the board");
   await page.click('.lib-top a[href="#/admin"]');
-  await page.waitForSelector(".host");
-  ok((await page.textContent(".dock-status")).includes("clues"), "back in the host console the lobby sees the questions");
+  await page.waitForSelector(".remote");
+  ok((await page.textContent(".r-status")).includes("questions"), "back on the host screen the lobby sees the questions");
   await page.keyboard.press("Space");
   await until(page, () => window.__G.S.phase === "board");
-  eq(await page.$$eval(".jcat span", (e) => e.map((x) => x.textContent)), ["Christmas Carols", "Christmas Movies", "Festive Food & Drink"], "the board shows the library's categories in order");
+  eq(await page.$$eval(".r-cat", (e) => e.map((x) => x.textContent)), ["Christmas Carols", "Christmas Movies", "Festive Food & Drink"], "the board shows the library's categories in order");
   await shot(page, "l08-board");
 
   // host note reaches the remote
   const maxQ = await page.evaluate(() => window.__G.Q.find((q) => q.answer === "Max the dog").id);
-  await page.click(`.jcell[data-id="${maxQ}"]`);
+  await page.click(`.r-cell[data-id="${maxQ}"]`);
   await until(page, () => window.__G.S.phase === "clue");
   const remote = await ctx.newPage();
   await remote.goto(URL + "#/remote");

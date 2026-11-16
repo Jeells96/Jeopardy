@@ -39,7 +39,8 @@ export function cleanClue(raw = {}) {
     points: Number.isFinite(n) && n > 0 ? Math.min(n, 100000) : null,
     question: str(raw.question, 400),
     answer,
-    wrong: slot === "final" ? [] : cleanWrong(raw.wrong, answer),
+    wrong: cleanWrong(raw.wrong, answer),
+    mcOff: !!raw.mcOff, // wrong options kept but multiple choice switched off
     dd: slot === "final" ? false : !!raw.dd,
     note: str(raw.note, 300),
   };
@@ -66,7 +67,7 @@ export function clueIssues(c) {
   return out;
 }
 export const isReady = (c) => clueIssues(c).length === 0;
-export const isMC = (c) => c.slot !== "final" && (c.wrong || []).length > 0;
+export const isMC = (c) => (c.wrong || []).length > 0 && !c.mcOff;
 
 // Group a set the way the board will show it. Blank point values are auto-filled with the
 // lowest unused value in that category ($100 steps, $200 in Double Jeopardy).
@@ -123,10 +124,10 @@ export function checkSet(set) {
     const target = Math.max(5, ...cats.map((c) => c.clues.length));
     for (const cat of cats) {
       const ready = cat.clues.filter(isReady).length;
-      if (ready < cat.clues.length) out.push({ level: "warn", text: `${label} › ${cat.name}: ${s(cat.clues.length - ready, "clue")} still unfinished.` });
-      if (cat.clues.length < target) out.push({ level: "info", text: `${label} › ${cat.name}: ${cat.clues.length} of ${target} clues written.` });
+      if (ready < cat.clues.length) out.push({ level: "warn", text: `${label} › ${cat.name}: ${s(cat.clues.length - ready, "question")} still unfinished.` });
+      if (cat.clues.length < target) out.push({ level: "info", text: `${label} › ${cat.name}: ${cat.clues.length} of ${target} questions written.` });
       const pts = cat.clues.map((c) => c.pts);
-      if (new Set(pts).size !== pts.length) out.push({ level: "warn", text: `${label} › ${cat.name}: two clues have the same point value.` });
+      if (new Set(pts).size !== pts.length) out.push({ level: "warn", text: `${label} › ${cat.name}: two questions have the same point value.` });
     }
     if (cats.length !== 6) out.push({ level: "info", text: `${label}: ${s(cats.length, "categor").replace(/categors?$/, cats.length === 1 ? "category" : "categories")} (the show uses 6 — any number works).` });
     const dd = cats.reduce((n, cat) => n + cat.clues.filter((c) => c.dd && isReady(c)).length, 0);
@@ -134,8 +135,8 @@ export function checkSet(set) {
     if (dd !== want) out.push({ level: "info", text: `${label}: ${s(dd, "Daily Double")} (the show has ${want}).` });
   }
   const finals = g.final.filter(isReady).length;
-  if (!finals) out.push({ level: "warn", text: "No Final Jeopardy clue yet." });
-  else if (finals > 1) out.push({ level: "info", text: `${finals} Final Jeopardy clues — only the first is used.` });
+  if (!finals) out.push({ level: "warn", text: "No Final Jeopardy question yet." });
+  else if (finals > 1) out.push({ level: "info", text: `${finals} Final Jeopardy questions — only the first is used.` });
   if (g.loose.length) out.push({ level: "info", text: `${s(g.loose.length, "unsorted idea")} — give ${g.loose.length === 1 ? "it" : "them"} a category to put ${g.loose.length === 1 ? "it" : "them"} on the board.` });
   return out;
 }
@@ -146,7 +147,7 @@ function shuffle(arr) {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
-// Rows for the game's `questions` collection. Unfinished clues are skipped.
+// Rows for the game's `questions` collection. Unfinished questions are skipped.
 export function toGameRows(set) {
   const g = groupSet(set);
   const rows = [];
@@ -157,7 +158,7 @@ export function toGameRows(set) {
     for (const cat of g.rounds[slot]) {
       for (const c of cat.clues) {
         if (!isReady(c)) { skipped++; continue; }
-        const mc = c.wrong.length > 0;
+        const mc = isMC(c);
         const choices = mc ? shuffle([c.answer, ...c.wrong]) : [];
         rows.push({
           category: cat.name, points: c.pts, question: c.question, answer: c.answer,
@@ -171,9 +172,11 @@ export function toGameRows(set) {
   const f = g.final.find(isReady);
   skipped += g.final.filter((c) => !isReady(c)).length;
   if (f) {
+    const fmc = isMC(f);
+    const fchoices = fmc ? shuffle([f.answer, ...f.wrong]) : [];
     rows.push({
-      category: f.category || "Final Jeopardy", points: 0, question: f.question, answer: f.answer, type: "spoken", choices: [],
-      correctIndex: -1, dailyDouble: false, isFinal: true, round: 0, order: order++, used: false, note: f.note || "",
+      category: f.category || "Final Jeopardy", points: 0, question: f.question, answer: f.answer, type: fmc ? "mcq" : "spoken", choices: fchoices,
+      correctIndex: fmc ? fchoices.indexOf(f.answer) : -1, dailyDouble: false, isFinal: true, round: 0, order: order++, used: false, note: f.note || "",
     });
     counts.final = 1;
   }
@@ -486,8 +489,10 @@ function byPosition(f, cur) {
   const c = { slot: cur.slot === "ideas" ? "r1" : cur.slot, category: cur.category };
   let i = 0;
   if (c.slot === "final") {
-    if (f.length >= 3) { c.category = f[0]; i = 1; }
-    return { ...c, question: f[i], answer: f[i + 1], note: f[i + 2] || "" };
+    // "Category | Question | Answer" only when no "## Category" heading came first and the
+    // third field doesn't look like wrong options ("a; b; c").
+    if (f.length >= 3 && !cur.category && !/;/.test(f[2])) { c.category = f[0]; i = 1; }
+    return { ...c, question: f[i], answer: f[i + 1], wrong: f[i + 2] || "", note: f[i + 3] || "" };
   }
   if (f.length >= 3 && !isNum(f[0]) && (isNum(f[1]) || f[1] === "")) { c.category = f[0]; c.points = f[1]; i = 2; }
   else if (isNum(f[0]) || (f[0] === "" && f.length >= 3)) { c.points = f[0]; i = 1; }
@@ -528,7 +533,10 @@ export function toText(set) {
   }
   if (g.final.length) {
     out.push(`== ${SLOT_LABEL.final} ==`);
-    for (const c of g.final) { if (c.category) out.push(`## ${c.category}`); out.push(`${safe(c.question)} | ${safe(c.answer)}${c.note ? " | " + safe(c.note) : ""}`); }
+    for (const c of g.final) {
+      if (c.category) out.push(`## ${c.category}`);
+      out.push([safe(c.question), safe(c.answer), ...(c.wrong.length || c.note ? [c.wrong.map(safe).join("; ")] : []), ...(c.note ? [safe(c.note)] : [])].join(" | "));
+    }
     out.push("");
   }
   if (g.loose.length) {
@@ -544,29 +552,29 @@ export function aiPrompt({ categories = 6, perCategory = 5, slot = "r1", topics 
   const step = slot === "r2" ? 200 : 100;
   const values = Array.from({ length: perCategory }, (_, i) => step * (i + 1));
   const lines = [
-    `I'm writing clues for a Christmas-themed Jeopardy game for ${audience}.`,
+    `I'm writing questions for a Christmas-themed Jeopardy game for ${audience}.`,
     "",
-    `Please write ${categories} categor${categories === 1 ? "y" : "ies"} with ${perCategory} clues each, ordered easiest to hardest (values ${values.join(", ")}).`,
+    `Please write ${categories} categor${categories === 1 ? "y" : "ies"} with ${perCategory} questions each, ordered easiest to hardest (values ${values.join(", ")}).`,
   ];
   if (topics.trim()) lines.push(`Categories / themes I'd like: ${topics.trim()}`);
   lines.push(
     "",
     "Rules:",
-    "- Every clue needs exactly one clearly correct, checkable answer. Nothing ambiguous or opinion-based.",
-    "- Keep each clue short enough to read aloud in one breath.",
-    "- A wrong answer loses points, so easy clues should be fair and hard clues genuinely hard.",
-    "- For the hardest clue or two in each category, add 3 believable WRONG options so it can be multiple choice.",
+    "- Every question needs exactly one clearly correct, checkable answer. Nothing ambiguous or opinion-based.",
+    "- Keep each question short enough to read aloud in one breath.",
+    "- A wrong answer loses points, so easy questions should be fair and hard questions genuinely hard.",
+    "- For the hardest question or two in each category, add 3 believable WRONG options so it can be multiple choice.",
     "- Double-check every fact, date and spelling.",
   );
   if (avoid.length) lines.push(`- Don't reuse any of these answers from past years: ${avoid.slice(0, 250).join("; ")}`);
   lines.push(
     "",
-    "Reply with ONLY the clues in exactly this format (no intro, no numbering, no extra commentary):",
+    "Reply with ONLY the questions in exactly this format (no intro, no numbering, no extra commentary):",
     "",
     "## Category Name",
-    `${values[0]} | Clue text | Correct answer`,
-    `${values[Math.min(1, values.length - 1)]} | Clue text | Correct answer`,
-    `${values[values.length - 1]} | Clue text | Correct answer | Wrong option 1; Wrong option 2; Wrong option 3`,
+    `${values[0]} | Question text | Correct answer`,
+    `${values[Math.min(1, values.length - 1)]} | Question text | Correct answer`,
+    `${values[values.length - 1]} | Question text | Correct answer | Wrong option 1; Wrong option 2; Wrong option 3`,
   );
   return lines.join("\n");
 }

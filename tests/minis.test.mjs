@@ -443,6 +443,114 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq(E.migrate(old).patch.jStarted, true, "upgrade: a game already on the board counts as started");
 }
 
+// ---------- tables & Christmas summons ----------
+{
+  const { SUMMONS, summonText } = await import("../js/summons.js");
+  const w = world(roster(3, 3), 11);
+  const id = w.add({ name: "Toss", type: "h2h" });
+  w.run("miniPlay", { id });
+  w.run("miniNext", { id });
+  ok(!("table" in E.openMatch(w.game())), "no tables set up: nothing to summon to");
+  eq(E.currentPick(w.state).table, null, "no table on the pick");
+  w.run("miniMatch", { id, winner: "team1" });
+  w.run("miniTables", { tables: " Kitchen ,Garage; kitchen\nPorch" });
+  eq(w.state.minis.tables, ["Kitchen", "Garage", "Porch"], "table names are cleaned and de-duplicated");
+  const seen = new Set(), lines = [];
+  for (let i = 0; i < 12; i++) {
+    w.run("miniNext", { id });
+    const pick = E.currentPick(w.state);
+    ok(["Kitchen", "Garage", "Porch"].includes(pick.table), "any-table game draws one of the tables");
+    seen.add(pick.table);
+    lines.push(pick.summon);
+    w.run("miniMatch", { id, winner: "tie" });
+  }
+  ok(seen.size > 1, "the table changes between draws");
+  eq(new Set(lines).size, lines.length, "a different summon line every draw");
+  w.run("miniUpdate", { id, patch: { table: "Porch" } });
+  w.run("miniNext", { id });
+  eq(E.currentPick(w.state).table, "Porch", "a game fixed to a table always summons there");
+  const before = E.currentPick(w.state);
+  w.run("miniRepick", { id, team: "team1" });
+  eq(E.currentPick(w.state).table, "Porch", "re-drawing keeps the table");
+  ok(E.currentPick(w.state).summon !== before.summon, "re-drawing gives a fresh summon");
+  const txt = summonText(0, ["Ann", "Bo"], "Porch");
+  ok(txt.includes("Ann and Bo") && txt.includes("Porch") && !txt.includes("{"), "summon fills in names and table");
+  ok(SUMMONS.length >= 30, "plenty of summon lines");
+  const b = w.add({ name: "Stack", type: "best" });
+  w.run("miniPlay", { id: b });
+  w.run("miniNext", { id: b });
+  ok(!!E.currentPick(w.state).table && E.currentPick(w.state).summon != null, "best-overall turns get a table too");
+  w.run("miniTables", { tables: Array.from({ length: 9 }, (_, i) => "T" + i) });
+  ok(!!w.error, "at most 8 tables");
+  w.run("newGame");
+  eq(w.state.minis.tables, ["Kitchen", "Garage", "Porch"], "tables survive a new game");
+}
+
+// ---------- ugly sweater vote ----------
+{
+  const players = [...roster(2, 2), { id: "m1", name: "Grandpa", team: "team1", manual: true }];
+  const w = world(players);
+  w.run("voteSetup");
+  ok(!!w.error, "the vote waits until Jeopardy is over");
+  w.state = { ...w.state, phase: "over" };
+  w.run("voteSetup");
+  eq(w.state.vote.stage, "setup", "host opens the eligible list");
+  eq(w.state.vote.candidates.length, 5, "everyone starts eligible");
+  w.run("voteToggle", { pid: "w2" });
+  w.run("voteToggle", { pid: "m1" });
+  eq(w.state.vote.candidates, ["h1", "h2", "w1"], "host un-ticks people without an ugly sweater");
+  w.run("castVote", { voter: "h1", pick: "w1" });
+  ok(!!w.error, "no voting before it opens");
+  w.run("voteOpen");
+  eq(w.state.vote.stage, "open", "voting opens");
+  w.run("castVote", { voter: "h1", pick: "h1" });
+  ok(!!w.error, "can't vote for yourself");
+  w.run("castVote", { voter: "h1", pick: "w2" });
+  ok(w.noop, "can't vote for someone who isn't eligible");
+  w.run("castVote", { voter: "m1", pick: "w1" });
+  ok(!!w.error, "players without a phone don't vote");
+  w.run("castVote", { voter: "h1", pick: "w1" });
+  w.run("castVote", { voter: "h2", pick: "h1" });
+  w.run("castVote", { voter: "h2", pick: "w1" }); // changed their mind
+  eq(E.voteProgress(w.state, players), { cast: 2, total: 4, all: false }, "progress counts phones only");
+  w.run("castVote", { voter: "w1", pick: "h2" });
+  eq(w.state.vote.stage, "open", "still hidden until everyone votes");
+  w.run("castVote", { voter: "w2", pick: "w1" });
+  eq(w.state.vote.stage, "reveal", "last vote reveals the results");
+  const r = E.voteResults(w.state);
+  eq(r.winners.map((x) => [x.name, x.votes]), [["Wife1", 3]], "most votes wins");
+  eq(r.rows.length, 3, "every eligible person is listed");
+  w.run("castVote", { voter: "w2", pick: "h2" });
+  ok(!!w.error, "no changes after the reveal");
+  w.run("voteBack");
+  eq(w.state.vote.stage, "off", "back to the final scores");
+  // a tie, revealed early by the host
+  w.run("voteSetup"); w.run("voteOpen");
+  w.run("castVote", { voter: "h1", pick: "w1" });
+  w.run("castVote", { voter: "w1", pick: "h1" });
+  w.run("voteReveal");
+  eq(E.voteResults(w.state).winners.map((x) => x.name).sort(), ["Hub1", "Wife1"], "ties share the crown");
+  w.run("voteSetup"); w.run("voteToggle", { pid: "h1" }); w.run("voteToggle", { pid: "h2" }); w.run("voteToggle", { pid: "w1" }); w.run("voteToggle", { pid: "w2" });
+  w.run("voteOpen");
+  ok(!!w.error, "needs at least two people in the running");
+  w.run("newGame");
+  eq(w.state.vote.stage, "off", "a new game clears the vote");
+}
+
+// ---------- Double Jeopardy switch ----------
+{
+  const w = world(roster(1, 1));
+  w.qs.push({ id: "d1", category: "DJ", points: 200, type: "spoken", round: 2 });
+  w.run("startGame");
+  w.run("setSettings", { patch: { doubleJeopardy: false } });
+  ok(E.hasRound2(w.qs) && !E.r2On(w.state, w.qs), "Double Jeopardy switched off (questions kept)");
+  w.run("startRound2");
+  ok(!!w.error && w.state.round === 1, "can't start Double Jeopardy while it's off");
+  w.run("setSettings", { patch: { doubleJeopardy: true } });
+  w.run("startRound2");
+  eq(w.state.round, 2, "switched back on, it plays");
+}
+
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

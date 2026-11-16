@@ -55,9 +55,9 @@ function focusNewClue(G, setId, before) {
     return fresh ? document.querySelector(`[data-id="${fresh.id}"][data-f="question"]`) : null;
   });
 }
-async function sampleClues() {
-  const res = await fetch("./sets/sample-game.txt", { cache: "no-store" });
-  if (!res.ok) throw new Error("Couldn't load the sample game — check your connection and try again.");
+async function sampleClues(file = "sample-game") {
+  const res = await fetch(`./sets/${file}.txt`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Couldn't load those questions — check your connection and try again.");
   return B.parsePaste(await res.text()).clues;
 }
 const clearSearch = (L) => { L.search = ""; const i = document.getElementById("lib-search"); if (i) i.value = ""; };
@@ -73,6 +73,13 @@ export async function libClick(a, el, ctx) {
   switch (a) {
     case "lib-select": L.setId = d.id; L.filter = "all"; L.undo = null; clearSearch(L); render(); window.scrollTo(0, 0); return;
     case "lib-search-clear": clearSearch(L); return render();
+    case "lib-add-test": {
+      const set = B.newSet({ name: "Test game (not Christmas)", year: new Date().getFullYear(), clues: await sampleClues("test-game") });
+      await D.createSet(set);
+      L.setId = set.id;
+      render();
+      return toast("Added the test game ✓ — one category plus Final, nothing from the real game", "good");
+    }
     case "lib-new": L.newFrom = "empty"; G.ui.modal = { type: "libNew" }; render(); return focusSoon("#ns-name");
     case "lib-add-sample": {
       const set = B.newSet({ name: "Sample game", year: new Date().getFullYear(), clues: await sampleClues() });
@@ -87,6 +94,7 @@ export async function libClick(a, el, ctx) {
       let clues = [];
       if (L.newFrom === "game") clues = B.fromGameRows(G.Q);
       else if (L.newFrom === "sample") clues = await sampleClues();
+      else if (L.newFrom === "test") clues = await sampleClues("test-game");
       const set = B.newSet({ name, year, clues });
       await D.createSet(set);
       L.setId = set.id; L.filter = "all"; clearSearch(L); close(); render();
@@ -150,7 +158,7 @@ export async function libClick(a, el, ctx) {
     case "lib-use-go": {
       const res = await D.loadSetIntoGame(cur);
       close(); render();
-      return toast(`“${cur.name}” is on the board ✓ (${res.rows} clues)`, "good");
+      return toast(`“${cur.name}” is on the board ✓ (${res.rows} questions)`, "good");
     }
     case "lib-more": G.ui.modal = { type: "libMore" }; return render();
     case "lib-export-xlsx": exportSetXlsx(cur, B.groupSet(cur)); return;
@@ -199,7 +207,7 @@ export async function libChange(k, el, ctx) {
   switch (k) {
     case "lib-meta": await D.setOp(cur.id, "meta", { patch: { [d.f]: el.value } }); return;
     case "lib-clue": await D.setOp(cur.id, "updateClue", { id: d.id, patch: { [d.f]: el.value } }); return;
-    case "lib-clue-bool": await D.setOp(cur.id, "updateClue", { id: d.id, patch: { [d.f]: el.checked } }); return;
+    case "lib-clue-bool": await D.setOp(cur.id, "updateClue", { id: d.id, patch: { [d.f]: d.invert ? !el.checked : el.checked } }); return;
     case "lib-cat-rename": await D.setOp(cur.id, "renameCategory", { slot: d.slot, from: d.from, to: el.value }); return;
     case "lib-copy": {
       const target = G.sets.find((s) => s.id === el.value);

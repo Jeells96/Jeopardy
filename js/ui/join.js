@@ -12,7 +12,7 @@ export function renderJoin(G) {
   return `<div class="join">
     <div class="join-card">
       ${logo}
-      ${G.ui.kicked ? `<div class="note">Jaren reset your player — please join again.</div>` : ""}
+      ${G.ui.kicked ? `<div class="note">Your name was removed from the game — enter your name to join again.</div>` : ""}
       <label class="join-label" for="jn-name">Your name</label>
       <input id="jn-name" class="join-input" maxlength="20" autocomplete="nickname" placeholder="e.g. Grandma Jo" value="${esc(G.ui.joinName || "")}" data-input="join-name" data-sticky>
       <div class="join-label">Pick your team</div>

@@ -126,12 +126,15 @@ export async function joinGame(name, team) {
   setLocalIdentity(name, team);
   await setDoc(doc(playersCol, id), { name, team, deviceId: id, joinedAt: serverNow() });
 }
+// On load: is this phone still in the game? If the host deleted its name (or started over),
+// the phone is released and must enter a name again. Returns true if still registered.
 export async function registerSelf() {
   const me = getLocalIdentity();
-  if (!me) return;
-  const ref = doc(playersCol, deviceId());
-  const snap = await getDoc(ref);
-  if (!snap.exists()) await setDoc(ref, { name: me.name, team: me.team, deviceId: deviceId(), joinedAt: serverNow() });
+  if (!me) return false;
+  const snap = await getDoc(doc(playersCol, deviceId()));
+  if (snap.exists()) return true;
+  clearLocalIdentity();
+  return false;
 }
 // A player without a phone, added by the host (they can still be drawn for mini games).
 export async function addPlayer(name, team) {
@@ -229,7 +232,7 @@ async function setOpNow(id, op, params) {
 // Put a set's finished clues on the board (replaces the game's current questions).
 export async function loadSetIntoGame(set) {
   const { rows, skipped, counts } = B.toGameRows(set);
-  if (!counts.r1) throw new GameError("This set has no finished Jeopardy-round clues yet.");
+  if (!counts.r1) throw new GameError("This set has no finished Jeopardy-round questions yet.");
   await replaceAllQuestions(rows);
   await act("setLoaded", { id: set.id, name: set.name });
   return { rows: rows.length, skipped, counts };

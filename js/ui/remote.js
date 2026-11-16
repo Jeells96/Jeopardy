@@ -5,7 +5,7 @@ import * as E from "../engine.js";
 import { tn, findQ, categories, roundLabel } from "./stage.js";
 import { hostSteps, renderButtons } from "./dock.js";
 import { answerMatches } from "../speech.js";
-import { modal } from "./host.js";
+import { modal, drawer } from "./host.js";
 import { remoteMinis } from "./minis.js";
 
 export function renderRemote(G) {
@@ -14,8 +14,13 @@ export function renderRemote(G) {
   const last = (S.history || [])[S.history.length - 1];
   return `<div class="remote">
     <header class="r-top">
-      <div class="r-brand">📱 Host remote <small>${esc(roundLabel(S))}</small></div>
-      <button class="hbtn sm" data-action="act" data-p='{"name":"undo","p":{}}'${last ? "" : " disabled"}>↶ Undo</button>
+      <div class="r-brand">🎅 Jaren's Control <small>${esc(roundLabel(S))}</small></div>
+      <div class="r-tools">
+        <button class="hbtn sm" data-action="act" data-p='{"name":"undo","p":{}}'${last ? "" : " disabled"} title="Undo last score change (U)">↶ Undo</button>
+        <button class="${cls("hbtn sm", G.soundOn && "on")}" data-action="toggle-sound" title="Sound on this screen (M)">${G.soundOn ? "🔊" : "🔇"}</button>
+        <a class="hbtn sm" href="#/board" target="_blank" rel="noopener" title="Open the projector board">📺 Board</a>
+        <button class="hbtn sm" data-action="drawer" data-p='{"tab":"game"}' title="Settings">⚙</button>
+      </div>
     </header>
     <div class="r-scores">${E.TEAMS.map((t) => `<button class="${cls("r-score", t, S.control === t && (S.phase === "board" || S.phase === "clue") && "ctl")}" data-action="score-panel" data-team="${t}"><span>${esc(tn(G, t))}</span><b class="${S.scores[t] < 0 ? "neg" : ""}">${money(S.scores[t])}</b></button>`).join("")}</div>
     ${secret(G)}
@@ -24,7 +29,8 @@ export function renderRemote(G) {
     <div class="r-buttons">${renderButtons(steps.buttons, { showKeys: false })}</div>
     ${S.phase === "board" ? miniGrid(G) : ""}
     ${remoteMinis(G)}
-    <div class="r-foot"><a href="#/admin">🖥 Console</a><a href="#/board" target="_blank" rel="noopener">📺 Board</a><span class="muted">Keep this screen private 🤫</span></div>
+    <div class="r-foot"><span class="muted">Put 📺 Board on the projector — keep this screen private 🤫</span></div>
+    ${drawer(G)}
     ${modal(G)}
   </div>`;
 }
@@ -38,13 +44,13 @@ function secret(G) {
     let extra = "";
     if (q.type === "mcq" && q.correctIndex >= 0) extra += `<div class="s-mcq">Correct choice: <b>${"ABCDEF"[q.correctIndex]}. ${esc(q.choices[q.correctIndex])}</b></div>`;
     const key = E.lockKey(c);
-    if (c.stage === "answering" && q.type !== "mcq" && !c.dd) {
+    if (c.stage === "answering" && q.type !== "mcq") {
       const sp = G.spoken && G.spoken.key === key ? G.spoken : null;
       if (sp && sp.text) {
         const m = answerMatches(sp.text, q.answer);
-        extra += `<div class="s-heard ${m ? "match" : "nomatch"}">🎤 “${esc(sp.text)}” <b>${m ? "— sounds right ✅" : "— not a clear match"}</b></div>`;
+        extra += `<div class="s-heard ${m ? "match" : "nomatch"}">✍️ Typed: “${esc(sp.text)}” <b>${m ? "— matches ✅" : "— not a clear match"}</b></div>`;
       } else {
-        extra += `<div class="s-heard muted">🎤 Listening on their phone…</div>`;
+        extra += `<div class="s-heard muted">✍️ Waiting for their typed answer…</div>`;
       }
     }
     return `<div class="secret">

@@ -13,7 +13,7 @@ export function roundLabel(S) {
   if (S.phase === "lobby") return "Get ready!";
   if (S.phase === "minis") return "Mini Games";
   if (S.phase === "final") return "Final Jeopardy!";
-  if (S.phase === "over") return "Final scores";
+  if (S.phase === "over") return S.vote && S.vote.stage !== "off" ? "Ugly sweater vote" : "Final scores";
   return S.round === 2 ? "Double Jeopardy!" : "Jeopardy! Round";
 }
 
@@ -61,6 +61,7 @@ function stageMain(G, opts) {
   if (S.phase === "board") return grid(G, opts);
   if (S.phase === "clue" && S.clue) return clueCard(G);
   if (S.phase === "final") return finalView(G);
+  if (S.phase === "over" && S.vote && S.vote.stage !== "off") return voteView(G);
   if (S.phase === "over") return overView(G);
   return grid(G, opts);
 }
@@ -77,7 +78,7 @@ function lobby(G) {
       <ol class="lobby-steps">
         <li>Scan the code or type the address</li>
         <li>Enter your name &amp; pick a team</li>
-        <li>Tap <b>Enable microphone</b></li>
+        <li>Tap the red buzzer when you know it!</li>
       </ol>
     </div>
     <div class="lobby-teams">${E.TEAMS.map((t) => roster(G, t)).join("")}</div>
@@ -122,7 +123,7 @@ function clueCard(G) {
   const S = G.S;
   const c = S.clue;
   const q = findQ(G, c.id);
-  if (!q) return `<div class="clue"><div class="clue-text">Loading clue…</div></div>`;
+  if (!q) return `<div class="clue"><div class="clue-text">Loading question…</div></div>`;
   if (c.stage === "dd") return ddSplash(G, c, q);
   const value = c.dd ? `Daily Double · ${money(c.dd.wager)}` : money(q.points);
   return `<div class="clue${c.dd ? " clue--dd" : ""}" data-key="clue-${esc(c.id)}">
@@ -168,7 +169,7 @@ function clueStatus(G, c, q) {
     const L = c.locked;
     const total = (set.answerSeconds || 15) * 1000;
     const key = E.lockKey(c);
-    const sp = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard">🎤 “${esc(G.spoken.text)}”</div>` : "";
+    const sp = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard">✍️ “${esc(G.spoken.text)}”</div>` : "";
     const tu = c.timeUp === key ? `<div class="status-sub timeup">⏰ Time's up!</div>` : "";
     const who = c.dd ? `${esc(tn(G, L.team))}` : `${esc(L.name)} <small>${esc(tn(G, L.team))}</small>`;
     return `<div class="answerer ${L.team}">${who}</div>${c.timeUp === key ? "" : timerLights(L.at + total, total)}${tu}${sp}`;
@@ -184,7 +185,7 @@ function clueStatus(G, c, q) {
     } else if (c.result === "nobody") {
       banner = `<div class="result result--none">Nobody got it!</div>`;
     } else if (c.result === "skipped") {
-      banner = `<div class="result result--none">Clue skipped</div>`;
+      banner = `<div class="result result--none">Question skipped</div>`;
     }
     const ans = c.revealed ? `<div class="answer-reveal"><span>Answer</span>${esc(q.answer)}</div>` : "";
     return banner + ans;
@@ -232,7 +233,8 @@ function finalView(G) {
     const total = (S.settings.finalSeconds || 30) * 1000;
     return `<div class="clue final--clue" data-key="final-clue">
       <div class="clue-head"><span class="clue-cat">${esc(cat)}</span><span class="clue-val">Final Jeopardy!</span></div>
-      <div class="clue-body"><div class="clue-text"><span>${esc(fq ? fq.question : "")}</span></div></div>
+      <div class="clue-body"><div class="clue-text"><span>${esc(fq ? fq.question : "")}</span></div>
+        ${fq && fq.type === "mcq" ? `<div class="bmcq">${fq.choices.map((ch, i) => `<div class="bchoice"><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></div>`).join("")}</div>` : ""}</div>
       <div class="clue-foot">
         <div class="final-clock"><span class="cd" data-deadline="${f.deadline}" data-format="s"></span></div>
         ${timerLights(f.deadline, total)}
@@ -294,4 +296,28 @@ export function podiums(G, opts = {}) {
       <div class="pmeta">${count} player${count === 1 ? "" : "s"}${ctl ? " · 🎁 picking next" : ""}</div>
     </div>`;
   }).join("")}</div>`;
+}
+
+// ---------------- ugly sweater vote ----------------
+function voteView(G) {
+  const S = G.S, V = E.voteOf(S);
+  if (V.stage === "setup") {
+    return `<div class="vote" data-key="vote-setup"><div class="over-kicker">One more contest…</div>
+      <div class="over-title">🧶 Ugly Sweater Vote</div><div class="vote-sub">Get your phones ready!</div></div>`;
+  }
+  if (V.stage === "open") {
+    const pr = E.voteProgress(S, G.P);
+    const pct = pr.total ? Math.round((pr.cast / pr.total) * 100) : 0;
+    return `<div class="vote" data-key="vote-open"><div class="over-kicker">Vote on your phone</div>
+      <div class="over-title">🧶 Who has the ugliest sweater?</div>
+      <div class="vote-cands">${V.candidates.map((pid) => `<span class="vcand">${esc(V.names[pid] || "?")}</span>`).join("")}</div>
+      <div class="vote-bar"><i style="width:${pct}%"></i></div>
+      <div class="vote-sub"><b>${pr.cast}</b> of <b>${pr.total}</b> votes in — results stay secret until everyone has voted 🤫</div></div>`;
+  }
+  const r = E.voteResults(S);
+  const max = Math.max(1, ...r.rows.map((x) => x.votes));
+  return `<div class="vote" data-key="vote-reveal"><div class="confetti" data-keep>${Array.from({ length: 50 }, (_, i) => `<i style="left:${(i * 53) % 100}%;animation-delay:-${((i * 37) % 30) / 10}s;width:${6 + (i * 7) % 10}px;height:${(6 + (i * 7) % 10) * 1.6}px;background:${["#ffcf40", "#d7263d", "#139a4b", "#ffffff", "#5ab0ff"][i % 5]}"></i>`).join("")}</div>
+    <div class="over-kicker">Ugliest sweater of the year</div>
+    <div class="over-title">${r.winners.length ? `👑 ${esc(r.winners.map((w) => w.name).join(" & "))}` : "No votes were cast"}</div>
+    <div class="vote-rows">${r.rows.slice(0, 8).map((x, i) => `<div class="${cls("vrow", r.winners.some((w) => w.pid === x.pid) && "win")}" style="animation-delay:${0.15 * i}s"><span class="vname">${esc(x.name)}</span><span class="vbar"><i style="width:${Math.round((x.votes / max) * 100)}%"></i></span><b>${x.votes}</b></div>`).join("")}</div></div>`;
 }

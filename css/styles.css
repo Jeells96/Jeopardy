@@ -1017,3 +1017,52 @@ select option { color: #10142e; background: #fff; }
 .flag.dd { background: rgba(255, 207, 64, 0.22); color: var(--gold); font-weight: 700; }
 .flag.note { background: rgba(255, 255, 255, 0.08); color: #e6eaff; }
 .set-stats span { white-space: nowrap; }
+/* the host view (remote layout) on any screen size */
+.r-tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+@media (min-width: 900px) { .remote { max-width: 760px; padding-top: 24px; } .r-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); } }
+.lib textarea.auto { resize: none; overflow: hidden; min-height: 40px; line-height: 1.35; }
+.lib .qc-a.auto { font-weight: 700; color: #b9ffd6; }
+.mcqbtn.picked { background: rgba(23, 164, 87, 0.85); border-color: #7dffb0; }
+
+/* ---- mini game tables & Christmas summons ---- */
+.summon {
+  margin: 1.2vh auto 0; max-width: 80vw; padding: 1.2vh 2.4vw; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 215, 0, 0.6);
+  color: #fff6c8; font-size: clamp(16px, 2.6vh, 34px); font-weight: 700; text-align: center;
+  animation: summon-in 0.5s ease-out both;
+}
+.upcol { display: flex; flex-direction: column; gap: 1vh; min-width: 0; }
+.upcol .summon { border-radius: 18px; max-width: none; }
+@keyframes summon-in { from { transform: scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
+.tabletag {
+  display: inline-block; margin: 8px auto 0; padding: 6px 14px; border-radius: 999px;
+  background: #ffd84d; color: #3a1d00; font-weight: 800; font-size: 18px;
+}
+.youup .tabletag { display: block; width: fit-content; margin: 10px auto 0; font-size: 22px; }
+.ph-versus + .tabletag { display: block; width: fit-content; }
+.ph-summon {
+  margin: 10px 0; padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.5); color: #fff6c8; font-weight: 600; text-align: center;
+}
+p.small { font-size: 13px; margin: 6px 0 0; }
+.upcol .upnext { flex: 1; }
+
+/* ---- ugly sweater vote ---- */
+.vote { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.4vh; height: 100%; text-align: center; padding: 2vh 3vw; overflow: hidden; }
+.vote-sub { font: 600 clamp(16px, 2.4vh, 30px) var(--ui); color: rgba(255, 255, 255, 0.85); }
+.vote-cands { display: flex; flex-wrap: wrap; gap: 1.2vh 1vw; justify-content: center; max-width: 90vw; }
+.vcand { padding: 1vh 1.6vw; border-radius: 999px; background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.25); font: 700 clamp(16px, 2.6vh, 34px) var(--ui); }
+.vote-bar { width: min(800px, 80vw); height: 2.2vh; min-height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.vote-bar i { display: block; height: 100%; background: linear-gradient(90deg, #139a4b, #ffcf40); transition: width 0.6s ease; }
+.vote-rows { display: flex; flex-direction: column; gap: 1vh; width: min(900px, 86vw); }
+.vrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 3em; align-items: center; gap: 1vw; font: 700 clamp(16px, 2.6vh, 32px) var(--ui); animation: summon-in 0.5s ease-out both; }
+.vrow .vname { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vrow .vbar { height: 2.6vh; min-height: 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.vrow .vbar i { display: block; height: 100%; background: rgba(255, 255, 255, 0.5); }
+.vrow.win { color: var(--gold); }
+.vrow.win .vbar i { background: var(--gold); }
+.vote-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.vchip { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.06); color: #fff; font: 600 15px var(--ui); cursor: pointer; }
+.vchip.on { background: rgba(23, 164, 87, 0.35); border-color: #7dffb0; }
+.ph-vote { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.vote .over-title { font-size: clamp(34px, 5vw, 96px); }

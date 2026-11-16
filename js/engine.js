@@ -6,6 +6,8 @@
 // Actions never mutate `state`. The data layer runs them inside a Firestore transaction,
 // so concurrent devices can't double-apply anything (e.g. 50 phones buzzing at once).
 
+import { SUMMONS } from "./summons.js";
+
 export const TEAMS = ["team1", "team2"];
 export const otherTeam = (t) => (t === "team1" ? "team2" : "team1");
 
@@ -17,6 +19,7 @@ export const DEFAULT_SETTINGS = {
   autoRebound: true,      // after a miss, instantly reopen buzzers for the other team
   finalNeedsPositive: true, // official rule: only teams with $1+ play Final Jeopardy
   playersRename: true,    // players may rename their own team before Jeopardy starts
+  doubleJeopardy: true,   // play the Double Jeopardy round (off = skip it; the questions are kept)
   announce: true,         // mini games: read "who's up next" out loud on the screen with sound on
 };
 
@@ -54,6 +57,7 @@ export function defaultState(keep = {}) {
     clue: null,
     final: freshFinal(),
     minis: freshMinis(),
+    vote: freshVote(),
     loaded: null, // which question set from the library is on the board: { id, name, at }
     jStarted: false, // Jeopardy has been started at least once (so "Start" means resume)
     history: [],
@@ -88,6 +92,8 @@ export const boardClues = (questions, round) =>
   (questions || []).filter((q) => !q.isFinal && roundOf(q) === round);
 export const finalClue = (questions) => (questions || []).find((q) => q.isFinal) || null;
 export const hasRound2 = (questions) => boardClues(questions, 2).length > 0;
+// Double Jeopardy is played only if it's switched on AND there are questions for it.
+export const r2On = (s, questions) => !(s && s.settings && s.settings.doubleJeopardy === false) && hasRound2(questions);
 export const roundMaxValue = (questions, round) =>
   boardClues(questions, round).reduce((m, q) => Math.max(m, Number(q.points) || 0), 0);
 export const cluesLeft = (questions, round) => boardClues(questions, round).filter((q) => !q.used).length;
@@ -155,7 +161,7 @@ export function startGame(s, { control } = {}, ctx) {
 // Step away from the Jeopardy board (back to the lobby or the mini games) without losing
 // anything: scores, used clues, round and whose turn it is all stay for when you resume.
 export function leaveJeopardy(s, { to } = {}, ctx) {
-  if (s.phase === "clue") return fail("Finish or close the current clue first.");
+  if (s.phase === "clue") return fail("Finish or close the current question first.");
   if (s.phase !== "board") return null;
   const phase = to === "minis" ? "minis" : "lobby";
   return builder(s, ctx).field("phase", phase).field("minis", { ...minisOf(s), current: null, back: null }).done();
@@ -175,6 +181,7 @@ export function setControl(s, { team }, ctx) {
 
 export function startRound2(s, _p, ctx) {
   if (!hasRound2(ctx.questions)) return fail("There's no Double Jeopardy round in your questions.");
+  if (!r2On(s, ctx.questions)) return fail("Double Jeopardy is switched off in Settings → Game.");
   const sc = s.scores || {};
   // Official rule: the player in last place picks first in Double Jeopardy.
   const ctrl = sc.team1 === sc.team2 ? s.control : sc.team1 < sc.team2 ? "team1" : "team2";
@@ -528,7 +535,7 @@ export function setSettings(s, { patch }, ctx) {
 // every question's `used` flag and clears buzzes.)
 export function newGame(s, _p, ctx) {
   const fresh = defaultState({ teamNames: s.teamNames, settings: s.settings });
-  fresh.minis = { list: minisOf(s).list.map((g) => ({ ...g, ...blankProgress() })), current: null, back: null };
+  fresh.minis = { list: minisOf(s).list.map((g) => ({ ...g, ...blankProgress() })), current: null, back: null, tables: minisOf(s).tables || [], recent: [] };
   fresh.loaded = s.loaded || null; // the questions themselves stay loaded
   const b = builder(s, ctx);
   for (const [k, v] of Object.entries(fresh)) b.field(k, v);
@@ -549,7 +556,8 @@ export function setLoaded(s, { id, name } = {}, ctx) {
 // =================================================================
 export const SPIN_MS = 1800; // length of the "who's up next?" shuffle animation
 
-export function freshMinis() { return { list: [], current: null, back: null }; }
+export function freshMinis() { return { list: [], current: null, back: null, tables: [], recent: [] }; }
+export const minisTables = (s) => minisOf(s).tables || [];
 export function minisOf(s) { return (s && s.minis) || freshMinis(); }
 export const miniById = (s, id) => minisOf(s).list.find((g) => g.id === id) || null;
 export const openMatch = (g) => (g.matches || []).find((m) => !m.winner) || null;
@@ -568,6 +576,7 @@ function cleanMini(src) {
     better: src.better === "low" ? "low" : "high",                     // best: highest or lowest score wins
     unit: String(src.unit == null ? "" : src.unit).trim().slice(0, 16),
     desc: String(src.desc == null ? "" : src.desc).trim().slice(0, 240),
+    table: String(src.table == null ? "" : src.table).trim().slice(0, 24), // "" = any table (drawn each time)
   };
 }
 
@@ -606,10 +615,11 @@ export function currentPick(s) {
       at: sides.reduce((t, p) => Math.max(t, p.at || 0), 0),
       pids: sides.map((p) => p.id),
       names: [m.p1 ? m.p1.name : null, m.p2 ? m.p2.name : null],
+      table: m.table || null, summon: m.summon == null ? null : m.summon,
     };
   }
   if (!g.turn) return null;
-  return { type: "best", key: g.turn.id, at: g.turn.at || 0, pids: [g.turn.pid], names: [g.turn.name] };
+  return { type: "best", key: g.turn.id, at: g.turn.at || 0, pids: [g.turn.pid], names: [g.turn.name], table: g.turn.table || null, summon: g.turn.summon == null ? null : g.turn.summon };
 }
 
 // Everyone on both teams has had a go in this game.
@@ -662,8 +672,21 @@ function pickTurn(g, ctx, replacing) {
   return { id: rid(), pid: p.id, name: p.name, team, at: ctx.now };
 }
 const withList = (s, list, extra = {}) => ({ ...minisOf(s), list, ...extra });
+// Where the drawn player(s) should go, and a summon line that hasn't been used lately.
+// With no tables set up there's nothing to say. keep: the table to stay at (a re-draw).
+function placeFor(s, g, ctx, keep) {
+  const M = minisOf(s);
+  const tables = M.tables || [];
+  if (!tables.length) return { where: {}, extra: {} };
+  const table = keep && tables.includes(keep) ? keep : tables.includes(g.table) ? g.table : tables[Math.floor(random(ctx) * tables.length)];
+  const recent = M.recent || [];
+  let pool = SUMMONS.map((_, i) => i).filter((i) => !recent.includes(i));
+  if (!pool.length) pool = SUMMONS.map((_, i) => i);
+  const summon = pool[Math.floor(random(ctx) * pool.length)];
+  return { where: { table, summon }, extra: { recent: [...recent, summon].slice(-Math.min(24, SUMMONS.length - 1)) } };
+}
 const mapMini = (s, id, fn) => minisOf(s).list.map((g) => (g.id === id ? fn(g) : g));
-const NO_MINIS_NOW = { clue: "Finish the current clue first.", final: "Final Jeopardy has already started.", over: "The game is over — start a new game to play mini games." };
+const NO_MINIS_NOW = { clue: "Finish the current question first.", final: "Final Jeopardy has already started.", over: "The game is over — start a new game to play mini games." };
 
 // ---------- setup ----------
 export function miniAdd(s, { game }, ctx) {
@@ -706,6 +729,18 @@ export function miniReset(s, { id }, ctx) {
   return b.field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, ...blankProgress() })), { current: M.current === id ? null : M.current })).done();
 }
 
+// The tables (stations) mini games are played at. Empty = one spot, nothing to announce.
+export function miniTables(s, { tables }, ctx) {
+  const seen = new Set();
+  const list = [];
+  for (const t of Array.isArray(tables) ? tables : String(tables || "").split(/[\n,;]+/)) {
+    const v = String(t || "").replace(/\s+/g, " ").trim().slice(0, 24);
+    if (v && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); list.push(v); }
+  }
+  if (list.length > 8) return fail("Up to 8 tables.");
+  return builder(s, ctx).field("minis", { ...minisOf(s), tables: list }).done();
+}
+
 // ---------- flow ----------
 export function minisStart(s, _p, ctx) {
   if (s.phase === "minis") return null;
@@ -744,13 +779,16 @@ export function miniNext(s, { id }, ctx) {
       p1: choose(ctx, "team1", g.played.team1, [lastSide(g, "p1")]),
       p2: choose(ctx, "team2", g.played.team2, [lastSide(g, "p2")]),
     };
-    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, m] }))))
+    const pl = placeFor(s, g, ctx);
+    Object.assign(m, pl.where);
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, m] })), pl.extra))
       .sfx(m.p1 || m.p2 ? "pick" : "buzz").done();
   }
   if (g.turn) return null;
   const turn = pickTurn(g, ctx, null);
   if (!turn) return fail("No players yet. Add them in ⚙ Settings → Players, or just finish the game and choose the winner.");
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn })))).sfx("pick").done();
+  const pl = placeFor(s, g, ctx);
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn: { ...turn, ...pl.where } })), pl.extra)).sfx("pick").done();
 }
 export function miniRepick(s, { id, team }, ctx) {
   const g = miniById(s, id);
@@ -763,13 +801,16 @@ export function miniRepick(s, { id, team }, ctx) {
       const key = t === "team1" ? "p1" : "p2";
       next[key] = choose(ctx, t, g.played[t], [m[key] ? m[key].id : null]);
     }
-    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? next : y)) }))))
+    const pl = placeFor(s, g, ctx, m.table);
+    Object.assign(next, pl.where);
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? next : y)) })), pl.extra))
       .sfx("pick").done();
   }
   if (!g.turn) return null;
   const turn = pickTurn(g, ctx, g.turn);
   if (!turn) return null;
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn })))).sfx("pick").done();
+  const pl = placeFor(s, g, ctx, g.turn.table);
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn: { ...turn, ...pl.where } })), pl.extra)).sfx("pick").done();
 }
 // Host hand-picks who's up instead of the random draw.
 export function miniSetPlayer(s, { id, team, pid }, ctx) {
@@ -785,6 +826,7 @@ export function miniSetPlayer(s, { id, team, pid }, ctx) {
   }
   if (!g.turn) return null;
   const turn = { id: rid(), pid: p.id, name: p.name, team: p.team, at: 0 };
+  if (g.turn.table) Object.assign(turn, { table: g.turn.table, summon: g.turn.summon });
   return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn })))).done();
 }
 
@@ -850,12 +892,86 @@ export function miniFinish(s, { id, winner }, ctx) {
   return b.sfx(w === "none" ? "buzz" : "miniwin").done();
 }
 
+// =====================================================================
+// Ugly sweater vote (after Jeopardy is over)
+// stage: off → setup (host ticks who can win) → open (phones vote) → reveal
+// Votes are kept hidden on every screen until everyone has voted (or the host reveals).
+// =====================================================================
+export function freshVote() { return { stage: "off", candidates: [], names: {}, votes: {}, openedAt: null }; }
+export const voteOf = (s) => (s && s.vote) || freshVote();
+// Everyone with a phone can vote (players the host added by hand have no phone).
+export const voteVoters = (players) => (players || []).filter((p) => TEAMS.includes(p.team) && !p.manual);
+export function voteProgress(s, players) {
+  const V = voteOf(s);
+  const ids = new Set(voteVoters(players).map((p) => p.id));
+  const cast = Object.keys(V.votes || {}).filter((id) => ids.has(id)).length;
+  return { cast, total: ids.size, all: ids.size > 0 && cast >= ids.size };
+}
+// Tally once revealed: [{ pid, name, votes }] best first; winners share the top count.
+export function voteResults(s) {
+  const V = voteOf(s);
+  const count = {};
+  for (const pid of V.candidates) count[pid] = 0;
+  for (const pick of Object.values(V.votes || {})) if (pick in count) count[pick]++;
+  const rows = V.candidates.map((pid) => ({ pid, name: V.names[pid] || "?", votes: count[pid] }))
+    .sort((a, b) => b.votes - a.votes || a.name.localeCompare(b.name));
+  const top = rows.length ? rows[0].votes : 0;
+  return { rows, winners: top > 0 ? rows.filter((r) => r.votes === top) : [] };
+}
+export function voteSetup(s, _p, ctx) {
+  if (s.phase !== "over") return fail("The sweater vote starts once Jeopardy is over.");
+  const players = (ctx.players || []).filter((p) => TEAMS.includes(p.team));
+  const names = {};
+  for (const p of players) names[p.id] = p.name;
+  return builder(s, ctx).field("vote", { ...freshVote(), stage: "setup", candidates: players.map((p) => p.id), names }).done();
+}
+export function voteToggle(s, { pid }, ctx) {
+  const V = voteOf(s);
+  if (V.stage !== "setup") return null;
+  const p = (ctx.players || []).find((x) => x.id === pid);
+  if (V.candidates.includes(pid)) return builder(s, ctx).field("vote", { ...V, candidates: V.candidates.filter((x) => x !== pid) }).done();
+  if (!p) return null;
+  return builder(s, ctx).field("vote", { ...V, candidates: [...V.candidates, pid], names: { ...V.names, [pid]: p.name } }).done();
+}
+export function voteOpen(s, _p, ctx) {
+  const V = voteOf(s);
+  if (V.stage !== "setup") return null;
+  const live = new Set((ctx.players || []).map((p) => p.id));
+  const candidates = V.candidates.filter((pid) => live.has(pid));
+  if (candidates.length < 2) return fail("Pick at least two people who can win.");
+  return builder(s, ctx).field("vote", { ...V, candidates, votes: {}, stage: "open", openedAt: ctx.now }).sfx("pick").done();
+}
+export function castVote(s, { voter, pick }, ctx) {
+  const V = voteOf(s);
+  if (V.stage !== "open") return fail("Voting is closed.");
+  if (!V.candidates.includes(pick)) return null;
+  if (voter === pick) return fail("Nice try! You can't vote for your own sweater. 😄");
+  if (!voteVoters(ctx.players).some((p) => p.id === voter)) return fail("Join the game first to vote.");
+  const next = { ...V, votes: { ...V.votes, [voter]: pick } };
+  const b = builder(s, ctx);
+  if (voteProgress({ vote: next }, ctx.players).all) return b.field("vote", { ...next, stage: "reveal" }).sfx("win").done();
+  return b.field("vote", next).done();
+}
+// Show the results now (everyone's in, or the host doesn't want to wait for stragglers).
+export function voteReveal(s, _p, ctx) {
+  const V = voteOf(s);
+  if (V.stage !== "open") return null;
+  return builder(s, ctx).field("vote", { ...V, stage: "reveal" }).sfx("win").done();
+}
+export function voteBack(s, _p, ctx) {
+  const V = voteOf(s);
+  if (V.stage === "off") return null;
+  if (V.stage === "open") return builder(s, ctx).field("vote", { ...V, stage: "setup", votes: {}, openedAt: null }).done();
+  return builder(s, ctx).field("vote", freshVote()).done();
+}
+
 export const ACTIONS = {
   startGame, setControl, startRound2, pickClue, unpickClue, setDDTeam, lockDDWager, openBuzzers,
   autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, answerTimeout, buzzWindowTimeout, nobody,
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
-  miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
+  voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
+  miniTables, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

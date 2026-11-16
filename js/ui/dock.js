@@ -28,7 +28,7 @@ export function hostSteps(G, { privateView = false } = {}) {
     const M = E.minisOf(S);
     const todo = M.list.filter((g) => g.status !== "done").length;
     status = `<ul class="checklist">
-      ${item(n1 > 0, n1 ? `<b>${n1}</b> clues${n2 ? ` + <b>${n2}</b> Double Jeopardy` : ""}${fq ? " + Final Jeopardy" : ""}` : "Load your Jeopardy questions (⚙ Settings → Questions)")}
+      ${item(n1 > 0, n1 ? `<b>${n1}</b> questions${n2 ? ` + <b>${n2}</b> Double Jeopardy` : ""}${fq ? " + Final Jeopardy" : ""}` : "Load your Jeopardy questions (⚙ Settings → Questions)")}
       ${M.list.length ? item(true, `<b>${M.list.length}</b> mini game${M.list.length === 1 ? "" : "s"} ready`) : ""}
       ${item(c1 + c2 > 0, `Players: ${esc(tn(G, "team1"))} <b>${c1}</b> · ${esc(tn(G, "team2"))} <b>${c2}</b>`)}
       ${item(G.soundOn, G.soundOn ? "Sound is on" : "Turn on 🔊 on the screen connected to speakers")}
@@ -62,10 +62,10 @@ export function hostSteps(G, { privateView = false } = {}) {
     const left = E.cluesLeft(G.Q, S.round);
     if (left > 0) {
       status = S.control
-        ? `🎁 <b>${esc(tn(G, S.control))}</b> ${verb(tn(G, S.control), "picks", "pick")} next — ${privateView ? "tap" : "click"} their clue on the board. <span class="muted">${left} left</span>`
-        : `${privateView ? "Tap" : "Click"} any clue on the board to begin. <span class="muted">${left} left</span>`;
+        ? `🎁 <b>${esc(tn(G, S.control))}</b> ${verb(tn(G, S.control), "picks", "pick")} next — ${privateView ? "tap" : "click"} their question on the board. <span class="muted">${left} left</span>`
+        : `${privateView ? "Tap" : "Click"} any question on the board to begin. <span class="muted">${left} left</span>`;
       btn("⇄ Switch who picks", "act", act("setControl", { team: S.control ? E.otherTeam(S.control) : "team1" }), "ghost", "");
-    } else if (S.round === 1 && E.hasRound2(G.Q)) {
+    } else if (S.round === 1 && E.r2On(S, G.Q)) {
       status = "That's the end of the first round! 🎄";
       btn("▶ Start Double Jeopardy!", "act", act("startRound2"), "primary", "Space");
     } else if (E.finalClue(G.Q)) {
@@ -92,16 +92,16 @@ export function hostSteps(G, { privateView = false } = {}) {
       panel = ddPanel(G, team, lim);
       const w = Number(G.ui.ddWager);
       const valid = lim && Number.isFinite(w) && G.ui.ddWager !== "" && w >= lim.min && w <= lim.max;
-      btn(valid ? `🔒 Lock ${money(w)} & show clue` : "🔒 Lock wager & show clue", "dd-lock", {}, "primary", "Space");
-      btn("↩ Put clue back", "act", act("unpickClue"), "ghost", "");
+      btn(valid ? `🔒 Lock ${money(w)} & show question` : "🔒 Lock wager & show question", "dd-lock", {}, "primary", "Space");
+      btn("↩ Put question back", "act", act("unpickClue"), "ghost", "");
       return { status, panel, buttons: B };
     }
     if (c.stage === "reading") {
       status = set.readSeconds > 0
-        ? `Read the clue — buzzers open automatically in <b class="cd" data-deadline="${c.pickedAt + set.readSeconds * 1000}" data-format="s"></b>.`
-        : "Read the clue out loud, then open the buzzers.";
+        ? `Read the question — buzzers open automatically in <b class="cd" data-deadline="${c.pickedAt + set.readSeconds * 1000}" data-format="s"></b>.`
+        : "Read the question out loud, then open the buzzers.";
       btn("🔔 Open buzzers", "act", act("openBuzzers"), "primary", "Space");
-      if (c.buzzRound === 0) btn("↩ Put clue back", "act", act("unpickClue"), "ghost", "");
+      if (c.buzzRound === 0) btn("↩ Put question back", "act", act("unpickClue"), "ghost", "");
       btn("🙅 Nobody — reveal", "act", act("nobody"), "ghost", "N");
       return { status, panel, buttons: B };
     }
@@ -127,7 +127,7 @@ export function hostSteps(G, { privateView = false } = {}) {
       const clock = c.timeUp === key
         ? `<span class="timeup">⏰ Time's up — your call.</span>`
         : `<span class="pill-cd"><span class="cd" data-deadline="${L.at + (set.answerSeconds || 15) * 1000}" data-format="s"></span></span>`;
-      const heard = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard-line">🎤 “${esc(G.spoken.text)}”</div>` : "";
+      const heard = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard-line">✍️ “${esc(G.spoken.text)}”</div>` : "";
       const isMcq = q && q.type === "mcq";
       status = `${who} ${c.dd ? verb(tn(G, L.team), "is", "are") : "is"} answering ${clock}${isMcq ? `<div class="muted">They choose on ${c.dd ? "their team's phones" : "their phone"} — scored automatically.</div>` : ""}${heard}`;
       if (isMcq) {
@@ -141,7 +141,7 @@ export function hostSteps(G, { privateView = false } = {}) {
       return { status, panel, buttons: B };
     }
     if (c.stage === "done") {
-      status = c.result === "correct" ? `✅ ${esc(tn(G, c.winner))} got it!` : c.result === "nobody" ? "Nobody got it." : "Clue finished.";
+      status = c.result === "correct" ? `✅ ${esc(tn(G, c.winner))} got it!` : c.result === "nobody" ? "Nobody got it." : "Question finished.";
       btn("↩ Back to the board", "close", {}, "primary", "Space");
       if (!c.revealed) btn("👁 Show answer", "act", act("revealAnswer"), "ghost", "R");
       return { status, panel, buttons: B };
@@ -154,7 +154,7 @@ export function hostSteps(G, { privateView = false } = {}) {
       status = `<b>Final Jeopardy!</b> Teams lock their wagers on their phones.`;
       panel = finalWagerPanel(G, privateView);
       const missing = E.TEAMS.filter((t) => f.eligible[t] && !f.wagers[t]);
-      btn(missing.length ? `▶ Reveal clue (${missing.map((t) => esc(tn(G, t))).join(" & ")} → $0)` : "▶ Reveal the Final clue", "act", act("finalRevealClue"), "primary", "Space");
+      btn(missing.length ? `▶ Reveal question (${missing.map((t) => esc(tn(G, t))).join(" & ")} → $0)` : "▶ Reveal the Final question", "act", act("finalRevealClue"), "primary", "Space");
       return { status, panel, buttons: B };
     }
     if (f.stage === "clue") {
@@ -185,10 +185,38 @@ export function hostSteps(G, { privateView = false } = {}) {
   }
 
   if (S.phase === "over") {
+    const V = E.voteOf(S);
+    if (V.stage === "setup") {
+      const people = G.P.filter((p) => E.TEAMS.includes(p.team));
+      status = `🧶 <b>Ugly sweater vote</b> — tick everyone who's wearing one (they can receive votes). <span class="muted">${V.candidates.length} in the running</span>`;
+      panel = `<div class="vote-pick">${people.map((p) => {
+        const on = V.candidates.includes(p.id);
+        return `<button class="${cls("vchip", p.team, on && "on")}" data-action="act" data-p="${esc(JSON.stringify({ name: "voteToggle", p: { pid: p.id } }))}" aria-pressed="${on}">${on ? "✅" : "⬜"} ${esc(p.name)}</button>`;
+      }).join("") || `<span class="muted">Nobody has joined yet.</span>`}</div>`;
+      btn("🗳️ Start voting", "act", act("voteOpen"), V.candidates.length >= 2 ? "primary" : "ghost", "Space");
+      btn("✕ Cancel", "act", act("voteBack"));
+      return { status, panel, buttons: B };
+    }
+    if (V.stage === "open") {
+      const pr = E.voteProgress(S, G.P);
+      const waiting = E.voteVoters(G.P).filter((p) => !(p.id in V.votes)).map((p) => p.name);
+      status = `🗳️ Voting is open — <b>${pr.cast} of ${pr.total}</b> votes in. Results stay hidden until everyone has voted.${waiting.length && waiting.length <= 8 ? ` <span class="muted">Waiting on: ${esc(waiting.join(", "))}</span>` : ""}`;
+      btn("🏆 Reveal now", "confirm", { what: "voteReveal" }, pr.all ? "primary" : "ghost", "");
+      btn("↩ Back to eligible list", "act", act("voteBack"));
+      return { status, panel, buttons: B };
+    }
+    if (V.stage === "reveal") {
+      const r = E.voteResults(S);
+      status = r.winners.length ? `🧶 Ugliest sweater: <b>${esc(r.winners.map((w) => w.name).join(" & "))}</b> (${r.winners[0].votes} vote${r.winners[0].votes === 1 ? "" : "s"})` : "No votes were cast.";
+      btn("↩ Back to final scores", "act", act("voteBack"));
+      btn("🎄 New game", "confirm", { what: "newGame" }, "ghost", "");
+      return { status, panel, buttons: B };
+    }
     const sc = S.scores;
     const champ = tn(G, sc.team1 > sc.team2 ? "team1" : "team2");
     status = sc.team1 === sc.team2 ? "It's a tie!" : `🏆 ${esc(champ)} ${verb(champ, "wins", "win")}!`;
-    btn("🎄 New game", "confirm", { what: "newGame" }, "primary", "");
+    btn("🧶 Ugly sweater vote", "act", act("voteSetup"), "primary", "");
+    btn("🎄 New game", "confirm", { what: "newGame" }, "ghost", "");
     return { status, panel, buttons: B };
   }
   return { status, panel, buttons: B };
