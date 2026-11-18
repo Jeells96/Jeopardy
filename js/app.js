@@ -11,7 +11,6 @@ import { PRESETS, itemSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import * as Dr from "./draw.js";
 import { subDocId, myDrawStep, myDrawState, miniHasResults } from "./ui/minis.js";
-import { VERSION } from "./version.js";
 import { builtinStrokes, isBuiltin } from "./pictures.js";
 import { renderLibrary } from "./ui/library.js";
 import { findQ } from "./ui/stage.js";
@@ -772,14 +771,15 @@ document.addEventListener("keydown", (e) => {
 // ---------------- updates ----------------
 // After a deploy, screens that were already open (a phone left asleep, the TV) reload
 // themselves onto the new code — but never mid-drawing, mid-question or while typing.
+// Every deploy gives the page a new "Last-Modified" time; this page knows its own.
 let updateTo = null;
 async function checkForUpdate() {
-  if (VERSION === "dev") return; // running locally
   try {
-    const r = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
-    if (!r.ok) return;
-    const { v } = await r.json();
-    updateTo = v && v !== VERSION ? v : null;
+    const mine = Date.parse(document.lastModified);
+    const r = await fetch(location.pathname, { method: "HEAD", cache: "no-store" });
+    const live = Date.parse(r.headers.get("Last-Modified") || "");
+    if (!r.ok || !live || !mine) return; // (no date to go by, e.g. running locally)
+    updateTo = live > mine + 1500 ? String(live) : null;
     applyUpdate();
   } catch { /* offline — try again later */ }
 }

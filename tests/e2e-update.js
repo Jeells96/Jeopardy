@@ -1,21 +1,21 @@
 // End-to-end test: screens that are already open reload themselves onto a new deploy.
-// Runs against a copy of the site stamped the way the deploy stamps it:
 //
-//   cp -r . /tmp/site && tools/stamp-version.sh test1   (inside the copy)
-//   PORT=8124 node /tmp/site/tests/server.js &
-//   URL=http://localhost:8124/ node tests/e2e-update.js
+//   node tests/server.js &  then  node tests/e2e-update.js
+//
+// Also run it against a copy with versioned file URLs, the way the deploy builds it:
+//   cp -r . /tmp/site && (cd /tmp/site && tools/cache-bust.sh test1)
+//   PORT=8124 node /tmp/site/tests/server.js &  then  URL=http://localhost:8124/ node tests/e2e-update.js
 //
 const { chromium } = require("playwright");
 
-const URL = process.env.URL || "http://localhost:8124/";
+const URL = process.env.URL || "http://localhost:8123/";
 let passed = 0, failed = 0;
 const ok = (cond, name) => { if (cond) { passed++; console.log("  ✓ " + name); } else { failed++; console.log("  ✗ " + name); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const deploy = (v) => fetch(URL + "__version", { method: "POST", body: JSON.stringify({ v }) });
+const deploy = () => fetch(URL + "__deploy", { method: "POST" });
 
 (async () => {
   await fetch(URL + "__fs/reset", { method: "POST" });
-  await deploy(null);
   const browser = await chromium.launch();
   const errors = [];
   const page = await (await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true })).newPage();
@@ -24,15 +24,17 @@ const deploy = (v) => fetch(URL + "__version", { method: "POST", body: JSON.stri
   let loads = 0;
   page.on("load", () => loads++);
 
-  console.log("A stamped build");
   await page.goto(URL);
   await page.waitForSelector("#jn-name");
-  const scripts = await page.evaluate(() => performance.getEntriesByType("resource").map((e) => e.name).filter((n) => /\/js\/.+\.js/.test(n)));
   const stamp = (await page.getAttribute('script[type="module"]', "src")).split("?v=")[1];
-  ok(!!stamp && stamp !== "dev", `the page loads the stamped app (${stamp})`);
-  ok(scripts.length > 10 && scripts.every((n) => n.includes("?v=" + stamp)), `every module is loaded with the version in its URL (${scripts.length} files) — never a cached old copy`);
-  const names = scripts.map((n) => n.split("?")[0]);
-  ok(new Set(names).size === names.length, "each module is loaded exactly once");
+  if (stamp) {
+    console.log("Versioned file URLs (as deployed)");
+    const scripts = await page.evaluate(() => performance.getEntriesByType("resource").map((e) => e.name).filter((n) => /\/js\/.+\.js/.test(n)));
+    ok(scripts.length > 10 && scripts.every((n) => n.includes("?v=" + stamp)), `every module is loaded with the version in its URL (${scripts.length} files) — never a cached old copy`);
+    const names = scripts.map((n) => n.split("?")[0]);
+    ok(new Set(names).size === names.length, "each module is loaded exactly once");
+  }
+  console.log("Nothing new deployed");
   await sleep(3500); // the first check runs 3 s after loading
   ok(loads === 1, "no reload while the site hasn't changed");
 
@@ -40,7 +42,7 @@ const deploy = (v) => fetch(URL + "__version", { method: "POST", body: JSON.stri
   await page.evaluate(() => { window.__marker = 1; });
   await page.focus("#jn-name");
   await page.keyboard.type("Ann");
-  await deploy("newer");
+  await deploy();
   await page.evaluate(() => window.__G.checkForUpdate());
   await sleep(2000);
   ok(await page.evaluate(() => window.__marker === 1), "not while someone is typing");
@@ -51,7 +53,6 @@ const deploy = (v) => fetch(URL + "__version", { method: "POST", body: JSON.stri
   await page.evaluate(() => { window.__marker = 2; });
   await sleep(4500);
   ok(await page.evaluate(() => window.__marker === 2), "it doesn't keep reloading if the new files aren't there yet");
-  await deploy(null);
 
   console.log(errors.length ? "\nPage errors:\n" + errors.join("\n") : "\nNo page errors.");
   console.log(`\n${passed} passed, ${failed} failed`);

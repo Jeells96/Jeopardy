@@ -323,14 +323,13 @@ Static site, no build step. Firebase and SheetJS load from CDNs.
 | `js/libctl.js` + `js/ui/library.js` | Question library screen |
 | `js/xlsx.js` | Spreadsheet template, import and export |
 | `tools/make_template.py` | Regenerates the sample template (`python3 tools/make_template.py`) |
-| `tools/stamp-version.sh` | Run by the deploy: stamps the version and adds `?v=` to every file URL |
-| `js/version.js` + `version.json` | The build version ("dev" locally) |
+| `tools/cache-bust.sh` | Run by the deploy: adds `?v=<commit>` to every file URL |
 
-**Updates reach open screens by themselves.** The deploy stamps each build with its commit
-(`tools/stamp-version.sh`). Every screen checks `version.json` every 90 seconds (and when a
-phone wakes up) and reloads onto a newer version — but never while someone is drawing, typing,
-or in the middle of a question. Because every file URL carries the version, a phone never mixes
-cached old files with new ones.
+**Updates reach open screens by themselves.** Every screen checks the page's Last-Modified
+date every 90 seconds (and when a phone wakes up) and reloads onto a newer deploy — but never
+while someone is drawing, typing, or in the middle of a question. The deploy workflow also adds
+`?v=<commit>` to every file URL (`tools/cache-bust.sh`), so a phone never mixes cached old files
+with new ones. (That part only applies when Settings → Pages → Source is "GitHub Actions".)
 
 **Tests**
 ```
@@ -345,8 +344,9 @@ node tests/e2e-library.js [shots] # question library: paste, edit, search, lock,
 node tests/e2e-extras.js [shots]  # test game, mini-game tables, multiple-choice Final
 node tests/draw.test.mjs          # Blind Drawing: the shape judge and its rules
 node tests/e2e-draw.js [shots]    # Blind Drawing: everyone draws at once, verdict, undo
-# Auto-update, against a copy stamped like the deploy does:
-#   cp -r . /tmp/site && (cd /tmp/site && tools/stamp-version.sh test1)
+node tests/e2e-update.js          # open screens reload onto a new deploy (not mid-typing)
+# …and against a copy with versioned file URLs, the way the deploy builds it:
+#   cp -r . /tmp/site && (cd /tmp/site && tools/cache-bust.sh test1)
 #   PORT=8124 node /tmp/site/tests/server.js &  then  URL=http://localhost:8124/ node tests/e2e-update.js
 ```
 
