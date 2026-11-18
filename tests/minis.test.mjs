@@ -568,10 +568,10 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   w.run("claimBuzz", { me: { deviceId: "w1", name: "Wife1", team: "team2" }, buzzRound: w.state.clue.buzzRound });
   const k2 = E.lockKey(w.state.clue);
   w.run("answerTimeout", { key: k2 }, 60000);
-  eq(w.state.clue.timeUp, k2, "time runs out on a slow answer");
+  eq([w.state.clue.stage, w.state.scores.team2], ["open", -200], "time runs out on a slow answer: marked wrong automatically");
   w.run("answerSubmitted", { key: k2 });
   ok(!!w.error && !w.state.clue.submitted, "an answer after time's up is refused");
-  w.run("judge", { result: "wrong" });
+  w.run("nobody");
 
   // Final: everyone answered → locks at once; multiple choice scores itself on reveal
   w.qs = w.qs.map((q) => (q.isFinal ? { ...q, type: "mcq", choices: ["Mars", "Venus"], correctIndex: 0 } : q));

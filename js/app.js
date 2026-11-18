@@ -255,7 +255,8 @@ function automations() {
   if (S.phase === "clue" && c) {
     const key = E.lockKey(c);
     if (c.stage === "reading" && set.readSeconds > 0 && now >= c.pickedAt + set.readSeconds * 1000) fire("ao" + c.pickedAt, "autoOpen", { pickedAt: c.pickedAt });
-    if (c.stage === "open" && set.buzzWindowSeconds > 0 && now >= c.openedAt + set.buzzWindowSeconds * 1000) fire("bw" + key + c.openedAt, "buzzWindowTimeout", { key });
+    const until = E.buzzDeadline(c, set);
+    if (until && now >= until) fire("bw" + key + c.openedAt, "buzzWindowTimeout", { key });
     if (c.stage === "answering" && c.locked && c.timeUp !== key && c.submitted !== key && now >= c.locked.at + (set.answerSeconds || 15) * 1000) fire("at" + key + c.locked.at, "answerTimeout", { key });
   }
   if (S.phase === "final" && S.final.stage === "clue" && now >= S.final.deadline) fire("fl" + S.final.deadline, "finalLock", {});

@@ -159,8 +159,8 @@ function clueStatus(G, c, q) {
     return `<div class="status status--wait">Get ready to buzz…${auto}</div>`;
   }
   if (c.stage === "open") {
-    const win = set.buzzWindowSeconds > 0
-      ? timerLights(c.openedAt + set.buzzWindowSeconds * 1000, set.buzzWindowSeconds * 1000) : "";
+    const until = E.buzzDeadline(c, set);
+    const win = until ? timerLights(until, until - c.openedAt) : "";
     const reb = c.blocked.length ? `<div class="status-sub">${esc(tn(G, E.otherTeam(c.blocked[0])))} can steal it!</div>` : "";
     return `<div class="status status--open">🔔 BUZZERS OPEN</div>${reb}${win}`;
   }

@@ -120,7 +120,7 @@ console.log("engine tests");
   eq(st.state.clue.mcq.index, 1, "mcq selection recorded");
 }
 
-// --- answer timeout: spoken flags, mcq auto-docks ---
+// --- answer timeout: points come off automatically, the other team gets to steal ---
 {
   let st = fresh();
   st = run(st, "startGame", {});
@@ -130,9 +130,16 @@ console.log("engine tests");
   const key = E.lockKey(st.state.clue);
   ok(run(st, "answerTimeout", { key }).noop, "timeout ignored before time runs out");
   st = run(st, "answerTimeout", { key }, 16000);
-  eq(st.state.clue.timeUp, key, "spoken timeout flags time up for the host");
-  eq(st.state.sfx.sound, "timesup", "time's up sound");
+  eq(st.state.scores.team1, -100, "typed answer out of time: points come off automatically");
+  eq(st.state.sfx.sound, "timesup", "only the time's-up sound plays (not the wrong-answer one)");
+  eq([st.state.clue.stage, st.state.clue.blocked], ["open", ["team1"]], "the other team can buzz in to steal");
+  const until = E.buzzDeadline(st.state.clue, st.state.settings);
+  ok(until - st.state.clue.openedAt === 30000, "…with 30 seconds to buzz in");
   ok(run(st, "answerTimeout", { key }, 1000).noop, "timeout only fires once");
+  const rk = E.lockKey(st.state.clue);
+  ok(run(st, "buzzWindowTimeout", { key: rk }, 10000).noop, "steal window still open after 10 s");
+  const after = run(st, "buzzWindowTimeout", { key: rk }, 31000);
+  eq([after.state.clue.stage, after.state.clue.result, after.state.clue.revealed, after.state.scores.team2], ["done", "nobody", true, 0], "nobody steals in 30 s → answer shown, no points lost");
 
   let m = fresh();
   m = run(m, "startGame", {});

@@ -14,6 +14,7 @@ export const otherTeam = (t) => (t === "team1" ? "team2" : "team1");
 export const DEFAULT_SETTINGS = {
   answerSeconds: 15,      // time the buzzed-in player has to answer
   buzzWindowSeconds: 0,   // 0 = buzzers stay open until someone buzzes
+  reboundSeconds: 30,     // after a miss, the other team gets this long to buzz in
   readSeconds: 0,         // 0 = host opens buzzers manually; >0 = auto-open after reading time
   finalSeconds: 31,       // Final Jeopardy think time (the length of the think music)
   autoRebound: true,      // after a miss, instantly reopen buzzers for the other team
@@ -25,7 +26,7 @@ export const DEFAULT_SETTINGS = {
 export const DEFAULT_NAMES = { team1: "Husbands", team2: "Wives" };
 
 export const LIMITS = {
-  answerSeconds: [3, 120], buzzWindowSeconds: [0, 120], readSeconds: [0, 30], finalSeconds: [10, 300],
+  answerSeconds: [3, 120], buzzWindowSeconds: [0, 120], reboundSeconds: [5, 120], readSeconds: [0, 30], finalSeconds: [10, 300],
 };
 
 const rid = () => Math.random().toString(36).slice(2, 10);
@@ -249,12 +250,22 @@ export function lockDDWager(s, { team, wager }, ctx) {
     }).done();
 }
 
+const reboundMs = (s) => ((s.settings && s.settings.reboundSeconds) || 30) * 1000;
+// When the open buzzers close by themselves: a rebound always has a time limit; the first
+// open only if a buzz-in window is set.
+export function buzzDeadline(c, settings) {
+  if (!c || c.stage !== "open") return null;
+  if (c.windowUntil) return c.windowUntil;
+  const secs = (settings && settings.buzzWindowSeconds) || 0;
+  return secs > 0 ? c.openedAt + secs * 1000 : null;
+}
 export function openBuzzers(s, _p, ctx) {
   const c = s.clue;
   if (!c || !["reading", "paused"].includes(c.stage)) return null;
   if (TEAMS.every((t) => c.blocked.includes(t))) return null;
   return builder(s, ctx).field("clue", {
     ...c, stage: "open", buzzRound: c.buzzRound + 1, openedAt: ctx.now, locked: null, mcq: null, timeUp: null,
+    windowUntil: c.blocked.length ? ctx.now + reboundMs(s) : null,
   }).done();
 }
 
@@ -312,7 +323,7 @@ function resolve(s, outcome, ctx, extra = {}) {
   if (!remaining.length) {
     b.field("clue", { ...base, stage: "done", result: "nobody", blocked, locked: null, revealed: true });
   } else if (s.settings && s.settings.autoRebound) {
-    b.field("clue", { ...base, stage: "open", blocked, locked: null, buzzRound: c.buzzRound + 1, openedAt: ctx.now, timeUp: null, mcq: null });
+    b.field("clue", { ...base, stage: "open", blocked, locked: null, buzzRound: c.buzzRound + 1, openedAt: ctx.now, timeUp: null, mcq: null, submitted: null, windowUntil: ctx.now + reboundMs(s) });
   } else {
     b.field("clue", { ...base, stage: "paused", blocked, locked: null, timeUp: null, mcq: null });
   }
@@ -353,17 +364,17 @@ export function answerTimeout(s, { key }, ctx) {
   if (!c || c.stage !== "answering" || !c.locked || lockKey(c) !== key || c.timeUp === key || c.submitted === key) return null;
   const secs = (s.settings && s.settings.answerSeconds) || 15;
   if (ctx.now < c.locked.at + secs * 1000 - 60) return null;
-  const q = findQ(ctx, c.id);
-  if (q && q.type === "mcq") return resolve(s, "timeout", ctx);
-  // Spoken answers: flag it and let the host make the call.
-  return builder(s, ctx).field("clue", { ...c, timeUp: key }).sfx("timesup").done();
+  // Out of time = wrong: points come off automatically (with the time's-up sound only),
+  // and the other team gets a chance to steal.
+  return resolve(s, "timeout", ctx);
 }
 
+// Nobody buzzed in time: show the answer. No points lost.
 export function buzzWindowTimeout(s, { key }, ctx) {
   const c = s.clue;
-  const secs = (s.settings && s.settings.buzzWindowSeconds) || 0;
-  if (!c || c.stage !== "open" || lockKey(c) !== key || secs <= 0) return null;
-  if (ctx.now < c.openedAt + secs * 1000 - 60) return null;
+  const until = buzzDeadline(c, s.settings);
+  if (!c || c.stage !== "open" || lockKey(c) !== key || !until) return null;
+  if (ctx.now < until - 60) return null;
   return builder(s, ctx).field("clue", { ...c, stage: "done", result: "nobody", locked: null, revealed: true }).sfx("timesup").done();
 }
 
@@ -495,7 +506,7 @@ export function finalLock(s, { force } = {}, ctx) {
   const f = s.final;
   if (!f || f.stage !== "clue") return null;
   if (!force && ctx.now < f.deadline - 60) return null;
-  return builder(s, ctx).field("final", { ...f, stage: "reveal" }).sfx("timesup").done();
+  return builder(s, ctx).field("final", { ...f, stage: "reveal" }).done(); // the music ending is the cue
 }
 
 export function finalShowAnswer(s, { team }, ctx) {

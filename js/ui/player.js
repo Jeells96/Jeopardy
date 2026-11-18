@@ -103,7 +103,8 @@ function clueBody(G) {
   if (c.stage === "open") {
     if (c.blocked.includes(me.team)) return `${clueBox(G, c, q)}<div class="ph-note">Your team already had a go — fingers crossed! 🤞</div>`;
     if (G.myBuzzKey === key) return `${clueBox(G, c, q)}<button class="buzz sent" disabled><span>BUZZED!</span><small>Checking who was first…</small></button>`;
-    return `${clueBox(G, c, q)}<button class="buzz live" data-action="buzz" aria-label="Buzz in"><span>BUZZ!</span></button>`;
+    const until = E.buzzDeadline(c, S.settings);
+    return `${clueBox(G, c, q)}<button class="buzz live" data-action="buzz" aria-label="Buzz in"><span>BUZZ!</span>${c.blocked.length ? "<small>Steal it!</small>" : ""}</button>${until ? timer(until, until - c.openedAt) : ""}`;
   }
   if (c.stage === "paused") return `${clueBox(G, c, q)}<div class="ph-note">Buzzers paused…</div>`;
 

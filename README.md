@@ -100,8 +100,10 @@ switch off phone renaming there too.
   Correct / Wrong / Skip.
 - **Multiple choice:** the player taps an option and it's scored automatically. A wrong
   option is crossed off for the rebound team.
-- **Answer timer** with show-style countdown lights. Spoken: time's up → your call.
-  Multiple choice: time's up counts as wrong.
+- **Answer timer** with show-style countdown lights. Out of time counts as wrong: the
+  points come off automatically (just the time's-up sound), and the other team gets
+  **30 seconds to steal** (Settings → Game → Steal time). If nobody buzzes in, the answer
+  is shown and nobody loses points.
 
 **Daily Doubles**
 - Splash screen and sound, no buzzing — the team that found it plays.

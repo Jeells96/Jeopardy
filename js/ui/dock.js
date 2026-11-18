@@ -103,9 +103,11 @@ export function hostSteps(G, { privateView = false } = {}) {
       return { status, panel, buttons: B };
     }
     if (c.stage === "open") {
+      const until = E.buzzDeadline(c, set);
+      const cd = until ? ` <span class="pill-cd"><span class="cd" data-deadline="${until}" data-format="s"></span></span>` : "";
       status = c.blocked.length
-        ? `🔔 Rebound! <b>${esc(tn(G, E.otherTeam(c.blocked[0])))}</b> can buzz in to steal it…`
-        : "🔔 Buzzers are open — waiting for the first buzz…";
+        ? `🔔 Rebound! <b>${esc(tn(G, E.otherTeam(c.blocked[0])))}</b> can buzz in to steal it${cd} <span class="muted">— no buzz means the answer is shown, no points lost</span>`
+        : `🔔 Buzzers are open — waiting for the first buzz…${cd}`;
       btn("⏸ Pause buzzers", "act", act("pauseBuzzers"), "ghost", "P");
       btn("🙅 Nobody knows — reveal", "act", act("nobody"), "ghost", "N");
       return { status, panel, buttons: B };
