@@ -229,6 +229,16 @@ async function setOpNow(id, op, params) {
   if (outcome && outcome.error) throw new GameError(outcome.error);
   return !!outcome;
 }
+// Practice: put the built-in non-Christmas test game on the board and start fresh.
+export async function loadTestGame() {
+  const res = await fetch("./sets/test-game.txt", { cache: "no-store" });
+  if (!res.ok) throw new GameError("Couldn't load the test game — check your connection and try again.");
+  const set = B.newSet({ name: "Test game (not Christmas)", clues: B.parsePaste(await res.text()).clues });
+  const { rows } = B.toGameRows(set);
+  await replaceAllQuestions(rows);
+  await newGameFull();
+  await act("setLoaded", { id: "test-game", name: "Test game (not Christmas)" });
+}
 // Put a set's finished clues on the board (replaces the game's current questions).
 export async function loadSetIntoGame(set) {
   const { rows, skipped, counts } = B.toGameRows(set);

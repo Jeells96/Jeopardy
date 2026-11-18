@@ -444,6 +444,7 @@ async function handle(a, p, el) {
       else if (p.what === "clearPlayers") { await D.clearPlayers(); toast("All players removed", "good"); }
       else if (p.what === "resetBoard") { await D.resetUsed(); toast("Every question is back on the board", "good"); }
       else if (p.what === "startGame") await D.act("startGame", { control: G.ui.firstPick || "random" });
+      else if (p.what === "loadTest") { await D.loadTestGame(); toast("🧪 Test game is on the board — have fun!", "good"); }
       else await D.act(p.what);
       return;
     }

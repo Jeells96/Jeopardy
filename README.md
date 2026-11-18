@@ -22,6 +22,11 @@ laptop) with the answer key and every control. Finish with an **ugly sweater vot
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
    mini games first if you've set any up, then Jeopardy.
 
+**Practice first:** ⚙ Settings → Questions → **🧪 Put the test game on the board** loads a
+one-category, non-Christmas game (plus a multiple-choice Final) so you can try every
+feature without seeing the real questions. When you're done, open the question library and
+tap **▶ Use in the game** on your real set.
+
 ---
 
 ## 🎯 Mini games (before Jeopardy)

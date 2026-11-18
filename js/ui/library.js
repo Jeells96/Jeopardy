@@ -46,6 +46,7 @@ function sidebar(G, cur, q) {
   const loaded = G.S && G.S.loaded ? G.S.loaded.id : null;
   return `<aside class="lib-sets">
     <button class="btn primary newset" data-action="lib-new">+ New question set</button>
+    ${G.sets.some((s) => s.name === "Test game (not Christmas)") ? "" : `<button class="btn ghost newset" data-action="lib-add-test">🧪 Add the test game</button>`}
     <div class="setlist">${G.sets.map((s) => {
       const st = B.setStats(s);
       return `<button class="${cls("setcard", !q && cur && s.id === cur.id && "on")}" data-action="lib-select" data-id="${esc(s.id)}" data-key="set-${esc(s.id)}">

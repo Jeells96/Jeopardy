@@ -28,7 +28,7 @@ export function hostSteps(G, { privateView = false } = {}) {
     const M = E.minisOf(S);
     const todo = M.list.filter((g) => g.status !== "done").length;
     status = `<ul class="checklist">
-      ${item(n1 > 0, n1 ? `<b>${n1}</b> questions${n2 ? ` + <b>${n2}</b> Double Jeopardy` : ""}${fq ? " + Final Jeopardy" : ""}` : "Load your Jeopardy questions (⚙ Settings → Questions)")}
+      ${item(n1 > 0, n1 ? `${S.loaded && S.loaded.id === "test-game" ? "🧪 Test game: " : ""}<b>${n1}</b> questions${n2 ? ` + <b>${n2}</b> Double Jeopardy` : ""}${fq ? " + Final Jeopardy" : ""}` : "Load your Jeopardy questions (⚙ Settings → Questions)")}
       ${M.list.length ? item(true, `<b>${M.list.length}</b> mini game${M.list.length === 1 ? "" : "s"} ready`) : ""}
       ${item(c1 + c2 > 0, `Players: ${esc(tn(G, "team1"))} <b>${c1}</b> · ${esc(tn(G, "team2"))} <b>${c2}</b>`)}
       ${item(G.soundOn, G.soundOn ? "Sound is on" : "Turn on 🔊 on the screen connected to speakers")}

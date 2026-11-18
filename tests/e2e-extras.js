@@ -87,6 +87,15 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   console.log("Mini-game tables");
   await host.goto(URL + "#/admin");
   await host.waitForSelector(".remote");
+  await host.click('.r-tools [data-action="drawer"]');
+  await host.click('.tab:has-text("Questions")');
+  await host.click('[data-action="confirm"][data-p*="loadTest"]');
+  await host.click('[data-action="confirm-yes"]');
+  await until(host, () => window.__G.S.loaded && window.__G.S.loaded.id === "test-game" && window.__G.Q.length === 6);
+  ok(true, "Settings → Questions → 🧪 puts the test game on the board in one tap");
+  await until(host, () => document.querySelector(".drawer")?.textContent.includes("The test game is on the board"));
+  ok(true, "…and reminds you to load the real set afterwards");
+  await host.keyboard.press("Escape");
   const board = await device("board", { width: 1600, height: 900 });
   await board.addInitScript(() => {
     window.__said = [];

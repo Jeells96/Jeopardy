@@ -114,8 +114,15 @@ function questionsTab(G) {
   const dd = (list) => list.filter((q) => q.dailyDouble).length;
   const mc = (list) => list.filter((q) => q.type === "mcq").length;
   const row = (label, list) => list.length
-    ? `<div class="qstat"><b>${label}</b><span>${list.length} questions · ${cats(list).length} categories · ${dd(list)} Daily Double${dd(list) === 1 ? "" : "s"} · ${mc(list)} multiple choice</span><small>${cats(list).map(esc).join(" · ")}</small></div>` : "";
+    ? `<div class="qstat"><b>${label}</b><span>${list.length} questions · ${cats(list).length} categor${cats(list).length === 1 ? "y" : "ies"} · ${dd(list)} Daily Double${dd(list) === 1 ? "" : "s"} · ${mc(list)} multiple choice</span><small>${cats(list).map(esc).join(" · ")}</small></div>` : "";
+  const testOn = G.S.loaded && G.S.loaded.id === "test-game";
   return `
+  <section class="sect"><h4>🧪 Test run <small>practice without spoiling the real game</small></h4>
+    ${testOn
+      ? `<div class="qstat warn"><b>The test game is on the board.</b><span>When you're done practising, open the question library and tap <b>▶ Use in the game</b> on your real set.</span></div>`
+      : `<p class="muted"><small>One non-Christmas category (5 questions: typed answers, multiple choice and a Daily Double) plus a multiple-choice Final. Nothing from your real questions is shown.</small></p>`}
+    <button class="btn ${testOn ? "ghost" : "primary"} sm" data-action="confirm" data-p='{"what":"loadTest"}'>🧪 ${testOn ? "Reload the test game" : "Put the test game on the board"}</button>
+  </section>
   <section class="sect"><h4>Your questions</h4>
     ${G.Q.length ? `${row("Jeopardy!", r1)}${row("Double Jeopardy!", r2)}${fq ? `<div class="qstat"><b>Final Jeopardy!</b><span>${esc(fq.category)}</span></div>` : `<div class="qstat warn">No Final Jeopardy tab found.</div>`}` : `<p class="muted">No questions loaded yet.</p>`}
     <div class="import-msg" role="status">${esc(G.ui.importMsg || "")}</div>
@@ -172,6 +179,7 @@ const CONFIRMS = {
   newGame: ["Start a new game?", "Scores and the board reset. Players, team names, settings and questions stay.", "Start new game"],
   clearPlayers: ["Remove all players?", "Everyone will need to rejoin from their phone.", "Remove everyone"],
   voteReveal: ["Reveal the sweater vote now?", "Not everyone has voted yet — anyone who hasn't won't get a say.", "Reveal now"],
+  loadTest: ["Put the test game on the board?", "The questions on the board are swapped for the 1-category test game, and scores and mini-game results reset. Your question library isn't touched — load your real set again when you're done.", "Load test game"],
   resetBoard: ["Put every question back?", "All questions become available again. Scores don't change.", "Reset board"],
   startRound2: ["Jump to Double Jeopardy?", "Any questions left in this round are skipped.", "Start Double Jeopardy"],
   finalStart: ["Jump to Final Jeopardy?", "Any questions left on the board are skipped.", "Start Final Jeopardy"],
