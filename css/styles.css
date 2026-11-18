@@ -1231,3 +1231,18 @@ html.padlock body { position: fixed; inset: 0; width: 100%; touch-action: none; 
 .df-btns .btn { flex: 1; padding: 16px; font-size: 18px; }
 html.padlock .string-lights, html.padlock .snow { display: none; }
 .df-top { z-index: 2; }
+
+/* fair buzzing */
+.buzz.early { background: radial-gradient(circle at 35% 30%, #8a8fae, #50557a 55%, #2c3050); box-shadow: 0 0 0 8px rgba(255, 120, 140, 0.45), 0 12px 0 #181b30; animation: shake 0.25s ease-in-out; }
+.buzz.early span { font-size: clamp(30px, 9vw, 46px); }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+.reaction { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 12px; margin: 8px 0; font: 700 14px var(--ui); }
+.reaction .team1 { color: #ff9aa7; } .reaction .team2 { color: #7dffb0; } .reaction .me { color: var(--gold); }
+.fastest { margin-top: 4px; font-size: 13px; }
+.mysub { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px auto; color: var(--muted); font-weight: 700; }
+.mysub svg.drawing.mine, .mysub .drawing.mine { width: min(78vw, 320px); height: auto; aspect-ratio: 1; }
+.dall.many .dall-item { width: clamp(48px, 7vh, 86px); }
+.dall.lots .dall-item { width: clamp(42px, 6vh, 72px); }
+.dall.lots .dall-item b { font-size: clamp(9px, 1.2vh, 13px); }
+.mgame--draw:has(.dverdict) .mg-title { display: none; }
+.mgame--draw:has(.dverdict) .dstatus { font-size: clamp(16px, 2.8vh, 34px); }

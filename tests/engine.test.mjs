@@ -36,6 +36,8 @@ const P2 = { deviceId: "p2", name: "Bob", team: "team2" };
 const P3 = { deviceId: "p3", name: "Cy", team: "team1" };
 
 function fresh() { return { state: E.defaultState(), qs: QS.map((q) => ({ ...q })) }; }
+// A press `ms` after the buzzers open, decided once the grace period has passed.
+const buzz = (st, me, ms = 50) => run(st, "claimBuzz", { buzzRound: st.state.clue ? st.state.clue.buzzRound : 0, candidates: st.state.clue ? [{ ...me, t: st.state.clue.openedAt + ms }] : [] }, 2000);
 
 console.log("engine tests");
 
@@ -49,14 +51,14 @@ console.log("engine tests");
   eq(st.state.clue.stage, "reading", "regular clue starts in reading");
   ok(st.qs.find((q) => q.id === "a1").used, "picked clue marked used");
   ok(run(st, "pickClue", { qid: "a2" }).noop, "can't pick a second clue while one is open");
-  ok(run(st, "claimBuzz", { me: P1, buzzRound: 1 }).noop, "can't buzz before buzzers open");
+  ok(buzz(st, P1).noop, "can't buzz before buzzers open");
   st = run(st, "openBuzzers");
   eq(st.state.clue.stage, "open", "buzzers open");
   const br = st.state.clue.buzzRound;
-  const won = run(st, "claimBuzz", { me: P2, buzzRound: br });
+  const won = buzz(st, P2);
   eq(won.state.clue.locked.name, "Bob", "first buzz locks in");
   eq(won.state.sfx.sound, "buzz", "buzz plays buzz-in sound");
-  ok(run(won, "claimBuzz", { me: P1, buzzRound: br }).noop, "second buzz is ignored (race safe)");
+  ok(buzz(won, P1).noop, "second buzz is ignored (race safe)");
   st = run(won, "judge", { result: "correct" });
   eq(st.state.scores.team2, 100, "correct adds clue value");
   eq(st.state.control, "team2", "correct answer takes control of the board");
@@ -73,13 +75,13 @@ console.log("engine tests");
   st = run(st, "startGame", { control: "team1" });
   st = run(st, "pickClue", { qid: "a1" });
   st = run(st, "openBuzzers");
-  st = run(st, "claimBuzz", { me: P1, buzzRound: st.state.clue.buzzRound });
+  st = buzz(st, P1);
   st = run(st, "judge", { result: "wrong" });
   eq(st.state.scores.team1, -100, "wrong subtracts value");
   eq(st.state.clue.stage, "open", "auto-rebound reopens buzzers");
   eq(st.state.clue.blocked, ["team1"], "missing team is blocked");
-  ok(run(st, "claimBuzz", { me: P3, buzzRound: st.state.clue.buzzRound }).noop, "blocked team can't buzz again");
-  st = run(st, "claimBuzz", { me: P2, buzzRound: st.state.clue.buzzRound });
+  ok(buzz(st, P3).noop, "blocked team can't buzz again");
+  st = buzz(st, P2);
   eq(st.state.clue.locked.team, "team2", "other team gets the rebound");
   st = run(st, "judge", { result: "skip" });
   eq(st.state.scores.team2, 0, "skip has no penalty");
@@ -95,7 +97,7 @@ console.log("engine tests");
   st = run(st, "startGame", {});
   st = run(st, "pickClue", { qid: "a1" });
   st = run(st, "openBuzzers");
-  st = run(st, "claimBuzz", { me: P1, buzzRound: st.state.clue.buzzRound });
+  st = buzz(st, P1);
   st = run(st, "judge", { result: "wrong" });
   eq(st.state.clue.stage, "paused", "without auto-rebound the clue pauses");
   st = run(st, "openBuzzers");
@@ -108,12 +110,12 @@ console.log("engine tests");
   st = run(st, "startGame", { control: "team1" });
   st = run(st, "pickClue", { qid: "a2" });
   st = run(st, "openBuzzers");
-  st = run(st, "claimBuzz", { me: P1, buzzRound: st.state.clue.buzzRound });
+  st = buzz(st, P1);
   ok(run(st, "mcqPick", { index: 1, me: P3 }).noop, "only the buzzed-in player can answer mcq");
   st = run(st, "mcqPick", { index: 0, me: P1 });
   eq(st.state.scores.team1, -200, "wrong mcq subtracts");
   eq(st.state.clue.eliminated, [0], "wrong option eliminated for the rebound");
-  st = run(st, "claimBuzz", { me: P2, buzzRound: st.state.clue.buzzRound });
+  st = buzz(st, P2);
   ok(run(st, "mcqPick", { index: 0, me: P2 }).noop, "eliminated option can't be picked");
   st = run(st, "mcqPick", { index: 1, me: P2 });
   eq(st.state.scores.team2, 200, "correct mcq adds");
@@ -126,7 +128,7 @@ console.log("engine tests");
   st = run(st, "startGame", {});
   st = run(st, "pickClue", { qid: "a1" });
   st = run(st, "openBuzzers");
-  st = run(st, "claimBuzz", { me: P1, buzzRound: st.state.clue.buzzRound });
+  st = buzz(st, P1);
   const key = E.lockKey(st.state.clue);
   ok(run(st, "answerTimeout", { key }).noop, "timeout ignored before time runs out");
   st = run(st, "answerTimeout", { key }, 16000);
@@ -145,7 +147,7 @@ console.log("engine tests");
   m = run(m, "startGame", {});
   m = run(m, "pickClue", { qid: "a2" });
   m = run(m, "openBuzzers");
-  m = run(m, "claimBuzz", { me: P1, buzzRound: m.state.clue.buzzRound });
+  m = buzz(m, P1);
   m = run(m, "answerTimeout", { key: E.lockKey(m.state.clue) }, 16000);
   eq(m.state.scores.team1, -200, "mcq timeout docks automatically");
   eq(m.state.clue.stage, "open", "and rebounds to the other team");
@@ -205,7 +207,7 @@ console.log("engine tests");
   st = run(st, "startGame", { control: "team1" });
   st = run(st, "pickClue", { qid: "a1" });
   st = run(st, "openBuzzers");
-  st = run(st, "claimBuzz", { me: P2, buzzRound: st.state.clue.buzzRound });
+  st = buzz(st, P2);
   st = run(st, "judge", { result: "correct" });
   eq(st.state.control, "team2", "control moved");
   st = run(st, "undo");
@@ -297,6 +299,51 @@ console.log("engine tests");
   const steps = [["startGame", { control: "random" }], ["pickClue", { qid: "a3" }], ["lockDDWager", { team: "team1", wager: 100 }], ["judge", { result: "correct" }], ["closeClue"], ["finalStart"]];
   for (const [n, p] of steps) { const ch = E.ACTIONS[n](st.state, p || {}, ctx(st.qs)); if (ch && hasUndef(ch.set)) bad++; st = apply(st.state, st.qs, ch); }
   eq(bad, 0, "change sets never contain undefined");
+}
+
+// --- fair buzzing: scheduled open, fastest press wins ---
+{
+  let st = fresh();
+  st = run(st, "startGame", { control: "team1" });
+  st = run(st, "pickClue", { qid: "a1" });
+  const before = T;
+  st = run(st, "openBuzzers");
+  const c = st.state.clue;
+  ok(c.openedAt - before >= E.OPEN_LEAD_MS && c.openedAt - before <= E.OPEN_LEAD_MS + 20, "buzzers open a moment from now, so every phone lights up at the same instant");
+  const br = c.buzzRound;
+  const press = (me, ms) => ({ ...me, t: c.openedAt + ms });
+  const claim = (cands, dt) => run(st, "claimBuzz", { buzzRound: br, candidates: cands }, dt);
+  ok(claim([press(P1, 200)], 0).noop, "not decided until slower phones' presses have had time to arrive");
+  // Bob's press reached the server first, but Ann pressed earlier: Ann wins.
+  let r = claim([press(P2, 260), press(P1, 180), press(P3, 400)], 3000);
+  eq(r.state.clue.locked.name, "Ann", "the fastest press wins, not the first message to arrive");
+  eq(r.state.clue.locked.ms, 180, "…with her reaction time");
+  eq(r.state.clue.order.map((o) => [o.name, o.ms]), [["Ann", 180], ["Bob", 260], ["Cy", 400]], "runners-up and their reaction times are kept");
+  r = claim([press(P1, -200), press(P2, 300)], 3000);
+  eq(r.state.clue.locked.name, "Bob", "a press before the buzzers opened doesn't count");
+  r = claim([press(P1, 100), press(P1, 50), press(P2, 70)], 3000);
+  eq([r.state.clue.locked.name, r.state.clue.order.length], ["Ann", 2], "each phone counts once (its earliest press)");
+  ok(claim([], 3000).noop, "no presses, nothing to decide");
+  ok(run(st, "claimBuzz", { buzzRound: br + 1, candidates: [press(P1, 100)] }, 3000).noop, "presses from an old round are ignored");
+  // wrong answer → rebound for the other team, also opened a moment from now
+  st = run(st, "setSettings", { patch: { autoRebound: true } });
+  st = claim([press(P1, 120)], 3000);
+  const t0 = T;
+  st = run(st, "judge", { result: "wrong" });
+  const c2 = st.state.clue;
+  ok(c2.stage === "open" && c2.openedAt - t0 >= E.OPEN_LEAD_MS && c2.windowUntil === c2.openedAt + 30000, "the rebound opens a moment from now, with 30 s from when it opens");
+  eq(c2.order, null, "the old buzz order is cleared");
+  r = run(st, "claimBuzz", { buzzRound: c2.buzzRound, candidates: [{ ...P3, t: c2.openedAt + 50 }, { ...P2, t: c2.openedAt + 90 }] }, 3000);
+  eq(r.state.clue.locked.name, "Bob", "the team that already answered can't buzz again");
+  // the read-the-question timer opens the buzzers exactly when it runs out
+  let a = fresh();
+  a = run(a, "startGame", { control: "team1" });
+  a = run(a, "setSettings", { patch: { readSeconds: 5 } });
+  a = run(a, "pickClue", { qid: "a1" });
+  const pickedAt = a.state.clue.pickedAt;
+  ok(run(a, "autoOpen", { pickedAt }, 1000).noop, "not yet");
+  a = run(a, "autoOpen", { pickedAt }, 4300 - 1000);
+  eq([a.state.clue.stage, a.state.clue.openedAt], ["open", pickedAt + 5000], "scheduled just before the timer ends, opening right when it hits zero");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

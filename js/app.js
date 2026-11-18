@@ -24,7 +24,7 @@ const G = {
   S: null, spoken: null, Q: [], P: [], B: [],
   me: null, deviceId: D.deviceId(),
   ui: { firstPick: "random", ddWager: "", ddTeam: null, drawer: false, drawerTab: "game", modal: null, joinName: "", joinTeam: null, renaming: false },
-  fsError: false, soundOn: false, myBuzzKey: null, lastPun: null, seenSelf: false,
+  fsError: false, soundOn: false, myBuzzKey: null, lastPun: null, seenSelf: false, subs: {}, sentRounds: new Set(),
   now: () => D.serverNow(),
 };
 initLibrary(G);
@@ -108,7 +108,21 @@ function onErr(e) {
   console.warn("Firestore:", e && e.message);
   if (/permission|insufficient/i.test((e && (e.code || e.message)) || "")) { G.fsError = true; render(); }
 }
+// Host screens watch the drawings of the round being drawn come in (see subscribeDrawSubs).
+let subsUnsub = null, subsRound = "";
+function followDrawSubs(S) {
+  const M = E.minisOf(S);
+  const g = S && S.phase === "minis" && M.current ? E.miniById(S, M.current) : null;
+  const r = g && g.mode === "draw" && g.status === "active" ? E.drawRound(g) : null;
+  const rid = r && isHostClass() ? r.id : "";
+  if (rid === subsRound) return;
+  subsRound = rid;
+  if (subsUnsub) { subsUnsub(); subsUnsub = null; }
+  G.subs = {};
+  if (rid) subsUnsub = D.subscribeDrawSubs(rid, (sent) => { G.subs = sent; render(); }, onErr);
+}
 function onState(prev, S) {
+  if (S) followDrawSubs(S);
   // Buzz-order subscription follows the current clue's buzz round.
   const c = S && S.clue;
   const key = c && !c.dd && ["open", "answering", "done"].includes(c.stage) ? E.lockKey(c) : "";
@@ -122,10 +136,14 @@ function onState(prev, S) {
   if (!c || !pc || c.id !== pc.id) { G.ui.ddWager = ""; G.ui.ddTeam = null; }
   if (c && c.pun) G.lastPun = c.pun;
 
-  // Phone haptics: buzzers opening, and "you're up".
+  // The buzzers light up on every screen at the same instant (by the shared clock).
+  const opened = c && c.stage === "open" && !(pc && pc.stage === "open" && pc.buzzRound === c.buzzRound);
+  if (opened) {
+    const buzzMe = isPlayerRoute() && G.me && !c.blocked.includes(G.me.team);
+    setTimeout(() => { render(); if (buzzMe) vibrate(35); }, Math.max(0, c.openedAt - G.now()));
+  }
+  // Phone haptics: "you're up".
   if (isPlayerRoute() && G.me && c) {
-    const opened = c.stage === "open" && !(pc && pc.stage === "open" && pc.buzzRound === c.buzzRound);
-    if (opened && !c.blocked.includes(G.me.team)) vibrate(35);
     const mine = c.stage === "answering" && c.locked && c.locked.deviceId === G.deviceId;
     const wasMine = pc && pc.stage === "answering" && pc.locked && pc.locked.deviceId === G.deviceId && E.lockKey(pc) === E.lockKey(c);
     if (mine && !wasMine) { vibrate([60, 40, 120]); focusAnswerBox(); }
@@ -266,7 +284,8 @@ function automations() {
   const c = S.clue;
   if (S.phase === "clue" && c) {
     const key = E.lockKey(c);
-    if (c.stage === "reading" && set.readSeconds > 0 && now >= c.pickedAt + set.readSeconds * 1000) fire("ao" + c.pickedAt, "autoOpen", { pickedAt: c.pickedAt });
+    if (c.stage === "reading" && set.readSeconds > 0 && now >= c.pickedAt + set.readSeconds * 1000 - E.OPEN_LEAD_MS) fire("ao" + c.pickedAt, "autoOpen", { pickedAt: c.pickedAt });
+    if (c.stage === "open" && G.B.some((b) => b.key === key && Number.isFinite(b.t))) decideBuzz(key, false);
     const until = E.buzzDeadline(c, set);
     if (until && now >= until) fire("bw" + key + c.openedAt, "buzzWindowTimeout", { key });
     if (c.stage === "answering" && c.locked && c.timeUp !== key && c.submitted !== key && now >= c.locked.at + (set.answerSeconds || 15) * 1000) fire("at" + key + c.locked.at, "answerTimeout", { key });
@@ -277,16 +296,24 @@ function automations() {
 }
 
 // ---------------- sounds ----------------
+// Every screen with 🔊 on plays every sound — all at the same moment: each cue is due
+// SOUND_LEAD_MS after it happened (by the shared clock), which gives every screen time to
+// hear about it first. The Final music is lined up with the Final timer the same way.
+const SOUND_LEAD_MS = 650;
 let lastSfxId = undefined;
 function soundEffects(S) {
   if (!S) return;
   if (lastSfxId === undefined) { lastSfxId = S.sfx ? S.sfx.id : null; } // don't replay old cues on load
-  const canPlay = Sounds.soundEnabled(); // every screen with 🔊 on plays the sounds
+  const canPlay = Sounds.soundEnabled();
   if (S.sfx && S.sfx.id !== lastSfxId) {
     lastSfxId = S.sfx.id;
-    if (canPlay && G.now() - S.sfx.at < 6000) Sounds.play(S.sfx.sound);
+    const due = S.sfx.at + SOUND_LEAD_MS - G.now();
+    G.lastCue = { sound: S.sfx.sound, id: S.sfx.id, at: Date.now() + due }; // when this screen plays it (by its own clock)
+    if (canPlay && due > -5000) Sounds.play(S.sfx.sound, { delay: due });
   }
-  Sounds.setFinalMusic(canPlay && S.phase === "final" && S.final && S.final.stage === "clue");
+  const finalOn = canPlay && S.phase === "final" && S.final && S.final.stage === "clue";
+  const finalSecs = (S.settings && S.settings.finalSeconds) || 31;
+  Sounds.setFinalMusic(finalOn, finalOn ? S.final.deadline - finalSecs * 1000 - G.now() : 0);
   if (S.phase !== "board") Sounds.stop("intro"); // a question (or anything else) cuts the theme off
 }
 
@@ -345,19 +372,54 @@ function mountQR() {
 }
 
 // ---------------- player actions ----------------
+// A press is stamped with the shared clock the instant it happens; the fastest press wins
+// (see claimBuzz). Pressing before the buzzers open locks you out for a quarter second,
+// like the real show.
+const EARLY_LOCKOUT_MS = 250;
 async function buzz() {
   const c = G.S && G.S.clue;
-  if (!G.me || !c || c.stage !== "open" || c.blocked.includes(G.me.team)) return;
+  if (!G.me || !c || !["reading", "open"].includes(c.stage) || c.blocked.includes(G.me.team)) return;
+  if (Date.now() < (G.earlyUntil || 0)) return; // locked out for jumping the gun
+  const t = G.now();
+  if (c.stage === "reading" || t < c.openedAt) {
+    G.earlyUntil = Date.now() + EARLY_LOCKOUT_MS;
+    vibrate(15);
+    render();
+    setTimeout(render, EARLY_LOCKOUT_MS + 10);
+    return;
+  }
   const key = E.lockKey(c);
   if (G.myBuzzKey === key) return;
   G.myBuzzKey = key;
+  G.myBuzzMs = Math.round(t - c.openedAt);
   vibrate(40);
   render();
   const me = { deviceId: G.deviceId, name: G.me.name, team: G.me.team };
-  const lp = G.lastPun || {};
-  const pun = { own: pickPunIndex(OWN.length, lp.own), opp: pickPunIndex(OPP.length, lp.opp) };
-  D.logBuzz(key, me);
-  try { await D.act("claimBuzz", { me, buzzRound: c.buzzRound, pun }); } catch { /* lost the race */ }
+  try { await D.logBuzz(key, me, t, c.buzzRound); } catch { G.myBuzzKey = null; render(); return toast("Your buzz didn't go through — tap again!", "bad"); }
+  // A host screen normally decides; if none is around, this phone does.
+  setTimeout(() => decideBuzz(key, true), E.BUZZ_GRACE_MS + 900);
+}
+// Lock in the fastest press, once slower phones have had time to send theirs.
+const deciding = new Set();
+async function decideBuzz(key, fromPhone) {
+  const c0 = G.S && G.S.clue;
+  if (!c0 || c0.stage !== "open" || E.lockKey(c0) !== key || deciding.has(key)) return;
+  deciding.add(key);
+  try {
+    const presses = async () => (fromPhone ? await D.getBuzzes(key) : G.B)
+      .filter((b) => b.key === key && Number.isFinite(b.t))
+      .map((b) => ({ deviceId: b.deviceId, name: b.name, team: b.team, t: b.t, seq: b.seq || 0 }));
+    let list = await presses();
+    if (!list.length) return;
+    const wait = Math.min(...list.map((b) => b.t)) + E.BUZZ_GRACE_MS - G.now();
+    if (wait > 0) { await new Promise((r) => setTimeout(r, wait)); list = await presses(); }
+    const c = G.S && G.S.clue;
+    if (!c || c.stage !== "open" || E.lockKey(c) !== key) return;
+    const lp = G.lastPun || {};
+    const pun = { own: pickPunIndex(OWN.length, lp.own), opp: pickPunIndex(OPP.length, lp.opp) };
+    await D.act("claimBuzz", { buzzRound: c.buzzRound, candidates: list.slice(0, 40), pun });
+  } catch (e) { console.warn("decide buzz", e); }
+  finally { setTimeout(() => deciding.delete(key), 1200); }
 }
 
 let faTimer = 0;
@@ -391,12 +453,12 @@ async function judgeDrawMatch(gid, rid) {
     const r = g && g.matches.find((x) => x.id === rid);
     if (!r || r.winner || !r.all) return;
     const ref = isBuiltin(r.pic) ? { strokes: builtinStrokes(r.pic) } : await D.loadDrawing(r.pic);
+    const subs = await Promise.all(r.drawers.map((d) => D.loadDrawing(subDocId(r.id, d.id), !(G.subs || {})[d.id]).catch(() => null)));
     const scores = {};
-    for (const d of r.drawers) {
-      if (!(r.done && r.done[d.id])) { scores[d.id] = null; continue; }
-      const sub = await D.loadDrawing(subDocId(r.id, d.id), true);
+    for (let i = 0; i < r.drawers.length; i++) {
+      const sub = subs[i];
       await new Promise((res) => setTimeout(res, 0)); // keep the screen responsive
-      scores[d.id] = sub && ref ? Dr.matchPercent(ref.strokes, sub.strokes) : null;
+      scores[r.drawers[i].id] = sub && ref ? Dr.matchPercent(ref.strokes, sub.strokes) : null;
     }
     await D.act("miniDrawJudge", { id: gid, matchId: rid, scores });
   } catch (e) { console.warn("judge", e); }
@@ -413,8 +475,17 @@ function drawStepBuzz() {
   const d = myDrawState(G);
   if (!d || d.sent) return;
   Dr.lockPad(d.pad, d.stage !== "step");
-  if (d.stage === "done") sendDrawing(d, true);
+  // After a reload mid-round: was this phone's drawing already sent? (Look once.)
+  const chk = subChecks.get(d.rid);
+  if (!chk) {
+    subChecks.set(d.rid, "looking");
+    D.loadDrawing(subDocId(d.rid, d.pid), true).then((v) => { subChecks.set(d.rid, v ? "sent" : "none"); if (v) { G.sentRounds.add(d.rid); render(); } })
+      .catch(() => subChecks.delete(d.rid));
+    return;
+  }
+  if (d.stage === "done" && chk === "none") sendDrawing(d, true);
 }
+const subChecks = new Map();
 const sending = new Set();
 async function sendDrawing(d, auto) {
   if (sending.has(d.rid)) return;
@@ -422,7 +493,8 @@ async function sendDrawing(d, auto) {
   try {
     const strokes = Dr.padStrokes(d.pad);
     await D.saveDrawing(subDocId(d.rid, d.pid), { kind: "drawsub", matchId: d.rid, pid: d.pid, team: G.me ? G.me.team : "", by: G.me ? G.me.name : "", strokes });
-    await D.act("miniDrawSubmitted", { id: d.gid, matchId: d.rid, pid: d.pid });
+    G.sentRounds.add(d.rid);
+    render();
     Dr.clearPad(d.pad);
     vibrate([40, 40, 40]);
     toast("Drawing sent ✓", "good");
@@ -438,7 +510,7 @@ function drawAutomations(S) {
   const g = M.current ? E.miniById(S, M.current) : null;
   if (S.phase !== "minis" || !g || g.mode !== "draw" || g.status !== "active") return;
   const r = E.drawRound(g);
-  if (r && r.startedAt && r.drawers.length && r.drawers.every((d) => r.done && r.done[d.id])) judgeDrawMatch(g.id, r.id);
+  if (r && r.startedAt && r.drawers.length && r.drawers.every((d) => (G.subs || {})[d.id] || (r.done || {})[d.id])) judgeDrawMatch(g.id, r.id);
 }
 
 async function handle(a, p, el) {
@@ -831,6 +903,8 @@ function boot() {
   startSubscriptions();
   D.ensureState().catch(onErr);
   D.syncClock().then(render);
+  setTimeout(() => D.syncClock(), 15000); // a couple more readings early on for a sharp clock
+  setTimeout(() => D.syncClock(), 45000);
   setInterval(() => D.syncClock(), 180000);
   if (G.me) D.registerSelf().then((ok) => { if (!ok) { G.me = null; G.seenSelf = false; G.ui.kicked = true; render(); } }).catch(() => {});
   setInterval(() => { tick(); automations(); drawStepBuzz(); }, 100);

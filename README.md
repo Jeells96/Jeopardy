@@ -91,10 +91,12 @@ Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing
    every X seconds. Phones show the step number and buzz on each new step. For a
    picture you drew yourself, the screen shows "Step 2 of 4 — listen to Jaren" (no example),
    and your screen shows the picture so you can describe each step.
-3. **Pencils down:** after the last step the pads switch off and every drawing **sends
-   itself** — nobody has to press anything, and nobody can touch up their drawing once they
-   look at it. (Nothing is sent while they draw, so nothing lags.) The big screen ticks off
-   each drawing as it comes in.
+3. **Pencils down:** the last step lasts **twice as long**, to finish off. Then the pads
+   switch off and every drawing **sends itself** — nobody has to press anything, and nobody
+   can touch up their drawing once they look at it. Each phone then shows **the drawing it
+   sent**. (Nothing is sent while they draw, so nothing lags; each drawing is saved on its
+   own, so 30 phones sending at once never clash.) The big screen ticks off each drawing as
+   it comes in.
 4. **The website judges** every drawing as soon as they're all in — position, size, rotation
    and mirror image don't matter, and a few stray lines are forgiven. The big screen shows
    **the picture, the winner and last place** side by side with a % match, then everyone's
@@ -123,9 +125,19 @@ switch off phone renaming there too.
 - Questions zoom in full-screen; categories, values and podium scores styled like the show.
 
 **Buzzing**
-- The **first buzz wins**, decided by a database transaction, so it's exact even with 50
-  phones at once. The board lists the buzz order with time gaps (+0.02s…).
-- The buzzer locks for everyone the moment someone buzzes. Each team's phones show a
+- **The fastest press wins — not the fastest Wi-Fi.** When Jaren opens the buzzers they
+  light up a moment later, at the same instant on every phone and the board (by a shared
+  clock every screen keeps in step with the server). Each press is stamped with that clock
+  the instant it happens, and the earliest press wins, even if a slower phone's message
+  arrives later. (A host screen waits 0.6 s after the first press for any slower phones,
+  then locks it in; with no host screen open, the buzzing phone does it.)
+- **Pressing too soon** — while the question is read, or before the buzzer turns green —
+  locks you out for a quarter second, like the real show.
+- The board, Jaren and the phones show **reaction times** to the hundredth of a second
+  ("⚡ Amy 0.21s · Bob 0.27s"), so everyone can see it was fair.
+- Built for a crowd: every press is its own little record, so 30 phones buzzing at once
+  never get in each other's way.
+- The buzzer locks for everyone once it's decided. Each team's phones show a
   Christmas pun — "we're counting on you" for the buzzer's team, a playful roast for the
   other team — and every member of a team sees the same one.
 - **Rebound:** after a miss the other team can buzz in right away (can be turned off).
@@ -239,6 +251,11 @@ Questions live in Firestore under `state/set-*`, which the existing rules alread
 
 ## 🔊 Sound effects
 
+Every screen with 🔊 on plays every sound, **in sync**: each sound is scheduled for the same
+moment by the shared clock (0.65 s after it happens, so every screen has heard about it), and
+each device takes its own speaker delay into account. The Final Jeopardy music is lined up
+with the Final timer the same way. (A Bluetooth speaker can still add its own small delay.)
+
 Built-in, original placeholder sounds play out of the box. To use your own audio, add MP3s
 to the [`sounds/`](./sounds) folder with these exact names (any you skip keep the built-in
 sound):
@@ -344,6 +361,7 @@ node tests/e2e-library.js [shots] # question library: paste, edit, search, lock,
 node tests/e2e-extras.js [shots]  # test game, mini-game tables, multiple-choice Final
 node tests/draw.test.mjs          # Blind Drawing: the shape judge and its rules
 node tests/e2e-draw.js [shots]    # Blind Drawing: everyone draws at once, verdict, undo
+node tests/e2e-30.js [shots]      # 30 phones: fair buzzing on a slow network, sync, 30-person drawing
 node tests/e2e-update.js          # open screens reload onto a new deploy (not mid-typing)
 # …and against a copy with versioned file URLs, the way the deploy builds it:
 #   cp -r . /tmp/site && (cd /tmp/site && tools/cache-bust.sh test1)

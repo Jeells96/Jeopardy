@@ -68,29 +68,53 @@ export function normalize(strokesEncoded, maxPoints = 240) {
 // How far each point is from the nearest point of the other drawing, averaged both ways:
 // missing parts count against you, and so do extra lines — but the worst 20% of a player's
 // ink is forgiven, so a couple of wild strokes don't sink an otherwise good drawing.
-function nearest(P, Q) {
-  return P.map(([x, y]) => {
+// (Points are kept in flat number arrays: judging 30 drawings has to be quick.)
+const flat = (P) => {
+  const n = P.length, x = new Float64Array(n), y = new Float64Array(n);
+  for (let i = 0; i < n; i++) { x[i] = P[i][0]; y[i] = P[i][1]; }
+  return { x, y, n };
+};
+function nearest(A, B, out) {
+  const ax = A.x, ay = A.y, bx = B.x, by = B.y, nb = B.n;
+  for (let i = 0; i < A.n; i++) {
+    const px = ax[i], py = ay[i];
     let best = Infinity;
-    for (const [u, v] of Q) { const d = (x - u) * (x - u) + (y - v) * (y - v); if (d < best) best = d; }
-    return Math.sqrt(best);
-  });
+    for (let j = 0; j < nb; j++) { const dx = px - bx[j], dy = py - by[j], d = dx * dx + dy * dy; if (d < best) best = d; }
+    out[i] = Math.sqrt(best);
+  }
+  return out;
 }
-const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-function trimmedMean(a, keep) { const s = a.slice().sort((x, y) => x - y); return mean(s.slice(0, Math.max(1, Math.round(s.length * keep)))); }
-function chamfer(R, D) {
-  return (mean(nearest(R, D)) + trimmedMean(nearest(D, R), 0.8)) / 2;
+function chamfer(R, D, bufR, bufD) {
+  nearest(R, D, bufR);
+  let a = 0;
+  for (let i = 0; i < R.n; i++) a += bufR[i];
+  nearest(D, R, bufD);
+  bufD.sort();
+  const keep = Math.max(1, Math.round(D.n * 0.8));
+  let b = 0;
+  for (let i = 0; i < keep; i++) b += bufD[i];
+  return (a / R.n + b / keep) / 2;
 }
-function place(P, deg, mirror, sc = 1, dx = 0, dy = 0) {
-  const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
-  return P.map(([x, y]) => { const mx = mirror ? -x : x; return [(mx * c - y * s) * sc + dx, (mx * s + y * c) * sc + dy]; });
+function place(D, deg, mirror, sc = 1, dx = 0, dy = 0, out) {
+  const a = (deg * Math.PI) / 180, c = Math.cos(a) * sc, s = Math.sin(a) * sc;
+  for (let i = 0; i < D.n; i++) {
+    const mx = mirror ? -D.x[i] : D.x[i], y = D.y[i];
+    out.x[i] = mx * c - y * s + dx;
+    out.y[i] = mx * s + y * c + dy;
+  }
+  return out;
 }
 // Lower = closer. Tries every 10° and the mirror image, then fine-tunes the best few fits
 // (angle, size and position) and keeps the best.
 export function shapeDistance(refEncoded, drawingEncoded) {
-  const R = normalize(refEncoded), D = normalize(drawingEncoded);
-  if (!R || !D) return Infinity;
+  const R0 = normalize(refEncoded), D0 = normalize(drawingEncoded);
+  if (!R0 || !D0) return Infinity;
+  const R = flat(R0), D = flat(D0);
+  const P = { x: new Float64Array(D.n), y: new Float64Array(D.n), n: D.n };
+  const bufR = new Float64Array(R.n), bufD = new Float64Array(D.n);
+  const score = (deg, mirror, sc, dx, dy) => chamfer(R, place(D, deg, mirror, sc, dx, dy, P), bufR, bufD);
   const tries = [];
-  for (const mirror of [false, true]) for (let deg = 0; deg < 360; deg += 10) tries.push({ d: chamfer(R, place(D, deg, mirror)), deg, mirror, sc: 1, dx: 0, dy: 0 });
+  for (const mirror of [false, true]) for (let deg = 0; deg < 360; deg += 10) tries.push({ d: score(deg, mirror, 1, 0, 0), deg, mirror, sc: 1, dx: 0, dy: 0 });
   tries.sort((x, y) => x.d - y.d);
   let best = tries[0];
   for (const t of tries.slice(0, 3)) {
@@ -107,7 +131,7 @@ export function shapeDistance(refEncoded, drawingEncoded) {
         for (const m of moves) {
           const n = { ...cur, ...m };
           if (n.sc < 0.6 || n.sc > 1.6 || Math.abs(n.dx) > 0.8 || Math.abs(n.dy) > 0.8) continue;
-          n.d = chamfer(R, place(D, n.deg, n.mirror, n.sc, n.dx, n.dy));
+          n.d = score(n.deg, n.mirror, n.sc, n.dx, n.dy);
           if (n.d < cur.d - 1e-6) { cur = n; improved = true; }
         }
       }

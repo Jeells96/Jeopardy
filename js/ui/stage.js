@@ -158,6 +158,7 @@ function clueStatus(G, c, q) {
     const auto = set.readSeconds > 0 ? ` <span class="cd" data-deadline="${c.pickedAt + set.readSeconds * 1000}" data-format="s"></span>` : "";
     return `<div class="status status--wait">Get ready to buzz…${auto}</div>`;
   }
+  if (c.stage === "open" && G.now() < c.openedAt) return `<div class="status status--wait">Get ready…</div>`;
   if (c.stage === "open") {
     const until = E.buzzDeadline(c, set);
     const win = until ? timerLights(until, until - c.openedAt) : "";
@@ -173,7 +174,8 @@ function clueStatus(G, c, q) {
     const tu = c.timeUp === key ? `<div class="status-sub timeup">⏰ Time's up!</div>` : "";
     const who = c.dd ? `${esc(tn(G, L.team))}` : `${esc(L.name)} <small>${esc(tn(G, L.team))}</small>`;
     const done = c.submitted === key ? `<div class="status-sub">✓ Answer in</div>` : "";
-    return `<div class="answerer ${L.team}">${who}</div>${c.timeUp === key || c.submitted === key ? "" : timerLights(L.at + total, total)}${tu}${done}${sp}`;
+    const fast = !c.dd && Number.isFinite(L.ms) ? `<div class="status-sub">⚡ ${(L.ms / 1000).toFixed(2)}s</div>` : "";
+    return `<div class="answerer ${L.team}">${who}</div>${fast}${c.timeUp === key || c.submitted === key ? "" : timerLights(L.at + total, total)}${tu}${done}${sp}`;
   }
   if (c.stage === "done") {
     let banner = "";
@@ -194,15 +196,15 @@ function clueStatus(G, c, q) {
   return "";
 }
 
+// Reaction times: how long after the buzzers opened each phone pressed (fastest first).
 function buzzOrder(G, c) {
-  if (!["answering", "open", "done"].includes(c.stage) || c.dd || !G.B.length) return "";
-  const t0 = tsOf(G.B[0]);
-  return `<div class="buzzorder"><div class="bo-head">Buzz order</div>${G.B.slice(0, 6).map((b, i) => {
-    const dt = i === 0 ? "first!" : `+${((tsOf(b) - t0) / 1000).toFixed(2)}s`;
-    return `<div class="bo-row ${b.team}${i === 0 ? " first" : ""}" data-key="bo-${esc(b.id)}"><span class="bo-n">${i + 1}</span><span class="bo-name">${esc(b.name)}</span><span class="bo-dt">${dt}</span></div>`;
-  }).join("")}</div>`;
+  if (!["answering", "open", "done"].includes(c.stage) || c.dd) return "";
+  const rows = c.order && c.order.length ? c.order.map((o, i) => ({ id: "o" + i, ...o }))
+    : G.B.filter((b) => Number.isFinite(b.t)).map((b) => ({ id: b.id, name: b.name, team: b.team, ms: Math.max(0, b.t - c.openedAt) }));
+  if (!rows.length) return "";
+  return `<div class="buzzorder"><div class="bo-head">Fastest buzz</div>${rows.slice(0, 5).map((b, i) =>
+    `<div class="bo-row ${b.team}${i === 0 ? " first" : ""}" data-key="bo-${esc(b.id)}"><span class="bo-n">${i + 1}</span><span class="bo-name">${esc(b.name)}</span><span class="bo-dt">${(b.ms / 1000).toFixed(2)}s</span></div>`).join("")}</div>`;
 }
-const tsOf = (b) => (b.ts && b.ts.toMillis ? b.ts.toMillis() : b.at || 0);
 
 function ddSplash(G, c, q) {
   const team = c.dd && c.dd.team;

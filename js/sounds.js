@@ -81,7 +81,15 @@ function probe() {
 }
 export const loadedSounds = () => Object.keys(buffers);
 const sources = {};     // slot -> Set of playing buffer sources (so long cues can be stopped)
-function playBuffer(name) {
+// Every screen plays a sound at the same moment: `delay` is how long from now (ms) it's
+// due by the shared clock. The speaker's own delay (bigger on Bluetooth) is taken off. A
+// screen that heard about it late skips the part that has already played elsewhere — a
+// moment of a short cue, or as much as needed of a long one (the Final music).
+export function speakerDelay() {
+  const c = ctx;
+  return c ? Math.min(0.5, Math.max(0, c.outputLatency || c.baseLatency || 0)) : 0;
+}
+function playBuffer(name, delay = 0) {
   const c = ensureCtx();
   if (!c || !buffers[name]) return null;
   const src = c.createBufferSource();
@@ -89,7 +97,16 @@ function playBuffer(name) {
   src.connect(master);
   (sources[name] = sources[name] || new Set()).add(src);
   src.onended = () => sources[name] && sources[name].delete(src);
-  src.start();
+  const dur = src.buffer.duration;
+  let when = c.currentTime + delay / 1000 - speakerDelay();
+  let offset = 0;
+  if (when < c.currentTime) {
+    const late = c.currentTime - when;
+    const maxSkip = dur > 3 ? dur - 0.25 : Math.min(0.35, dur / 2);
+    if (late <= maxSkip) offset = late;
+    when = c.currentTime;
+  }
+  src.start(when, offset);
   return src;
 }
 
@@ -176,9 +193,10 @@ export function stop(...names) {
     if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } }
   }
 }
-function playFile(name) {
-  if (playBuffer(name)) return true;
+function playFile(name, delay = 0) {
+  if (playBuffer(name, delay)) return true;
   if (!available[name]) return false;
+  if (delay > 20) { setTimeout(() => playFile(name, 0), delay); return true; }
   let a = cache[name];
   if (!a) { a = new Audio(BASE + SLOTS[name]); a.preload = "auto"; cache[name] = a; }
   try { a.currentTime = 0; } catch { /* ignore */ }
@@ -186,18 +204,20 @@ function playFile(name) {
   if (p && p.catch) p.catch(() => SYNTH[name] && SYNTH[name]());
   return true;
 }
-export function play(name) {
+// delay: ms from now until the sound is due (negative = it was due a moment ago).
+export function play(name, { delay = 0 } = {}) {
   if (!enabled) return;
   if (!SYNTH[name] && SYNTH.fill && name === "intro") SYNTH[name] = SYNTH.fill;
   resume();
-  if (playFile(name)) return;
-  const asked = Date.now();
+  const due = Date.now() + delay;
+  const synth = () => { const d = due - Date.now(); if (d > 20) setTimeout(() => enabled && SYNTH[name](), d); else SYNTH[name](); };
+  if (playFile(name, delay)) return;
   if (loading && available[name] !== false) {
     // Still loading: play the real file as soon as it's ready (if that's within 3 s).
-    loading.then(() => { if (enabled && Date.now() - asked < 3000 && playFile(name)) return; if (enabled && SYNTH[name]) SYNTH[name](); });
+    loading.then(() => { if (enabled && Date.now() - due < 3000 && playFile(name, due - Date.now())) return; if (enabled && SYNTH[name]) synth(); });
     return;
   }
-  if (SYNTH[name]) SYNTH[name]();
+  if (SYNTH[name]) synth();
 }
 
 // Browsers are fussy about speech: Chrome can silently drop an utterance spoken right
@@ -274,7 +294,9 @@ function scheduleLoop() {
   }
 }
 
-export function setFinalMusic(on) {
+// startsIn: ms until the music is due to start by the shared clock (negative = it started
+// that long ago), so every screen plays the same moment of it.
+export function setFinalMusic(on, startsIn = 0) {
   if (!on || !enabled) {
     if (finalEl) { try { finalEl.pause(); } catch { /* ignore */ } finalEl = null; }
     if (loopTimer) { clearInterval(loopTimer); loopTimer = null; }
@@ -285,10 +307,11 @@ export function setFinalMusic(on) {
   if (finalOn || finalEl || loopTimer) return;
   finalOn = true;
   resume();
-  if (playBuffer("final")) return;
+  if (playBuffer("final", startsIn)) return;
   if (available.final) {
     finalEl = new Audio(BASE + SLOTS.final);
     finalEl.loop = false;
+    if (startsIn < -300) { try { finalEl.currentTime = -startsIn / 1000; } catch { /* ignore */ } }
     const p = finalEl.play();
     if (p && p.catch) p.catch(() => { finalEl = null; startLoop(); });
   } else {

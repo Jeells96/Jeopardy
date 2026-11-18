@@ -600,7 +600,7 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   w.run("startGame", { control: "team1" });
   w.run("pickClue", { qid: "a1" });
   w.run("openBuzzers");
-  w.run("claimBuzz", { me: { deviceId: "h1", name: "Hub1", team: "team1" }, buzzRound: w.state.clue.buzzRound });
+  w.run("claimBuzz", { buzzRound: w.state.clue.buzzRound, candidates: [{ deviceId: "h1", name: "Hub1", team: "team1", t: w.state.clue.openedAt + 50 }] }, 2000);
   const key = E.lockKey(w.state.clue);
   ok(w.state.clue.stage === "answering", "someone buzzed in");
   w.run("answerSubmitted", { key });
@@ -612,7 +612,7 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   w.run("closeClue");
   w.run("pickClue", { qid: "a2" });
   w.run("openBuzzers");
-  w.run("claimBuzz", { me: { deviceId: "w1", name: "Wife1", team: "team2" }, buzzRound: w.state.clue.buzzRound });
+  w.run("claimBuzz", { buzzRound: w.state.clue.buzzRound, candidates: [{ deviceId: "w1", name: "Wife1", team: "team2", t: w.state.clue.openedAt + 50 }] }, 2000);
   const k2 = E.lockKey(w.state.clue);
   w.run("answerTimeout", { key: k2 }, 60000);
   eq([w.state.clue.stage, w.state.scores.team2], ["open", -200], "time runs out on a slow answer: marked wrong automatically");

@@ -151,6 +151,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(wp, () => !!document.querySelector(".ph-note"));
   ok((await wp.textContent(".ph-note")).includes("already had a go"), "blocked team's phones explain why");
   const stealer = opps[0];
+  await until(stealer, () => !!document.querySelector(".buzz.live"));
   await stealer.dispatchEvent('[data-action="buzz"]', "pointerdown");
   await until(board, () => window.__G.S.clue.stage === "answering");
   await key(host, "c");
@@ -178,6 +179,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   S = await state(board);
   ok(S.scores.team1 === base.team1 - 200, "wrong multiple-choice auto-scores −$200");
   ok(S.clue.eliminated.includes(wrongIdx), "wrong option is crossed off for the rebound");
+  await until(P.Rick, () => !!document.querySelector(".buzz.live"));
   await P.Rick.dispatchEvent('[data-action="buzz"]', "pointerdown");
   await until(P.Rick, () => document.querySelectorAll(".mcqbtn").length >= 2);
   ok(await P.Rick.isDisabled(`.mcqbtn[data-i="${wrongIdx}"]`), "eliminated choice is disabled on the rebound");

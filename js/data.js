@@ -35,11 +35,13 @@ export function clearLocalIdentity() { safeDel("jeop_identity"); }
 // ---------------- server clock ----------------
 // Every countdown uses serverNow() so all phones, the board and the host agree to within
 // a few tens of milliseconds, regardless of how wrong each device's own clock is.
+// Each sync takes a few readings; the quickest round trip gives the most accurate offset,
+// and the best reading of the last 10 minutes is kept (so accuracy only gets better).
 let clockOffset = 0;
 export const serverNow = () => Date.now() + clockOffset;
+const samples = [];
 export async function syncClock() {
   const ref = doc(db, "state", "clock-" + deviceId());
-  let best = null;
   for (let i = 0; i < 3; i++) {
     try {
       const t0 = Date.now();
@@ -47,12 +49,11 @@ export async function syncClock() {
       const t1 = Date.now();
       const snap = await getDoc(ref);
       const t = snap.exists() ? snap.data().t : null;
-      if (t && t.toMillis) {
-        const rtt = t1 - t0;
-        if (!best || rtt < best.rtt) best = { rtt, offset: t.toMillis() - (t0 + t1) / 2 };
-      }
+      if (t && t.toMillis) samples.push({ rtt: t1 - t0, offset: t.toMillis() - (t0 + t1) / 2, at: t1 });
     } catch { /* offline or rules not set yet */ }
   }
+  while (samples.length && Date.now() - samples[0].at > 10 * 60 * 1000) samples.shift();
+  const best = samples.reduce((a, b) => (!a || b.rtt < a.rtt ? b : a), null);
   if (best) clockOffset = best.offset;
   return best;
 }
@@ -84,10 +85,19 @@ export function subscribeBuzzes(key, cb, err) {
   const q = query(buzzesCol, where("key", "==", key));
   return onSnapshot(q, (snap) => {
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const t = (r) => (r.ts && r.ts.toMillis ? r.ts.toMillis() : r.at || Infinity);
-    rows.sort((a, b) => t(a) - t(b));
-    cb(rows);
+    cb(sortBuzzes(rows));
   }, err);
+}
+// Fastest press first (press time by the shared clock); arrival order breaks ties.
+const arrived = (r) => (r.ts && r.ts.toMillis ? r.ts.toMillis() : r.at || Infinity);
+function sortBuzzes(rows) {
+  const press = (r) => (Number.isFinite(r.t) ? r.t : arrived(r));
+  return rows.map((r) => ({ ...r, seq: arrived(r) })).sort((a, b) => press(a) - press(b) || a.seq - b.seq);
+}
+// One look at the presses so far (a phone deciding when no host screen is around).
+export async function getBuzzes(key) {
+  const snap = await getDocs(query(buzzesCol, where("key", "==", key)));
+  return sortBuzzes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
 }
 
 // ---------------- game state ----------------
@@ -167,10 +177,12 @@ export async function resetUsed() {
 }
 
 // ---------------- buzzes / live answers ----------------
-export async function logBuzz(key, me) {
-  try {
-    await addDoc(buzzesCol, { key, deviceId: me.deviceId, name: me.name, team: me.team, ts: serverTimestamp(), at: serverNow() });
-  } catch { /* the order list is cosmetic; the transaction decides the winner */ }
+// A press: who, and when by the shared clock (t). Each press is its own document, so
+// 30 phones buzzing at once never get in each other's way.
+export async function logBuzz(key, me, t, buzzRound) {
+  const data = { key, buzzRound, deviceId: me.deviceId, name: me.name, team: me.team, t, ts: serverTimestamp(), at: serverNow() };
+  try { await addDoc(buzzesCol, data); }
+  catch { await addDoc(buzzesCol, data); } // one retry
 }
 export async function clearBuzzes() {
   const snap = await getDocs(buzzesCol);
@@ -190,8 +202,24 @@ export async function newGameFull() {
 // ---------------- blind drawing ----------------
 // Drawings live in their own documents (state/drawpic-* = the host's pictures,
 // state/drawsub-* = what players drew), so the game document stays small and fast.
-export const saveDrawing = (docId, data) => setDoc(doc(db, "state", docId), { ...data, at: Date.now() });
 const drawCache = new Map();
+export async function saveDrawing(docId, data) {
+  const v = { ...data, at: Date.now() };
+  await setDoc(doc(db, "state", docId), v);
+  drawCache.set(docId, v);
+}
+// Host screens: the drawings sent for a round, as they come in. Each phone saves its own
+// document — nothing touches the game document, so 30 phones sending at once never clash.
+export function subscribeDrawSubs(roundId, cb, err) {
+  return onSnapshot(query(collection(db, "state"), where("matchId", "==", roundId)), (snap) => {
+    const sent = {};
+    for (const d of snap.docs) {
+      const v = d.data();
+      if (v.kind === "drawsub" && v.pid) { sent[v.pid] = true; drawCache.set(d.id, v); }
+    }
+    cb(sent);
+  }, err);
+}
 export async function loadDrawing(docId, fresh = false) {
   if (!fresh && drawCache.has(docId)) return drawCache.get(docId);
   const snap = await getDoc(doc(db, "state", docId));

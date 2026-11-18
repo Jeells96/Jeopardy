@@ -183,9 +183,18 @@ async function hold(page, sel) {
   await P.Jake.mouse.wheel(0, 600);
   ok((await P.Jake.evaluate(() => (document.scrollingElement || document.body).scrollTop)) === 0, "scrolling does nothing while drawing");
   ok(!(await host.evaluate(() => Object.keys(window.__G.S.minis.list[0].matches[0].done || {}).length)), "nothing is sent while they draw (no lag)");
+  // the last step lasts twice as long, to finish off the drawing
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 2 of 2"), null, 8000);
+  const lastFrom = Date.now();
+  ok((await board.textContent(".steppanel")).includes("left to finish your drawing"), "the last step says how long is left to finish");
   // pencils down: every drawing sends itself, then the website judges
-  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Pencils down"), null, 14000);
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Pencils down"), null, 16000);
+  const lastFor = (Date.now() - lastFrom) / 1000;
+  ok(lastFor > 8.5 && lastFor < 11.5, `the last step lasts twice as long as the others (${lastFor.toFixed(1)}s for 5-second steps)`);
   ok(true, "after the last step: pencils down");
+  await until(P.Kim, () => document.querySelectorAll(".mysub svg.drawing polyline").length >= 1, null, 8000);
+  ok((await P.Kim.textContent(".mysub")).includes("Your drawing"), "once it locks, each phone shows the drawing it sent");
+  await shot(P.Kim, "d02d-phone-sent");
   await until(host, () => !!window.__G.S.minis.list[0].matches[0].winner, null, 15000);
   ok(true, "every phone sends its drawing by itself at pencils down — nobody has to press anything — and the website judges");
   await until(P.Jake, () => !document.querySelector(".drawfull") && !document.documentElement.classList.contains("padlock"));
@@ -201,7 +210,7 @@ async function hold(page, sel) {
   await sleep(500);
   await shot(board, "d03-board-verdict");
   await until(P.Jake, () => document.body.textContent.includes("Your drawing won"));
-  await until(P.Kim, () => document.body.textContent.includes("You came 2nd of 3"));
+  await until(P.Kim, () => document.body.textContent.includes("You came 2nd of 3") && !!document.querySelector(".mysub svg.drawing polyline"));
   await until(P.Emma, () => document.body.textContent.includes("You came 3rd of 3"));
   ok(true, "every phone says how they did");
   await shot(P.Kim, "d03b-phone-verdict");

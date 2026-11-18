@@ -669,13 +669,16 @@ function picsBlock(G, g) {
 }
 const picTotalSteps = (g, id) => (builtin(id) ? builtin(id).steps.length : (g.picSteps && g.picSteps[id]) || 1);
 // Where a drawing round is: waiting for the host to start, counting down, on step i, or done.
+// The last step lasts twice as long, so everyone has time to finish off their drawing.
 function drawPhase(G, g, m) {
   if (!m.startedAt) return { stage: "ready" };
   const now = G.now();
   if (now < m.startedAt) return { stage: "countdown", endsAt: m.startedAt };
   const total = picTotalSteps(g, m.pic), ms = (g.stepSeconds || 20) * 1000;
-  const i = Math.floor((now - m.startedAt) / ms);
-  if (i < total) return { stage: "step", i, total, endsAt: m.startedAt + (i + 1) * ms };
+  const i = Math.min(total - 1, Math.floor((now - m.startedAt) / ms));
+  const last = i === total - 1;
+  const endsAt = m.startedAt + (i + 1) * ms + (last ? ms : 0);
+  if (now < endsAt) return { stage: "step", i, total, endsAt, last };
   return { stage: "done", total };
 }
 const cd = (t) => `<span class="cd" data-deadline="${t}" data-format="s"></span>`;
@@ -691,17 +694,18 @@ function stepPanel(G, g, m, size = "") {
   return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-${ph.i}">
     ${pic ? Dr.svgSteps(pic.steps, ph.i, "example") : ""}
     <div class="sp-text"><div class="sp-step">Step ${ph.i + 1} of ${ph.total}</div><div class="sp-big">${esc(text)}</div>
-      <div class="sp-time">⏱ ${cd(ph.endsAt)}${ph.i + 1 < ph.total ? " until the next step" : " left"}</div></div>
+      <div class="sp-time">⏱ ${cd(ph.endsAt)}${ph.last ? " left to finish your drawing" : " until the next step"}</div></div>
   </div>`;
 }
 const roundNo = (g, r) => E.drawRounds(g).findIndex((x) => x.id === r.id) + 1;
 const lastRound = (g) => { const rs = E.drawRounds(g); return rs.length ? rs[rs.length - 1] : null; };
-const sentCount = (r) => r.drawers.filter((d) => (r.done || {})[d.id]).length;
+const isSent = (G, r, pid) => !!((r.done || {})[pid] || (G.subs || {})[pid] || (pid === G.deviceId && G.sentRounds && G.sentRounds.has(r.id)));
+const sentCount = (G, r) => r.drawers.filter((d) => isSent(G, r, d.id)).length;
 const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 // Everyone in the round, ✓ once their drawing is in.
 function drawerChips(G, r) {
   return `<div class="dchips">${r.drawers.map((d) => {
-    const sent = !!(r.done || {})[d.id];
+    const sent = isSent(G, r, d.id);
     return `<span class="${cls("dchip", d.team, sent && "sent")}" data-key="dch-${esc(d.id)}">${sent ? "✓" : "✏️"} ${esc(d.name)}</span>`;
   }).join("")}</div>`;
 }
@@ -727,7 +731,7 @@ function drawVerdict(G, g, r) {
       ${panel(best, tie ? "tie" : "win", tie ? "🤝 Tied for best" : "🏆 Winner")}
       ${worst ? panel(worst, "lose", "😬 Last place") : ""}
     </div>
-    ${ranked.length > 2 ? `<div class="dall">${all}</div>` : ""}
+    ${ranked.length > 2 ? `<div class="${cls("dall", ranked.length > 12 && "many", ranked.length > 20 && "lots")}">${all}</div>` : ""}
   </div>`;
 }
 function roundChip(G, g, m) {
@@ -739,8 +743,8 @@ function drawView(G, M, g) {
   const r = E.drawRound(g);
   const last = lastRound(g);
   let main;
-  if (r) main = `${stepPanel(G, g, r)}<div class="dstatus" data-key="dst-${esc(r.id)}"><b>Round ${roundNo(g, r)}</b> · ✓ ${sentCount(r)} of ${r.drawers.length} drawings sent</div>${drawerChips(G, r)}`;
-  else if (last && last.winner) main = `<div class="dstatus"><b>Round ${roundNo(g, last)}</b> — the website's verdict</div>${drawVerdict(G, g, last)}`;
+  if (r) main = `${stepPanel(G, g, r)}<div class="dstatus" data-key="dst-${esc(r.id)}"><b>Round ${roundNo(g, r)}</b> · ✓ ${sentCount(G, r)} of ${r.drawers.length} drawings sent</div>${drawerChips(G, r)}`;
+  else if (last && last.winner) main = `<div class="dstatus"><b>${esc(g.name)} · Round ${roundNo(g, last)}</b> — the website's verdict</div>${drawVerdict(G, g, last)}`;
   else main = `<div class="mg-wait">✏️ Everyone draws at once — right where you're sitting!</div>`;
   const past = E.drawRounds(g).filter((x) => x.winner && (r || x.id !== (last && last.id))).slice(-5).reverse();
   return `<div class="mgame mgame--draw" data-key="mg-${esc(g.id)}">
@@ -768,7 +772,7 @@ function drawSteps(G, g, { btn, act, B, st, n1, n2 }) {
   if (r) {
     const ph = drawPhase(G, g, r);
     const mine = !isBuiltin(r.pic);
-    const sent = sentCount(r);
+    const sent = sentCount(G, r);
     status = `<b>${esc(g.name)}</b> · Round ${roundNo(g, r)} · ✓ <b>${sent}</b> of ${r.drawers.length} drawings sent · ${tally} <span class="muted">— the website judges as soon as everyone has sent</span>`;
     panel = `<div class="describe">${mine ? `<div class="desc-pic"><small>${ph.stage === "step" ? `Describe step ${ph.i + 1} of ${ph.total} 🤫` : "Your picture 🤫"}</small>${drawingSvg(G, r.pic, "host")}</div>` : ""}${stepPanel(G, g, r, "small")}</div>${drawerChips(G, r)}`;
     if (!r.startedAt) {
@@ -799,7 +803,7 @@ function drawPhone(G, g) {
   const r = E.drawRound(g);
   const me = r && r.drawers.find((d) => d.id === G.deviceId);
   if (me) {
-    if ((r.done || {})[me.id]) return `<div class="youup big">✓ Drawing sent!<small>${sentCount(r)} of ${r.drawers.length} sent — the website judges as soon as everyone's in.</small></div>`;
+    if (isSent(G, r, me.id)) return `<div class="youup big">✓ Drawing sent!<small>The website judges as soon as everyone's in.</small></div><div class="mysub"><small>Your drawing</small>${drawingSvg(G, subDocId(r.id, me.id), "mine")}</div>`;
     const key = `sub-${r.id}`;
     const ph = drawPhase(G, g, r);
     // The whole screen is the pad. Nothing to tap by mistake while it's on your head:
@@ -828,7 +832,8 @@ function drawPhone(G, g) {
       : last.winner === "tie" ? "🤝 It's a tie!"
       : last.winner === myTeam ? `🏆 ${esc(tn(G, last.winner))} won the round!` : `😤 ${esc(tn(G, last.winner))} won the round`;
     const mine = i >= 0 ? `You came <b>${ordinal(i + 1)}</b> of ${ranked.length}${ranked[i].score != null ? ` — ${ranked[i].score}% match` : " (no drawing sent)"}` : "";
-    verdict = `<div class="ph-card verdict"><b>${title}</b><small>${best && best.score != null ? `Best drawing: ${esc(best.name)} ${best.score}%` : ""}${mine ? `<br>${mine}` : ""}<br>See the big screen!</small></div>`;
+    const myPic = i >= 0 && ranked[i].sent ? `<div class="mysub"><small>Your drawing</small>${drawingSvg(G, subDocId(last.id, G.deviceId), "mine")}</div>` : "";
+    verdict = `<div class="ph-card verdict"><b>${title}</b><small>${best && best.score != null ? `Best drawing: ${esc(best.name)} ${best.score}%` : ""}${mine ? `<br>${mine}` : ""}<br>See the big screen!</small></div>${myPic}`;
   }
   return `${verdict || `<div class="ph-note">✏️ Get ready — everyone draws at once, right where you're sitting!</div>`}${tally}`;
 }
@@ -841,7 +846,7 @@ export function myDrawState(G) {
   const r = E.drawRound(g);
   if (!r || !r.drawers.some((d) => d.id === G.deviceId)) return null;
   const ph = drawPhase(G, g, r);
-  return { gid: g.id, rid: r.id, pid: G.deviceId, pad: `sub-${r.id}`, stage: ph.stage, i: ph.i, sent: !!(r.done || {})[G.deviceId] };
+  return { gid: g.id, rid: r.id, pid: G.deviceId, pad: `sub-${r.id}`, stage: ph.stage, i: ph.i, sent: isSent(G, r, G.deviceId) };
 }
 // Which step this phone's drawing round is on (so the phone can buzz on each new step).
 export function myDrawStep(G) {

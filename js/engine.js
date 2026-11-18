@@ -251,6 +251,13 @@ export function lockDDWager(s, { team, wager }, ctx) {
 }
 
 const reboundMs = (s) => ((s.settings && s.settings.reboundSeconds) || 30) * 1000;
+// Fair buzzing: the buzzers open at a set moment a little in the future, so every phone
+// knows about it in time and lights up at the same instant (by the shared clock). Each
+// press is stamped with that clock; the fastest press wins — not the first message to
+// reach the server. After the first press, we wait BUZZ_GRACE_MS for slower phones'
+// presses to arrive before deciding.
+export const OPEN_LEAD_MS = 700;
+export const BUZZ_GRACE_MS = 600;
 // When the open buzzers close by themselves: a rebound always has a time limit; the first
 // open only if a buzz-in window is set.
 export function buzzDeadline(c, settings) {
@@ -259,22 +266,27 @@ export function buzzDeadline(c, settings) {
   const secs = (settings && settings.buzzWindowSeconds) || 0;
   return secs > 0 ? c.openedAt + secs * 1000 : null;
 }
-export function openBuzzers(s, _p, ctx) {
+// at: when to open (the read-the-question timer); otherwise OPEN_LEAD_MS from now.
+export function openBuzzers(s, { at } = {}, ctx) {
   const c = s.clue;
   if (!c || !["reading", "paused"].includes(c.stage)) return null;
   if (TEAMS.every((t) => c.blocked.includes(t))) return null;
+  const openAt = Math.max(ctx.now + 300, Number(at) || ctx.now + OPEN_LEAD_MS);
   return builder(s, ctx).field("clue", {
-    ...c, stage: "open", buzzRound: c.buzzRound + 1, openedAt: ctx.now, locked: null, mcq: null, timeUp: null,
-    windowUntil: c.blocked.length ? ctx.now + reboundMs(s) : null,
+    ...c, stage: "open", buzzRound: c.buzzRound + 1, openedAt: openAt, locked: null, order: null, mcq: null, timeUp: null,
+    windowUntil: c.blocked.length ? openAt + reboundMs(s) : null,
   }).done();
 }
 
+// The read-the-question timer: scheduled just before it runs out, so the buzzers open
+// exactly when it hits zero.
 export function autoOpen(s, { pickedAt }, ctx) {
   const c = s.clue;
   const secs = (s.settings && s.settings.readSeconds) || 0;
   if (!c || c.stage !== "reading" || c.pickedAt !== pickedAt || secs <= 0) return null;
-  if (ctx.now < c.pickedAt + secs * 1000 - 60) return null;
-  return openBuzzers(s, {}, ctx);
+  const at = c.pickedAt + secs * 1000;
+  if (ctx.now < at - OPEN_LEAD_MS - 100) return null;
+  return openBuzzers(s, { at }, ctx);
 }
 
 export function pauseBuzzers(s, _p, ctx) {
@@ -283,14 +295,31 @@ export function pauseBuzzers(s, _p, ctx) {
   return builder(s, ctx).field("clue", { ...c, stage: "paused" }).done();
 }
 
-export function claimBuzz(s, { me, buzzRound, pun }, ctx) {
+// Decide who buzzed first. candidates: the presses seen so far ({ deviceId, name, team,
+// t = press time by the shared clock }). The earliest press wins; it can only be decided
+// once BUZZ_GRACE_MS has passed since that press (slower phones' presses may still be on
+// their way). Also returns the runners-up with their reaction times.
+export function claimBuzz(s, { buzzRound, candidates, pun }, ctx) {
   const c = s.clue;
   if (!c || c.stage !== "open" || c.buzzRound !== buzzRound) return null;
-  if (!me || !TEAMS.includes(me.team) || c.blocked.includes(me.team)) return null;
+  const presses = (Array.isArray(candidates) ? candidates : [])
+    .filter((b) => b && b.deviceId && TEAMS.includes(b.team) && !c.blocked.includes(b.team) && Number.isFinite(b.t) && b.t >= c.openedAt - 30)
+    .sort((a, b) => a.t - b.t || (a.seq || 0) - (b.seq || 0));
+  if (!presses.length) return null;
+  const w = presses[0];
+  if (ctx.now < w.t + BUZZ_GRACE_MS - 50) return null; // too soon to be sure
+  const seen = new Set();
+  const order = [];
+  for (const b of presses) {
+    if (seen.has(b.deviceId)) continue;
+    seen.add(b.deviceId);
+    order.push({ name: String(b.name || "").slice(0, 20), team: b.team, ms: Math.max(0, Math.round(b.t - c.openedAt)) });
+    if (order.length >= 5) break;
+  }
   return builder(s, ctx).field("clue", {
     ...c, stage: "answering",
-    locked: { deviceId: me.deviceId, name: me.name, team: me.team, at: ctx.now },
-    pun: pun || null, timeUp: null, mcq: null,
+    locked: { deviceId: w.deviceId, name: String(w.name || "").slice(0, 20), team: w.team, at: ctx.now, ms: order[0].ms },
+    order, pun: pun || null, timeUp: null, mcq: null,
   }).sfx("buzz").done();
 }
 
@@ -323,7 +352,8 @@ function resolve(s, outcome, ctx, extra = {}) {
   if (!remaining.length) {
     b.field("clue", { ...base, stage: "done", result: "nobody", blocked, locked: null, revealed: true });
   } else if (s.settings && s.settings.autoRebound) {
-    b.field("clue", { ...base, stage: "open", blocked, locked: null, buzzRound: c.buzzRound + 1, openedAt: ctx.now, timeUp: null, mcq: null, submitted: null, windowUntil: ctx.now + reboundMs(s) });
+    const openAt = ctx.now + OPEN_LEAD_MS;
+    b.field("clue", { ...base, stage: "open", blocked, locked: null, order: null, buzzRound: c.buzzRound + 1, openedAt: openAt, timeUp: null, mcq: null, submitted: null, windowUntil: openAt + reboundMs(s) });
   } else {
     b.field("clue", { ...base, stage: "paused", blocked, locked: null, timeUp: null, mcq: null });
   }
@@ -1059,17 +1089,23 @@ export function miniDrawJudge(s, { id, matchId, scores = {} }, ctx) {
   if (!g || g.mode !== "draw") return null;
   const r = drawRound(g);
   if (!r || (matchId && r.id !== matchId)) return null;
-  const num = (v) => (v !== null && v !== "" && Number.isFinite(Number(v)) ? clamp(Math.round(Number(v)), [0, 100]) : null);
-  const sc = {};
-  for (const d of r.drawers) sc[d.id] = (r.done || {})[d.id] ? num(scores[d.id]) : null;
-  const ranked = drawRanking({ ...r, scores: sc });
+  const num = (v) => (v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v)) ? clamp(Math.round(Number(v)), [0, 100]) : null);
+  // Drawings are their own documents; the judge passes a score for each one it found (and
+  // null for anyone who didn't send). Older rounds marked each drawing as it arrived.
+  const marked = Object.keys(r.done || {}).length > 0;
+  const sc = {}, done = {};
+  for (const d of r.drawers) {
+    sc[d.id] = !marked || r.done[d.id] ? num(scores[d.id]) : null;
+    if (sc[d.id] != null) done[d.id] = true;
+  }
+  const ranked = drawRanking({ ...r, done, scores: sc });
   const top = ranked.length ? ranked[0].score : null;
   const topTeams = new Set(ranked.filter((x) => top != null && x.score === top).map((x) => x.team));
   const winner = topTeams.size === 1 ? [...topTeams][0] : "tie";
   const res = miniMatch(s, { id, matchId: r.id, winner }, ctx);
   if (!res || res.error) return res;
   const minis = res.set.minis;
-  res.set.minis = { ...minis, list: minis.list.map((x) => (x.id === id ? { ...x, matches: x.matches.map((y) => (y.id === r.id ? { ...y, scores: sc, judged: ctx.now } : y)) } : x)) };
+  res.set.minis = { ...minis, list: minis.list.map((x) => (x.id === id ? { ...x, matches: x.matches.map((y) => (y.id === r.id ? { ...y, done, scores: sc, judged: ctx.now } : y)) } : x)) };
   return res;
 }
 

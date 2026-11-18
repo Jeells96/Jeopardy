@@ -102,6 +102,11 @@ export function hostSteps(G, { privateView = false } = {}) {
       btn("🙅 Nobody — reveal", "act", act("nobody"), "ghost", "N");
       return { status, panel, buttons: B };
     }
+    if (c.stage === "open" && G.now() < c.openedAt) {
+      status = "🔔 Buzzers opening…";
+      btn("🙅 Nobody knows — reveal", "act", act("nobody"), "ghost", "N");
+      return { status, panel, buttons: B };
+    }
     if (c.stage === "open") {
       const until = E.buzzDeadline(c, set);
       const cd = until ? ` <span class="pill-cd"><span class="cd" data-deadline="${until}" data-format="s"></span></span>` : "";
@@ -130,7 +135,8 @@ export function hostSteps(G, { privateView = false } = {}) {
         : `<span class="pill-cd"><span class="cd" data-deadline="${L.at + (set.answerSeconds || 15) * 1000}" data-format="s"></span></span>`;
       const heard = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard-line">✍️ “${esc(G.spoken.text)}”</div>` : "";
       const isMcq = q && q.type === "mcq";
-      status = `${who} ${c.dd ? verb(tn(G, L.team), "is", "are") : "is"} answering ${clock}${isMcq ? `<div class="muted">They choose on ${c.dd ? "their team's phones" : "their phone"} — scored automatically.</div>` : ""}${heard}`;
+      const fastest = !c.dd && c.order && c.order.length ? `<div class="muted fastest">⚡ ${c.order.slice(0, 3).map((o) => `${esc(o.name)} ${(o.ms / 1000).toFixed(2)}s`).join(" · ")}</div>` : "";
+      status = `${who} ${c.dd ? verb(tn(G, L.team), "is", "are") : "is"} answering ${clock}${fastest}${isMcq ? `<div class="muted">They choose on ${c.dd ? "their team's phones" : "their phone"} — scored automatically.</div>` : ""}${heard}`;
       if (isMcq) {
         btn("✗ Mark wrong", "act", act("judge", { result: "wrong" }), "bad", "W");
         btn("Skip (no penalty)", "act", act("judge", { result: "skip" }), "ghost", "S");

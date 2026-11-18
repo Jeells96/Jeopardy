@@ -84,6 +84,13 @@ function choices(G, c, q) {
     ? `<button class="mcqbtn" data-action="mcq" data-i="${i}"${c.eliminated.includes(i) ? " disabled" : ""}><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></button>` : "").join("")}</div>`;
 }
 
+// Who was fastest, to the hundredth of a second (and how you did, if you buzzed).
+function reactionLine(G, c, key) {
+  const order = c.order || [];
+  if (!order.length) return "";
+  const mineMs = G.myBuzzKey === key && Number.isFinite(G.myBuzzMs) && !order.some((o) => o.name === (G.me && G.me.name)) ? G.myBuzzMs : null;
+  return `<div class="reaction">${order.slice(0, 3).map((o) => `<span class="${o.team}">⚡ ${esc(o.name)} ${(o.ms / 1000).toFixed(2)}s</span>`).join("")}${mineMs != null ? `<span class="me">you ${(mineMs / 1000).toFixed(2)}s</span>` : ""}</div>`;
+}
 function clueBody(G) {
   const S = G.S;
   const me = G.me;
@@ -98,11 +105,15 @@ function clueBody(G) {
     return `<div class="ph-card dd-card"><div class="dd-mini">DAILY DOUBLE!</div><p>${mine ? "Your team found it! Tell Jaren your wager." : c.dd.team ? `${esc(tn(G, c.dd.team))} found it and ${verb(tn(G, c.dd.team), "is", "are")} wagering…` : "Someone found a Daily Double!"}</p><small class="muted">${esc(q.category)}</small></div>`;
   }
   if (c.stage === "reading") {
-    return `${clueBox(G, c, q)}<button class="buzz wait" disabled aria-label="Buzzer not open yet"><span>WAIT</span><small>Buzzers open soon</small></button>`;
+    if (Date.now() < (G.earlyUntil || 0)) return `${clueBox(G, c, q)}<button class="buzz early" data-action="buzz" aria-label="Too soon"><span>TOO SOON!</span><small>Wait for it to turn green</small></button>`;
+    return `${clueBox(G, c, q)}<button class="buzz wait" data-action="buzz" aria-label="Buzzer not open yet"><span>WAIT</span><small>Buzzers open soon</small></button>`;
   }
   if (c.stage === "open") {
     if (c.blocked.includes(me.team)) return `${clueBox(G, c, q)}<div class="ph-note">Your team already had a go — fingers crossed! 🤞</div>`;
-    if (G.myBuzzKey === key) return `${clueBox(G, c, q)}<button class="buzz sent" disabled><span>BUZZED!</span><small>Checking who was first…</small></button>`;
+    if (G.myBuzzKey === key) return `${clueBox(G, c, q)}<button class="buzz sent" disabled><span>BUZZED!</span><small>⚡ ${(G.myBuzzMs / 1000).toFixed(2)}s — checking who was fastest…</small></button>`;
+    if (Date.now() < (G.earlyUntil || 0)) return `${clueBox(G, c, q)}<button class="buzz early" data-action="buzz" aria-label="Too soon"><span>TOO SOON!</span><small>Wait for it to turn green</small></button>`;
+    // Not open yet (it opens at the same instant on every phone): pressing now is too soon.
+    if (G.now() < c.openedAt) return `${clueBox(G, c, q)}<button class="buzz wait" data-action="buzz" aria-label="Buzzer not open yet"><span>WAIT…</span><small>Get ready</small></button>`;
     const until = E.buzzDeadline(c, S.settings);
     return `${clueBox(G, c, q)}<button class="buzz live" data-action="buzz" aria-label="Buzz in"><span>BUZZ!</span>${c.blocked.length ? "<small>Steal it!</small>" : ""}</button>${until ? timer(until, until - c.openedAt) : ""}`;
   }
@@ -130,7 +141,7 @@ function clueBody(G) {
     return `<div class="${cls("punbox", mine ? "ours" : "theirs")}" data-key="pun-${esc(key)}">
         <div class="pun-who">🔔 ${esc(L.name)} buzzed in${mine ? " for your team!" : ""}</div>
         <div class="pun-line">${esc(line)}</div>
-      </div>${clock}${clueBox(G, c, q)}`;
+      </div>${reactionLine(G, c, key)}${clock}${clueBox(G, c, q)}`;
   }
 
   if (c.stage === "done") {
