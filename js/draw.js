@@ -130,6 +130,19 @@ export function svg(strokesEncoded, cls = "") {
   return `<svg class="drawing ${cls}" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${lines}</svg>`;
 }
 
+// A ready-made picture up to step `upto` (0-based): earlier steps in black, the newest in red.
+export function svgSteps(steps, upto, cls = "") {
+  const parts = [];
+  steps.forEach((st, i) => {
+    if (i > upto) return;
+    for (const s of decode(st.strokes)) {
+      const c = i === upto ? "now" : "done";
+      parts.push(s.length === 1 ? `<circle class="${c}" cx="${s[0][0]}" cy="${s[0][1]}" r="9"/>` : `<polyline class="${c}" points="${s.map((p) => p.join(",")).join(" ")}"/>`);
+    }
+  });
+  return `<svg class="drawing steps ${cls}" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${parts.join("")}</svg>`;
+}
+
 // ---------------------------------------------------------------- the drawing pad (browser only)
 // Strokes live here, not on the page, so the screen can refresh while someone draws.
 const pads = new Map(); // key -> { strokes: [[x,y],…][] }

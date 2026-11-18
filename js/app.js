@@ -10,7 +10,8 @@ import { hostSteps } from "./ui/dock.js";
 import { PRESETS, itemSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import * as Dr from "./draw.js";
-import { subDocId } from "./ui/minis.js";
+import { subDocId, myDrawStep } from "./ui/minis.js";
+import { builtinStrokes, isBuiltin } from "./pictures.js";
 import { renderLibrary } from "./ui/library.js";
 import { findQ } from "./ui/stage.js";
 import { initLibrary, libClick, libChange, libInput, splitOldDoubleJeopardy } from "./libctl.js";
@@ -386,7 +387,7 @@ async function judgeDrawMatch(gid, mid) {
     const g = E.miniById(G.S, gid);
     const m = g && g.matches.find((x) => x.id === mid);
     if (!m || m.winner) return;
-    const ref = await D.loadDrawing(m.pic);
+    const ref = isBuiltin(m.pic) ? { strokes: builtinStrokes(m.pic) } : await D.loadDrawing(m.pic);
     const scores = {};
     for (const t of E.TEAMS) {
       if (!(m.done && m.done[t])) { scores[t] = null; continue; }
@@ -397,6 +398,14 @@ async function judgeDrawMatch(gid, mid) {
     await D.act("miniDrawJudge", { id: gid, matchId: mid, scores });
   } catch (e) { console.warn("judge", e); }
   finally { setTimeout(() => judging.delete(mid), 3000); }
+}
+// Drawers have the phone on their head: a buzz tells them a new step is up.
+let lastDrawStep = null;
+function drawStepBuzz() {
+  if (!isPlayerRoute() || !G.me || !G.S) return;
+  const k = myDrawStep(G);
+  if (k && lastDrawStep && k !== lastDrawStep && /:step:|:done:/.test(k)) vibrate(k.includes(":done:") ? [200, 80, 200, 80, 200] : [250]);
+  if (k !== lastDrawStep) { lastDrawStep = k; render(); }
 }
 function drawAutomations(S) {
   const M = E.minisOf(S);
@@ -433,14 +442,25 @@ async function handle(a, p, el) {
     case "drawer-close": G.ui.drawer = false; releaseFocus(); return render();
     case "pad-clear": Dr.clearPad(el.dataset.pad); return;
     case "draw-pic-new": G.ui.modal = { type: "miniDrawPic", id: el.dataset.id }; render(); return;
+    case "draw-gallery": G.ui.modal = { type: "miniDrawGallery", id: el.dataset.id }; render(); return;
+    case "draw-builtin-toggle": {
+      const g = E.miniById(G.S, el.dataset.id);
+      if (!g) return;
+      const pics = g.pics || [], id = el.dataset.pic;
+      await D.act("miniUpdate", { id: g.id, patch: { pics: pics.includes(id) ? pics.filter((x) => x !== id) : [...pics, id] } });
+      return;
+    }
     case "draw-pic-save": {
       const g = E.miniById(G.S, el.dataset.id);
       const key = "ref-" + el.dataset.id;
       const strokes = Dr.padStrokes(key);
       if (!g || Dr.inkCount(strokes) < 4) return toast("Draw the picture first.", "bad");
+      const stepsEl = document.getElementById("draw-pic-steps");
+      const steps = Math.round(Number(stepsEl && stepsEl.value));
+      if (!(steps >= 1 && steps <= 10)) { if (stepsEl) stepsEl.focus(); return toast("Type how many steps you'll describe (1–10).", "bad"); }
       const docId = "drawpic-" + Math.random().toString(36).slice(2, 10);
-      await D.saveDrawing(docId, { kind: "drawpic", strokes });
-      await D.act("miniUpdate", { id: g.id, patch: { pics: [...(g.pics || []), docId] } });
+      await D.saveDrawing(docId, { kind: "drawpic", strokes, steps });
+      await D.act("miniUpdate", { id: g.id, patch: { pics: [...(g.pics || []), docId], picSteps: { ...(g.picSteps || {}), [docId]: steps } } });
       Dr.clearPad(key);
       G.ui.modal = null;
       render();
@@ -741,7 +761,7 @@ function boot() {
   D.syncClock().then(render);
   setInterval(() => D.syncClock(), 180000);
   if (G.me) D.registerSelf().then((ok) => { if (!ok) { G.me = null; G.seenSelf = false; G.ui.kicked = true; render(); } }).catch(() => {});
-  setInterval(() => { tick(); automations(); }, 100);
+  setInterval(() => { tick(); automations(); drawStepBuzz(); }, 100);
   // Re-render once a second so time-based bits (e.g. the board fill animation) settle.
   setInterval(() => { if (route() !== "questions") render(); }, 1000);
 }

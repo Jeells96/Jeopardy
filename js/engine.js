@@ -625,8 +625,21 @@ function cleanMini(src) {
     table: String(src.table == null ? "" : src.table).trim().slice(0, 24), // "" = all tables at once
     mode,
     // Blind drawing: the host's pictures (ids of state/drawpic-* docs), used in turn.
-    pics: mode === "draw" && Array.isArray(src.pics) ? src.pics.filter((x) => typeof x === "string" && x).slice(0, 40) : [],
+    pics: mode === "draw" && Array.isArray(src.pics) ? [...new Set(src.pics.filter((x) => typeof x === "string" && x))].slice(0, 40) : [],
+    // How many steps each hand-drawn picture has (ready-made ones know their own steps).
+    picSteps: mode === "draw" ? cleanPicSteps(src.picSteps, src.pics) : {},
+    stepSeconds: clamp(Math.round(Number(src.stepSeconds)) || 20, [5, 120]), // a new step every this many seconds
   };
+}
+
+function cleanPicSteps(steps, pics) {
+  const out = {};
+  for (const id of Array.isArray(pics) ? pics : []) {
+    if (typeof id !== "string" || id.startsWith("builtin:")) continue;
+    const n = Math.round(Number(steps && steps[id]));
+    out[id] = Number.isFinite(n) && n >= 1 ? Math.min(n, 10) : 1;
+  }
+  return out;
 }
 
 // Who's winning a mini game right now.
@@ -974,6 +987,17 @@ export function miniMatch(s, { id, winner, matchId }, ctx) {
   return b.sfx(winner === "tie" ? "buzz" : "correct").done();
 }
 // ---------- blind drawing ----------
+// Start the round: the steps start appearing on the big screen (after a 3-second countdown)
+// for every table that's ready.
+export const DRAW_COUNTDOWN_MS = 3000;
+export function miniDrawStart(s, { id }, ctx) {
+  const g = miniById(s, id);
+  if (!g || g.mode !== "draw" || g.status !== "active") return null;
+  const ready = openMatches(g).filter((m) => !m.startedAt);
+  if (!ready.length) return null;
+  const at = ctx.now + DRAW_COUNTDOWN_MS;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((m) => (ready.some((r) => r.id === m.id) ? { ...m, startedAt: at } : m)) })))).sfx("pick").done();
+}
 // A drawer's phone sent its drawing (the drawing itself is saved in its own document).
 export function miniDrawSubmitted(s, { id, matchId, team }, ctx) {
   const g = miniById(s, id);
@@ -1127,7 +1151,7 @@ export const ACTIONS = {
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
-  miniSetTable, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
+  miniSetTable, miniDrawStart, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
   miniTables, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

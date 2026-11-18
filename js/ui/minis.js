@@ -4,6 +4,7 @@ import { esc, money, cls, verb } from "./util.js";
 import * as E from "../engine.js";
 import { summonText } from "../summons.js";
 import * as Dr from "../draw.js";
+import { PICTURES, BUILTIN, builtin, isBuiltin, builtinStrokes } from "../pictures.js";
 import { cachedDrawing, loadDrawing } from "../data.js";
 
 const tn = (G, t) => E.teamName(G.S || {}, t);
@@ -12,6 +13,7 @@ const isDraw = (g) => !!g && g.mode === "draw";
 const typeLabel = (g) => (isDraw(g) ? TYPE_LABEL.draw : TYPE_LABEL[g.type]);
 // A saved drawing as a picture; loads it (and refreshes the screen) the first time it's needed.
 function drawingSvg(G, docId, cls = "") {
+  if (isBuiltin(docId)) return Dr.svg(builtinStrokes(docId) || [], cls);
   const d = docId ? cachedDrawing(docId) : null;
   if (d) return Dr.svg(d.strokes, cls);
   if (docId && !(G.drawLoading || (G.drawLoading = new Set())).has(docId)) {
@@ -428,10 +430,22 @@ export function miniModal(G, m) {
   if (m.type === "miniDrawPic") {
     return `<div class="modal-scrim"></div><div class="modal drawmodal" role="dialog">
       <h3>✏️ Draw a picture for “${esc(g.name)}”</h3>
-      <p class="muted small">Players never see this. You'll describe it while they draw blind, then the website judges whose drawing is closest. Simple shapes work best (a star, a tree, a snowman…).</p>
+      <p class="muted small">Keep it Christmassy and simple (finger-sized shapes). The big screen only shows “Step 2 of 4” for a picture you draw yourself — you describe each step out loud — so plan your steps as you draw.</p>
       <div class="padbox" data-keep data-key="padbox-ref-${esc(g.id)}"><canvas class="drawpad" data-pad="ref-${esc(g.id)}"></canvas></div>
+      <label class="xf stepsfield"><span>How many steps will you describe? <small>required</small></span><input id="draw-pic-steps" type="number" inputmode="numeric" min="1" max="10" placeholder="e.g. 3" data-sticky></label>
       <div class="btnrow end"><button class="btn ghost" data-action="pad-clear" data-pad="ref-${esc(g.id)}">Start over</button>${cancel()}<button class="btn primary" data-action="draw-pic-save" data-id="${esc(g.id)}">Save picture</button></div>
     </div>`;
+  }
+  if (m.type === "miniDrawGallery") {
+    const have = new Set(g.pics || []);
+    return wrap(`<h3>🎄 Ready-made Christmas drawings</h3>
+      <p class="muted small">Each one is built up step by step on the big screen, with an example of what the drawing should look like so far. Tap to add or remove.</p>
+      <div class="gallery">${PICTURES.map((p) => {
+        const id = BUILTIN + p.key, on = have.has(id);
+        return `<button class="${cls("gpic", on && "on")}" data-action="draw-builtin-toggle" data-id="${esc(g.id)}" data-pic="${esc(id)}" aria-pressed="${on}">
+          ${Dr.svg(p.steps.flatMap((s) => s.strokes), "thumb")}<b>${esc(p.name)}</b><small>${p.steps.length} steps</small><em>${on ? "✓ Added" : "+ Add"}</em></button>`;
+      }).join("")}</div>
+      <div class="btnrow end">${cancel("Done")}</div>`, true);
   }
   if (m.type === "miniReset") {
     return wrap(`<h3>Reset “${esc(g.name)}”?</h3><p>Its results are cleared and any points it gave out are taken back.</p>
@@ -625,11 +639,49 @@ export function playerMinis(G, extra = "") {
 // =====================================================================
 function picsBlock(G, g) {
   const pics = g.pics || [];
+  const steps = (id) => picTotalSteps(g, id);
   return `<div class="mini-row picrow">
-    <span class="muted">Pictures (${pics.length})${pics.length ? ` — used in turn, one per round` : " — draw at least one"}</span>
-    <div class="pics">${pics.map((id, i) => `<span class="pic" data-key="pic-${esc(id)}">${drawingSvg(G, id, "thumb")}<button class="x" ${actAttr("miniUpdate", { id: g.id, patch: { pics: pics.filter((x) => x !== id) } })} title="Delete this picture">✕</button><small>${i + 1}</small></span>`).join("")}
-      <button class="btn primary sm" data-action="draw-pic-new" data-id="${esc(g.id)}">+ Draw a picture</button></div>
+    <span class="muted">Pictures (${pics.length})${pics.length ? ` — used in turn, one per round` : " — add at least one"}</span>
+    <div class="pics">${pics.map((id, i) => `<span class="pic" data-key="pic-${esc(id)}">${drawingSvg(G, id, "thumb")}<button class="x" ${actAttr("miniUpdate", { id: g.id, patch: { pics: pics.filter((x) => x !== id) } })} title="Remove this picture">✕</button><small>${i + 1} · ${steps(id)} step${steps(id) === 1 ? "" : "s"}${isBuiltin(id) ? "" : " ✍️"}</small></span>`).join("")}</div>
+    <div class="btnrow"><button class="btn primary sm" data-action="draw-gallery" data-id="${esc(g.id)}">🎄 Ready-made drawings</button><button class="btn ghost sm" data-action="draw-pic-new" data-id="${esc(g.id)}">✍️ Draw my own</button></div>
+    <label class="pts steps"><span>New step every</span><input type="number" inputmode="numeric" min="5" max="120" value="${g.stepSeconds || 20}" aria-label="Seconds per step" data-change="mini-field" data-id="${esc(g.id)}" data-f="stepSeconds" data-key="mf-${esc(g.id)}-stepSeconds"><span>seconds</span></label>
   </div>`;
+}
+const picTotalSteps = (g, id) => (builtin(id) ? builtin(id).steps.length : (g.picSteps && g.picSteps[id]) || 1);
+// Where a drawing round is: waiting for the host to start, counting down, on step i, or done.
+function drawPhase(G, g, m) {
+  if (!m.startedAt) return { stage: "ready" };
+  const now = G.now();
+  if (now < m.startedAt) return { stage: "countdown", endsAt: m.startedAt };
+  const total = picTotalSteps(g, m.pic), ms = (g.stepSeconds || 20) * 1000;
+  const i = Math.floor((now - m.startedAt) / ms);
+  if (i < total) return { stage: "step", i, total, endsAt: m.startedAt + (i + 1) * ms };
+  return { stage: "done", total };
+}
+const cd = (t) => `<span class="cd" data-deadline="${t}" data-format="s"></span>`;
+// The step on the big screen: what to draw now, and (for ready-made pictures) what the
+// drawing should look like so far.
+function stepPanel(G, g, m, size = "") {
+  const ph = drawPhase(G, g, m);
+  const pic = builtin(m.pic);
+  if (ph.stage === "ready") return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-ready"><div class="sp-text"><div class="sp-big">Get ready! 🎄</div><div>Drawers: phone on your head, eyes on this screen.</div></div></div>`;
+  if (ph.stage === "countdown") return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-cd"><div class="sp-text"><div class="sp-big">Starting in ${cd(ph.endsAt)}</div><div>Phones on heads!</div></div></div>`;
+  if (ph.stage === "done") return `<div class="steppanel ${size} done" data-key="sp-${esc(m.id)}-done"><div class="sp-text"><div class="sp-big">✋ Pencils down!</div><div>Take the phone off your head and <b>hold Send</b>.</div></div>${pic ? Dr.svgSteps(pic.steps, pic.steps.length - 1, "example") : ""}</div>`;
+  const text = pic ? pic.steps[ph.i].text : "Listen to Jaren!";
+  return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-${ph.i}">
+    ${pic ? Dr.svgSteps(pic.steps, ph.i, "example") : ""}
+    <div class="sp-text"><div class="sp-step">Step ${ph.i + 1} of ${ph.total}</div><div class="sp-big">${esc(text)}</div>
+      <div class="sp-time">⏱ ${cd(ph.endsAt)}${ph.i + 1 < ph.total ? " until the next step" : " left"}</div></div>
+  </div>`;
+}
+// Open matchups that started together with the same picture share one step panel.
+function stepGroups(g) {
+  const groups = new Map();
+  for (const m of E.openMatches(g)) {
+    const k = `${m.pic}|${m.startedAt || "ready"}`;
+    if (!groups.has(k)) groups.set(k, m);
+  }
+  return [...groups.values()];
 }
 // The latest matchup at each table (or the only spot): playing now, or its result.
 function latestPerTable(G, g) {
@@ -648,7 +700,8 @@ function drawCard(G, g, m) {
   if (m.free) return `<div class="tcard free" data-key="dc-free-${esc(m.table)}">${where}<div class="tc-free">Free — next round 🎲</div></div>`;
   if (!m.winner) {
     const it = pickOf(G.S, m.id);
-    const status = (team) => (m.done && m.done[team] ? `<em class="dd ok">✓ Done</em>` : `<em class="dd">✏️ Drawing…</em>`);
+    const ph = drawPhase(G, g, m);
+    const status = (team) => (m.done && m.done[team] ? `<em class="dstat ok">✓ Sent</em>` : ph.stage === "ready" || ph.stage === "countdown" ? `<em class="dstat">🎄 Getting ready</em>` : `<em class="dstat">✏️ Drawing…</em>`);
     const side = (team, p) => `<span class="${team}">${p ? spin(namesOn(G, team), p.name, p.at, "tspin") : esc(tn(G, team))}${itemSpinning(G, it) ? "" : status(team)}</span>`;
     return `<div class="tcard" data-key="dc-${esc(m.id)}">${where}<div class="tc-vs">${side("team1", m.p1)}<i>vs</i>${side("team2", m.p2)}</div>
       ${!itemSpinning(G, it) && itemSummon(it) ? `<div class="tc-sum">${esc(itemSummon(it))}</div>` : ""}</div>`;
@@ -674,6 +727,7 @@ function drawView(G, M, g) {
   const past = g.matches.filter((x) => x.winner).slice(-5).reverse();
   return `<div class="mgame mgame--draw" data-key="mg-${esc(g.id)}">
     ${gameHead(M, g)}
+    ${stepGroups(g).filter((m) => !itemSpinning(G, pickOf(G.S, m.id))).map((m) => stepPanel(G, g, m)).join("")}
     ${cards.length ? `<div class="tcards n${Math.min(cards.length, 4)}">${cards.map((m) => drawCard(G, g, m)).join("")}</div>` : `<div class="mg-wait">Who's drawing first? 🎲</div>`}
     <div class="tally">
       <span class="t team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span>
@@ -694,9 +748,13 @@ function drawSteps(G, g, { btn, act, B, st, n1, n2 }) {
     btn("↩ Games list", "act", act("miniClose"));
     return { status, panel, buttons: B };
   }
-  // The picture(s) to describe, private to the host.
-  const pics = [...new Set(open.map((m) => m.pic).filter(Boolean))];
-  const describe = pics.length ? `<div class="describe">${pics.map((p) => `<div class="desc-pic"><small>Describe this picture 🤫</small>${drawingSvg(G, p, "host")}</div>`).join("")}</div>` : "";
+  // What's on the big screen right now (and, for your own pictures, the picture to describe).
+  const describe = stepGroups(g).map((m) => {
+    const ph = drawPhase(G, g, m);
+    const mine = !isBuiltin(m.pic);
+    return `<div class="describe">${mine ? `<div class="desc-pic"><small>${ph.stage === "step" ? `Describe step ${ph.i + 1} of ${ph.total} 🤫` : "Your picture 🤫"}</small>${drawingSvg(G, m.pic, "host")}</div>` : ""}${stepPanel(G, g, m, "small")}</div>`;
+  }).join("");
+  const notStarted = open.filter((m) => !m.startedAt && !itemSpinning(G, pickOf(G.S, m.id)));
   const rows = open.map((m) => {
     const it = pickOf(G.S, m.id);
     const a = sideName(G, m, "team1"), b = sideName(G, m, "team2");
@@ -722,7 +780,8 @@ function drawSteps(G, g, { btn, act, B, st, n1, n2 }) {
     panel = results + (E.minisTables(G.S).length ? "" : tablePicker(G, g, null));
   }
   const slots = E.miniSlots(G.S, g).filter((t) => t !== null);
-  if (free.length) btn(open.length ? `🎲 Draw for ${free.length === 1 && free[0] ? free[0] : `${free.length} free tables`}` : slots.length > 1 ? `🎲 Draw for all ${slots.length} tables` : "🎲 Who's drawing?", "act", act("miniNext", { id: g.id }), "primary", "Space");
+  if (notStarted.length) btn(`▶ Start drawing <small>(new step every ${g.stepSeconds || 20}s)</small>`, "act", act("miniDrawStart", { id: g.id }), "primary", "Space");
+  if (free.length) btn(open.length ? `🎲 Draw for ${free.length === 1 && free[0] ? free[0] : `${free.length} free tables`}` : slots.length > 1 ? `🎲 Draw for all ${slots.length} tables` : "🎲 Who's drawing?", "act", act("miniNext", { id: g.id }), notStarted.length ? "ghost" : "primary", notStarted.length ? "" : "Space");
   btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, free.length ? "ghost" : "primary", "");
   btn("↩ Games list", "act", act("miniClose"));
   return { status, panel, buttons: B };
@@ -740,9 +799,14 @@ function drawPhone(G, g) {
     const rival = sideName(G, mine, E.otherTeam(team));
     if (mine.done && mine.done[team]) return `<div class="youup big">✓ Drawing sent!<small>Waiting for ${esc(rival)}… then the website judges.</small></div>`;
     const key = `sub-${mine.id}`;
-    return `<div class="drawfull" data-keep data-key="drawfull-${esc(mine.id)}">
-      <div class="df-top"><b>✏️ You vs ${esc(rival)}${mine.table ? ` · 📍 ${esc(mine.table)}` : ""}</b><span>Phone on your head — draw what Jaren describes!</span></div>
-      <div class="padbox"><canvas class="drawpad" data-pad="${esc(key)}"></canvas></div>
+    const ph = drawPhase(G, g, mine);
+    const prompt = ph.stage === "ready" ? "Get ready — phone on your head, eyes on the big screen!"
+      : ph.stage === "countdown" ? `Starting in ${cd(ph.endsAt)}… phone on your head!`
+      : ph.stage === "step" ? `Step ${ph.i + 1} of ${ph.total} — look at the big screen! (${cd(ph.endsAt)})`
+      : "✋ Pencils down! Take it off your head and hold Send.";
+    return `<div class="${cls("drawfull", ph.stage === "done" && "finished")}" data-key="drawfull-${esc(mine.id)}">
+      <div class="df-top"><b>✏️ You vs ${esc(rival)}${mine.table ? ` · 📍 ${esc(mine.table)}` : ""}</b><span>${prompt}</span></div>
+      <div class="padbox" data-keep data-key="padbox-${esc(mine.id)}"><canvas class="drawpad" data-pad="${esc(key)}"></canvas></div>
       <div class="df-btns"><button class="btn ghost" data-action="pad-clear" data-pad="${esc(key)}">Start over</button>
         <button class="btn primary holdbtn" data-hold="pad-submit" data-id="${esc(g.id)}" data-match="${esc(mine.id)}" data-team="${team}" data-pad="${esc(key)}"><span>Hold to send ✋</span></button></div>
     </div>`;
@@ -760,4 +824,15 @@ function drawPhone(G, g) {
   const st = E.miniStanding(g);
   return `${rows || `<div class="ph-note">Get ready — the next drawers are about to be picked! 🎲</div>`}${verdict}
     <div class="ph-tally"><span class="team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span><span>–</span><span class="team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span></div>`;
+}
+
+// Which step a phone's drawer is on (so the phone can buzz on each new step).
+export function myDrawStep(G) {
+  const M = E.minisOf(G.S);
+  const g = M.current ? E.miniById(G.S, M.current) : null;
+  if (!isDraw(g)) return null;
+  const m = E.openMatches(g).find((x) => (x.p1 && x.p1.id === G.deviceId) || (x.p2 && x.p2.id === G.deviceId));
+  if (!m) return null;
+  const ph = drawPhase(G, g, m);
+  return `${m.id}:${ph.stage}:${ph.i == null ? "" : ph.i}`;
 }

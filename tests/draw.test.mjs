@@ -1,6 +1,7 @@
 // Unit tests for Blind Drawing: the shape judge and the game rules — run with:  node tests/draw.test.mjs
 import * as Dr from "../js/draw.js";
 import * as E from "../js/engine.js";
+import { PICTURES, builtinStrokes, isBuiltin } from "../js/pictures.js";
 
 let passed = 0, failed = 0;
 function ok(cond, name) { if (cond) passed++; else { failed++; console.log("  ✗ " + name); } }
@@ -70,6 +71,32 @@ const m2 = E.openMatch(st.minis.list[0]);
 run("miniDrawJudge", { id: g0.id, matchId: m2.id, scores: { team1: 40, team2: 40 } });
 eq(st.minis.list[0].matches.find((x) => x.id === m2.id).winner, "tie", "equal scores tie");
 ok(!!E.ACTIONS.miniUpdate(st, { id: g0.id, patch: { type: "best" } }, { now: 1 }).error, "can't change the game type once it's started");
+
+// ---------- ready-made pictures ----------
+eq(PICTURES.length, 10, "10 ready-made pictures");
+ok(PICTURES.every((p) => p.steps.length >= 2 && p.steps.length <= 5), "each is built up in 2–5 steps");
+ok(PICTURES.every((p) => p.steps.every((st) => st.text.length > 10 && st.strokes.length >= 1 && st.strokes.length <= 4)), "every step says what to draw and is only a few strokes");
+ok(PICTURES.every((p) => Dr.decode(builtinStrokes("builtin:" + p.key)).flat().every(([x, y]) => x >= 0 && x <= 1000 && y >= 0 && y <= 1000)), "everything fits on the pad");
+ok(PICTURES.every((p) => Dr.matchPercent(builtinStrokes("builtin:" + p.key), builtinStrokes("builtin:" + p.key)) === 100), "each picture matches itself perfectly");
+ok(isBuiltin("builtin:tree") && !isBuiltin("drawpic-x"), "ready-made vs hand-drawn ids");
+eq(Dr.svgSteps(PICTURES[0].steps, 1).match(/class="now"/g).length, PICTURES[0].steps[1].strokes.length, "the example highlights the current step");
+
+// ---------- steps, timing and starting a round ----------
+{
+  let s2 = E.defaultState();
+  const r = (name, p, now = 1000) => { const x = E.ACTIONS[name](s2, p, { now, questions: [], players, rand: rnd }); if (x && !x.error) s2 = { ...s2, ...x.set }; return x; };
+  r("miniAdd", { game: { name: "Blind Drawing", type: "draw" } });
+  const gid = s2.minis.list[0].id;
+  eq(s2.minis.list[0].stepSeconds, 20, "a new step every 20 seconds by default");
+  r("miniUpdate", { id: gid, patch: { stepSeconds: 2, pics: ["builtin:tree", "drawpic-mine"], picSteps: { "drawpic-mine": 4, "builtin:tree": 9 } } });
+  eq([s2.minis.list[0].stepSeconds, s2.minis.list[0].picSteps], [5, { "drawpic-mine": 4 }], "at least 5 seconds a step; step counts kept only for hand-drawn pictures");
+  r("miniPlay", { id: gid });
+  r("miniNext", { id: gid });
+  ok(!E.openMatch(s2.minis.list[0]).startedAt, "a round waits for the host to start it");
+  r("miniDrawStart", { id: gid }, 5000);
+  eq(E.openMatch(s2.minis.list[0]).startedAt, 5000 + E.DRAW_COUNTDOWN_MS, "starting begins step 1 after a 3-second countdown");
+  ok(E.ACTIONS.miniDrawStart(s2, { id: gid }, { now: 9000, players }) === null, "starting again changes nothing");
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

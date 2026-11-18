@@ -72,19 +72,25 @@ and the points go straight onto the team's score and carry into Jeopardy.
 
 ### ✏️ Blind Drawing
 Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing" as a game's type).
-1. **Draw the pictures:** under the game, tap **+ Draw a picture**, draw it with your finger
-   and **Save picture**. Players never see these. Add a few — each round uses the next one.
-2. **Play:** the drawers' phones turn into a full-screen drawing pad. They put the phone on
-   their head and draw while you describe the picture (it's shown privately on your screen).
-   Nothing is sent while they draw, so nothing lags; when they're done they **hold Send**
-   (a quick tap won't send it by accident).
-3. **The website judges:** as soon as both drawings are in, it compares the **shapes** —
-   position, size, rotation and mirror image don't matter, so a good drawing that's off to
-   one side, tiny or upside down still wins, and a few stray lines are forgiven. The big
-   screen shows **the picture, the winner and the loser** side by side with a % match.
-   **⏭ Judge now** judges straight away if someone never sends (a missing drawing loses).
-- Only players with a phone are picked to draw. With tables set up, every table draws at
-  once (the same picture, so you only describe it once).
+1. **Pick the pictures:** under the game, tap **🎄 Ready-made drawings** and choose from 10
+   simple Christmas pictures (snowman & tree, Christmas tree, present, candy cane, stocking,
+   ornament, gingerbread man, Santa hat, wreath, candle), each built up in 2–5 steps. Or tap
+   **✍️ Draw my own** and type how many steps you'll describe. Each round uses the next picture.
+   Set how many seconds each step lasts ("New step every … seconds", default 20).
+2. **Play:** draw who's up, then **▶ Start drawing** when phones are on heads. After a 3-second
+   countdown the big screen shows **Step 1 of 3: "Draw a snowman…"** with an example of what
+   the drawing should look like so far (the new step in red), and moves to the next step
+   every X seconds. Drawers' phones show the step number and buzz on each new step. For a
+   picture you drew yourself, the screen shows "Step 2 of 4 — listen to Jaren" (no example),
+   and your screen shows the picture so you can describe each step.
+3. **Pencils down:** after the last step, drawers take the phone off their head and **hold
+   Send** (nothing is sent while they draw, so nothing lags).
+4. **The website judges** the shapes — position, size, rotation and mirror image don't matter,
+   and a few stray lines are forgiven. The big screen shows **the picture, the winner and the
+   loser** side by side with a % match. **⏭ Judge now** judges straight away if someone never
+   sends (a missing drawing loses).
+- Only players with a phone are picked to draw. With tables set up, every table draws the same
+  picture at the same time.
 
 ### Team names
 Teams start as **Husbands** and **Wives**. Until Jeopardy starts, anyone on a team can tap
@@ -297,6 +303,7 @@ Static site, no build step. Firebase and SheetJS load from CDNs.
 | `js/app.js` | Routing, live subscriptions, rendering, actions, automations, sounds, typed answers |
 | `js/summons.js` | Christmas summon lines for mini games played at several tables |
 | `js/draw.js` | Blind Drawing: drawing pad, storage format and the shape judge |
+| `js/pictures.js` | The 10 ready-made Christmas pictures, step by step |
 | `js/ui/*.js` | Screens: `stage` (show display), `host`, `dock` (next-step logic), `remote`, `player`, `join`, `minis` (all mini-game screens), `team` (phone renaming) |
 | `js/bank.js` | Question library logic: paste parser, checks, search, repeats, export |
 | `js/libctl.js` + `js/ui/library.js` | Question library screen |

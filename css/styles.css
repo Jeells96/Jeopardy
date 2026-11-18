@@ -1148,8 +1148,8 @@ p.small { font-size: 13px; margin: 6px 0 0; }
 .desc-pic { display: flex; flex-direction: column; gap: 4px; align-items: center; }
 .desc-pic small { color: var(--gold); font-weight: 700; }
 .drawing.host { width: 150px; }
-.tc-vs em.dd { display: block; font: 600 clamp(11px, 1.6vh, 18px) var(--ui); font-style: normal; color: rgba(255, 255, 255, 0.75); }
-.tc-vs em.dd.ok { color: #7dffb0; }
+.tc-vs em.dstat { display: block; font: 600 clamp(11px, 1.6vh, 18px) var(--ui); font-style: normal; color: rgba(255, 255, 255, 0.75); }
+.tc-vs em.dstat.ok { color: #7dffb0; }
 .tcard.result { padding: 1vh 0.8vw; }
 .dpanels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8vw; margin-top: 0.6vh; }
 .dpanel { display: flex; flex-direction: column; gap: 0.4vh; align-items: center; min-width: 0; }
@@ -1169,3 +1169,30 @@ svg.drawing { height: auto; }
 svg.drawing.host { width: 150px; height: 150px; flex: none; }
 svg.drawing.thumb { width: 64px; height: 64px; flex: none; }
 .dpanels svg.drawing { height: auto; aspect-ratio: 1; }
+
+/* ---- blind drawing: steps ---- */
+.drawing.steps polyline.done { stroke: #222; }
+.drawing.steps polyline.now { stroke: #d7263d; stroke-width: 18; }
+.drawing.steps circle.now { fill: #d7263d; }
+.steppanel { display: flex; align-items: center; gap: 2vw; width: min(1300px, 100%); margin: 1vh auto; padding: 1.4vh 1.6vw; border-radius: 18px; background: rgba(0, 0, 0, 0.3); border: 3px solid var(--gold); animation: summon-in 0.4s ease-out both; }
+.steppanel svg.example { width: min(34vh, 30%); height: auto; aspect-ratio: 1; flex: none; }
+.sp-text { display: flex; flex-direction: column; gap: 0.8vh; flex: 1; min-width: 0; text-align: left; }
+.sp-step { font: 800 clamp(16px, 2.6vh, 34px) var(--ui); color: var(--gold); text-transform: uppercase; letter-spacing: 1px; }
+.sp-big { font: 800 clamp(22px, 4.6vh, 60px)/1.15 var(--ui); color: #fff; }
+.sp-time { font: 700 clamp(16px, 2.6vh, 34px) var(--ui); color: #fff6c8; }
+.steppanel.small { padding: 10px; gap: 10px; border-width: 2px; }
+.steppanel.small svg.example { width: 110px; }
+.steppanel.small .sp-big { font-size: 16px; }
+.steppanel.small .sp-step, .steppanel.small .sp-time { font-size: 13px; }
+.describe { align-items: stretch; }
+.describe .steppanel { flex: 1; margin: 0; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; max-height: 60vh; overflow: auto; }
+.gpic { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #fff; cursor: pointer; font: 600 13px var(--ui); }
+.gpic svg.drawing.thumb { width: 84px; height: 84px; }
+.gpic.on { border-color: var(--gold); background: rgba(255, 207, 64, 0.18); }
+.gpic em { font-style: normal; color: var(--gold); }
+.pts.steps { align-self: flex-start; }
+.pts.steps input { width: 70px; }
+.stepsfield { margin-top: 8px; }
+.stepsfield input { width: 100px; }
+.drawfull.finished .df-top span { color: #7dffb0; font-size: 18px; }
