@@ -8,7 +8,6 @@ export const SLOTS = {
   timesup: "times-up.mp3",         // a timer ran out
   final: "final-jeopardy.mp3",     // Final Jeopardy think music (plays once; the timer matches its length)
   intro: "this-is-jeopardy.mp3",   // Jeopardy starts
-  double: "double-jeopardy.mp3",   // Double Jeopardy starts
   dd: "daily-double.mp3",          // Daily Double revealed
   buzz: "buzz-in.mp3",             // someone buzzed in
   fill: "board-fill.mp3",          // board appears at the start of a round
@@ -182,7 +181,7 @@ function playFile(name) {
 }
 export function play(name) {
   if (!enabled) return;
-  if (!SYNTH[name] && SYNTH.fill && (name === "intro" || name === "double")) SYNTH[name] = SYNTH.fill;
+  if (!SYNTH[name] && SYNTH.fill && name === "intro") SYNTH[name] = SYNTH.fill;
   resume();
   if (playFile(name)) return;
   const asked = Date.now();

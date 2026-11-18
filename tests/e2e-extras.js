@@ -1,5 +1,5 @@
 // End-to-end test for: mini-game tables + Christmas summons, the quick test game,
-// a multiple-choice Final Jeopardy, and the Double Jeopardy switch.
+// a multiple-choice Final Jeopardy, and moving old Double Jeopardy questions into their own set.
 //
 //   node tests/server.js &
 //   node tests/e2e-extras.js [shotsDir]
@@ -155,7 +155,6 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
 
   // ---------------- Double Jeopardy switch + multiple-choice Final ----------------
   console.log("Final Jeopardy multiple choice");
-  ok(!!(await host.evaluate(() => window.__G.S.settings.doubleJeopardy !== false)), "Double Jeopardy is on by default");
   await act(host, "startGame", { control: "team1" });
   // ---- your MP3s are loaded; out of time = no more answering ----
   await until(board, async () => { const m = await import("/js/sounds.js"); return ["correct", "wrong", "timesup", "final", "intro", "double"].every((k) => m.loadedSounds().includes(k)); }, null, 10000);
@@ -203,6 +202,26 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await sleep(300);
   await shot(board, "x04-board-final-mc");
   await shot(P.Jen, "x05-phone-final-mc");
+
+  // ---------------- old Double Jeopardy questions are moved, not lost ----------------
+  console.log("Old Double Jeopardy questions");
+  await host.goto(URL + "#/questions");
+  await host.waitForSelector(".lib-sets");
+  const before = await host.evaluate(() => window.__G.sets.length);
+  await host.evaluate(async () => {
+    const D = await import("/js/data.js");
+    const c = (slot, category, question, points) => ({ id: Math.random().toString(36).slice(2, 10), slot, category, points, question, answer: "ans", wrong: [], dd: false, note: "" });
+    await D.createSet({ id: "oldset", kind: "set", name: "Christmas 2024", year: 2024, notes: "", locked: false, createdAt: 1, updatedAt: 1,
+      clues: [c("r1", "Movies", "keep me", 100), c("r2", "DJ History", "move me 1", 400), c("r2", "DJ History", "move me 2", 800), c("final", "Poems", "final q", null)] });
+  });
+  await until(host, (n) => window.__G.sets.length === n + 2, before, 10000);
+  const old = await host.evaluate(() => window.__G.sets.find((x) => x.id === "oldset"));
+  const extra = await host.evaluate(() => window.__G.sets.find((x) => x.name === "Christmas 2024 – extra categories"));
+  ok(old.clues.map((x) => x.question).join(",") === "keep me,final q", "the old set keeps its Jeopardy round and Final");
+  ok(!!extra && extra.clues.length === 2 && extra.clues.every((x) => x.slot === "r1" && x.category === "DJ History") && extra.clues.map((x) => x.points).join(",") === "200,400",
+    "its Double Jeopardy questions moved into a new set as a regular category ($100–$500 values)");
+  await sleep(1500);
+  ok((await host.evaluate(() => window.__G.sets.length)) === before + 2, "moved only once");
 
   console.log(errors.length ? "\nPage errors:\n" + errors.join("\n") : "\nNo page errors.");
   console.log(`\n${passed} passed, ${failed} failed`);

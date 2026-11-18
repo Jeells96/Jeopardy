@@ -25,7 +25,6 @@ const PASTE = `## Christmas Movies
 300 | Which store introduced Rudolph in 1939? | Montgomery Ward | Macy's; Sears; Woolworth's | DD
 ## Carols
 100 | Which carol mentions figgy pudding? | We Wish You a Merry Christmas
-== Double Jeopardy ==
 ## History
 200 | Which president made Christmas a federal holiday? | Ulysses S. Grant | Abraham Lincoln; Andrew Jackson; Theodore Roosevelt
 == Final Jeopardy ==
@@ -58,8 +57,8 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   await page.fill("#ns-year", "2025");
   await page.check('input[name="ns-from"][value="sample"]');
   await page.click('[data-action="lib-new-create"]');
-  await until(page, () => window.__G.sets.length === 1 && window.__G.sets[0].clues.length === 61);
-  ok(true, "a set can start from the sample game (61 clues)");
+  await until(page, () => window.__G.sets.length === 1 && window.__G.sets[0].clues.length === 31);
+  ok(true, "a set can start from the sample game (31 questions)");
   ok((await page.textContent(".checkbar")).includes("ready to play") || (await page.textContent(".checkbar")).includes("suggestion"), "the set shows a readiness check");
 
   // this year's set, by pasting
@@ -67,7 +66,7 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   await page.fill("#ns-name", "Christmas 2026");
   await page.press("#ns-name", "Enter");
   await until(page, () => window.__G.sets.length === 2);
-  eq((await sets()).map((s) => [s.name, s.year, s.clues.length]), [["Christmas 2026", new Date().getFullYear(), 0], ["Christmas 2025", 2025, 61]], "sets are listed newest year first");
+  eq((await sets()).map((s) => [s.name, s.year, s.clues.length]), [["Christmas 2026", new Date().getFullYear(), 0], ["Christmas 2025", 2025, 31]], "sets are listed newest year first");
   await page.click('[data-action="lib-paste-open"]');
   await page.waitForSelector("#lib-paste");
   ok((await page.textContent(".formats")).includes("multiple choice"), "the paste box explains the format");
@@ -79,7 +78,7 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   await page.click('[data-action="lib-paste-add"]');
   await until(page, () => window.__G.sets[0].clues.length === 6);
   let s = (await sets())[0];
-  eq(s.clues.map((c) => [c.slot, c.category, c.points, c.wrong.length, c.dd]), [["r1", "Christmas Movies", 100, 0, false], ["r1", "Christmas Movies", 200, 0, false], ["r1", "Christmas Movies", 300, 3, true], ["r1", "Carols", 100, 0, false], ["r2", "History", 200, 3, false], ["final", "Famous Poems", null, 0, false]], "pasted questions land in the right round, category, value and type");
+  eq(s.clues.map((c) => [c.slot, c.category, c.points, c.wrong.length, c.dd]), [["r1", "Christmas Movies", 100, 0, false], ["r1", "Christmas Movies", 200, 0, false], ["r1", "Christmas Movies", 300, 3, true], ["r1", "Carols", 100, 0, false], ["r1", "History", 200, 3, false], ["final", "Famous Poems", null, 0, false]], "pasted questions land in the right round, category, value and type");
   ok((await page.textContent(".lib-main")).includes("Also asked in Christmas 2025"), "a question already asked in a past year is flagged");
   await shot(page, "l03-set");
 
@@ -171,14 +170,14 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   await toast("is on the board");
   await until(page, () => window.__G.Q.length === 7);
   const Q = await page.evaluate(() => window.__G.Q.map((q) => [q.round, q.category, q.points, q.type, q.isFinal]));
-  eq(Q.filter((q) => q[4]).length + "/" + Q.filter((q) => q[3] === "mcq").length + "/" + Q.filter((q) => q[0] === 2).length, "1/3/1", "the game now has the set's finished clues: Final, multiple choice and Double Jeopardy");
+  eq(Q.filter((q) => q[4]).length + "/" + Q.filter((q) => q[3] === "mcq").length + "/" + Q.filter((q) => q[0] === 2).length, "1/3/0", "the game now has the set's finished questions: Final and multiple choice (no Double Jeopardy)");
   ok((await page.textContent(".set-stats")).includes("In the game now"), "the library shows which set is on the board");
   await page.click('.lib-top a[href="#/admin"]');
   await page.waitForSelector(".remote");
   ok((await page.textContent(".r-status")).includes("questions"), "back on the host screen the lobby sees the questions");
   await page.keyboard.press("Space");
   await until(page, () => window.__G.S.phase === "board");
-  eq(await page.$$eval(".r-cat", (e) => e.map((x) => x.textContent)), ["Christmas Carols", "Christmas Movies", "Festive Food & Drink"], "the board shows the library's categories in order");
+  eq(await page.$$eval(".r-cat", (e) => e.map((x) => x.textContent)), ["Christmas Carols", "Christmas Movies", "History", "Festive Food & Drink"], "the board shows the library's categories in order");
   await shot(page, "l08-board");
 
   // host note reaches the remote

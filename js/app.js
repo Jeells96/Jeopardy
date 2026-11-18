@@ -11,7 +11,7 @@ import { PRESETS, pickSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import { renderLibrary } from "./ui/library.js";
 import { findQ } from "./ui/stage.js";
-import { initLibrary, libClick, libChange, libInput } from "./libctl.js";
+import { initLibrary, libClick, libChange, libInput, splitOldDoubleJeopardy } from "./libctl.js";
 import { OWN, OPP, pickPunIndex } from "./puns.js";
 import { downloadTemplate, parseWorkbook } from "./xlsx.js";
 
@@ -191,7 +191,7 @@ let setsWatched = false;
 function watchSets() {
   if (setsWatched) return;
   setsWatched = true;
-  D.subscribeSets((sets) => { G.sets = sets; G.setsReady = true; render(); }, onErr);
+  D.subscribeSets((sets) => { G.sets = sets; G.setsReady = true; render(); splitOldDoubleJeopardy(libCtx).catch(() => {}); }, onErr);
 }
 const libCtx = { G, D, toast, render };
 
@@ -273,7 +273,7 @@ function soundEffects(S) {
     if (canPlay && G.now() - S.sfx.at < 6000) Sounds.play(S.sfx.sound);
   }
   Sounds.setFinalMusic(canPlay && S.phase === "final" && S.final && S.final.stage === "clue");
-  if (S.phase !== "board") Sounds.stop("intro", "double"); // a question (or anything else) cuts the theme off
+  if (S.phase !== "board") Sounds.stop("intro"); // a question (or anything else) cuts the theme off
 }
 
 // ---------------- typed answers ----------------
@@ -611,7 +611,7 @@ document.addEventListener("keydown", (e) => {
     // Library boxes: Enter saves (the text wraps on its own); Shift+Enter is ignored too.
     if (e.target.classList && e.target.classList.contains("auto") && e.target.dataset.change) { e.preventDefault(); e.target.blur(); return; }
     const go = { "ns-name": '[data-action="lib-new-create"]', "ns-year": '[data-action="lib-new-create"]',
-      "new-cat-r1": '[data-action="lib-add-cat"][data-slot="r1"]', "new-cat-r2": '[data-action="lib-add-cat"][data-slot="r2"]',
+      "new-cat-r1": '[data-action="lib-add-cat"][data-slot="r1"]',
       "mini-score": '[data-action="mini-score"]', "team-name-input": '[data-action="team-rename-save"]', "exact-score": '[data-action="set-exact"]',
       "add-player-team1": '[data-action="player-add"][data-team="team1"]', "add-player-team2": '[data-action="player-add"][data-team="team2"]',
       "mini-new-name": '[data-action="mini-add"]', "dd-wager": '[data-action="dd-lock"]', "fw-input": '[data-action="final-wager"]' }[e.target.id];

@@ -28,7 +28,7 @@ export function hostSteps(G, { privateView = false } = {}) {
     const M = E.minisOf(S);
     const todo = M.list.filter((g) => g.status !== "done").length;
     status = `<ul class="checklist">
-      ${item(n1 > 0, n1 ? `${S.loaded && S.loaded.id === "test-game" ? "🧪 Test game: " : ""}<b>${n1}</b> questions${n2 ? ` + <b>${n2}</b> Double Jeopardy` : ""}${fq ? " + Final Jeopardy" : ""}` : "Load your Jeopardy questions (⚙ Settings → Questions)")}
+      ${item(n1 > 0, n1 ? `${S.loaded && S.loaded.id === "test-game" ? "🧪 Test game: " : ""}<b>${n1}</b> questions${fq ? " + Final Jeopardy" : ""}` : "Load your Jeopardy questions (⚙ Settings → Questions)")}
       ${M.list.length ? item(true, `<b>${M.list.length}</b> mini game${M.list.length === 1 ? "" : "s"} ready`) : ""}
       ${item(c1 + c2 > 0, `Players: ${esc(tn(G, "team1"))} <b>${c1}</b> · ${esc(tn(G, "team2"))} <b>${c2}</b>`)}
       ${item(G.soundOn, G.soundOn ? "Sound is on" : "Turn on 🔊 on the screen connected to speakers")}
@@ -65,9 +65,6 @@ export function hostSteps(G, { privateView = false } = {}) {
         ? `🎁 <b>${esc(tn(G, S.control))}</b> ${verb(tn(G, S.control), "picks", "pick")} next — ${privateView ? "tap" : "click"} their question on the board. <span class="muted">${left} left</span>`
         : `${privateView ? "Tap" : "Click"} any question on the board to begin. <span class="muted">${left} left</span>`;
       btn("⇄ Switch who picks", "act", act("setControl", { team: S.control ? E.otherTeam(S.control) : "team1" }), "ghost", "");
-    } else if (S.round === 1 && E.r2On(S, G.Q)) {
-      status = "That's the end of the first round! 🎄";
-      btn("▶ Start Double Jeopardy!", "act", act("startRound2"), "primary", "Space");
     } else if (E.finalClue(G.Q)) {
       status = "The board is clear — time for Final Jeopardy!";
       btn("▶ Start Final Jeopardy!", "act", act("finalStart"), "primary", "Space");

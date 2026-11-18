@@ -89,7 +89,7 @@ function setView(G, set) {
     const count = g.rounds[slot].reduce((n, c) => n + c.clues.length, 0);
     if (todo && !list.length) return "";
     return `<section class="lib-round" data-key="round-${slot}">
-      <h3>${B.SLOT_LABEL[slot]} round <small>${g.rounds[slot].length ? `${plural(g.rounds[slot].length, "category", "categories")} · ${plural(count, "question")} · values ${slot === "r2" ? "$200–$1,000" : "$100–$500"}` : slot === "r2" ? "optional — add a category to include it" : "no categories yet"}</small></h3>
+      <h3>${B.SLOT_LABEL[slot]} round <small>${g.rounds[slot].length ? `${plural(g.rounds[slot].length, "category", "categories")} · ${plural(count, "question")} · values $100–$500` : "no categories yet"}</small></h3>
       ${list.map((cat, i) => catBlock(G, set, cat, i, g.rounds[slot].length, show)).join("")}
       ${set.locked || todo ? "" : `<div class="newcat">
         <input id="new-cat-${slot}" maxlength="60" placeholder="New category name" aria-label="New ${B.SLOT_LABEL[slot]} category" data-sticky>
@@ -108,7 +108,7 @@ function setView(G, set) {
       <label class="set-year"><span>Year</span><input type="number" inputmode="numeric" value="${set.year}" aria-label="Year" data-change="lib-meta" data-f="year"${dis}></label>
     </div>
     <div class="set-stats">
-      <span><b>${st.r1}</b> Jeopardy</span><span><b>${st.r2}</b> Double Jeopardy</span><span>Final ${st.final ? "✓" : "—"}</span>
+      <span><b>${st.r1}</b> Jeopardy</span><span>Final ${st.final ? "✓" : "—"}</span>
       <span><b>${st.mc}</b> multiple choice</span><span><b>${st.dd}</b> Daily Double${st.dd === 1 ? "" : "s"}</span>
       ${st.ideas ? `<span class="warn"><b>${st.ideas}</b> unfinished</span>` : ""}
       ${inGame ? `<span class="live">▶ In the game now</span>` : ""}
@@ -136,7 +136,6 @@ function setView(G, set) {
   </div>
   ${todo && !st.ideas ? `<div class="lib-empty small"><p>🎉 Nothing unfinished in this set.</p></div>` : ""}
   ${round("r1")}
-  ${round("r2")}
   ${todo && !finals.length ? "" : `<section class="lib-round" data-key="round-final">
     <h3>Final Jeopardy <small>one question; teams wager and write their answer</small></h3>
     ${finals.map((c) => clueCard(G, set, c, "final")).join("")}
@@ -229,7 +228,7 @@ function searchView(G, cur, q) {
   ${groups.map((g) => `<section class="lib-round"><h3>${esc(g.set.name)} <small>${g.set.year} · ${plural(g.clues.length, "match", "matches")}</small>
       <button class="btn ghost sm" data-action="lib-select" data-id="${esc(g.set.id)}">Open this set</button></h3>
     ${g.clues.map((c) => `<div class="hit" data-key="hit-${esc(c.id)}">
-      <div class="hit-meta">${esc(c.slot === "final" ? "Final Jeopardy" : c.category || "Unsorted")}${c.slot === "r2" ? " · Double Jeopardy" : ""}</div>
+      <div class="hit-meta">${esc(c.slot === "final" ? "Final Jeopardy" : c.category || "Unsorted")}</div>
       <div class="hit-q">${esc(c.question) || `<span class="muted">(no question yet)</span>`}</div>
       <div class="hit-a">${esc(c.answer) || `<span class="muted">(no answer yet)</span>`}${B.isMC(c) ? ` <small>· not: ${esc(c.wrong.join(", "))}</small>` : ""}</div>
       ${c.note ? `<div class="hit-meta">📝 ${esc(c.note)}</div>` : ""}
@@ -255,7 +254,8 @@ function libModal(G, cur) {
       <div class="field"><span>Start with</span>
         ${radio("empty", "An empty set")}
         ${G.Q.length ? radio("game", `The ${G.Q.length} questions that are in the game right now`) : ""}
-        ${radio("sample", "The sample game (60 questions + Final) to edit")}
+        ${radio("sample", "The sample game (30 questions + Final) to edit")}
+        ${radio("sample2", "Sample game 2 — 30 more Christmas questions (the old Double Jeopardy ones)")}
         ${radio("test", "A quick test game — 1 non-Christmas category + Final, for trying things out")}
       </div>
       <div class="btnrow end">${cancel()}<button class="btn primary" data-action="lib-new-create">Create set</button></div>`);
@@ -272,7 +272,7 @@ function libModal(G, cur) {
 100 | Who lives on Mount Crumpit? | The Grinch
 200 | Which store introduced Rudolph? | Montgomery Ward | Macy's; Sears; Woolworth's</pre>
         <ul>
-          <li><code>## Name</code> starts a category. <code>== Double Jeopardy ==</code> or <code>== Final Jeopardy ==</code> switches round.</li>
+          <li><code>## Name</code> starts a category. <code>== Final Jeopardy ==</code> starts the Final question.</li>
           <li>Each line is <code>points | question | answer</code>. Add a 4th part with wrong options (separated by <code>;</code>) to make it <b>multiple choice</b>, and <code>| DD</code> for a Daily Double.</li>
           <li>Also fine: <code>Question? Answer: X</code>, numbered lists with A) B) C) D) options, rows copied from a spreadsheet, or a table.</li>
         </ul>
@@ -285,7 +285,7 @@ function libModal(G, cur) {
           ${s.mc ? `<span><b>${s.mc}</b> multiple choice</span>` : ""}
         </div>
         <div class="paste-prev">${r.clues.slice(0, 80).map((c) => `<div class="${cls("pp", !B.isReady(c) && "todo")}">
-            <span class="pp-cat">${esc(c.slot === "final" ? "Final" : c.category || "no category")}${c.slot === "r2" ? " · DJ" : ""}${c.points ? " · " + money(c.points) : ""}</span>
+            <span class="pp-cat">${esc(c.slot === "final" ? "Final" : c.category || "no category")}${c.points ? " · " + money(c.points) : ""}</span>
             <span class="pp-q">${esc(c.question) || "<i>no question</i>"}</span>
             <span class="pp-a">${c.answer ? "→ " + esc(c.answer) : "<i>no answer</i>"}${B.isMC(c) ? ` <small>(not: ${esc(c.wrong.join(", "))})</small>` : ""}${c.dd ? " ⭐" : ""}</span>
           </div>`).join("")}${r.clues.length > 80 ? `<div class="muted pad">…and ${r.clues.length - 80} more</div>` : ""}</div>`;
@@ -308,7 +308,7 @@ function libModal(G, cur) {
       <div class="paste-opts three">
         <label class="xf"><span>Categories</span><input type="number" inputmode="numeric" min="1" max="12" value="${P.categories}" data-input="lib-prompt" data-f="categories" data-sticky></label>
         <label class="xf"><span>Questions in each</span><input type="number" inputmode="numeric" min="1" max="10" value="${P.perCategory}" data-input="lib-prompt" data-f="perCategory" data-sticky></label>
-        <label class="xf"><span>Round</span><select data-change="lib-prompt-slot"><option value="r1"${P.slot === "r1" ? " selected" : ""}>Jeopardy</option><option value="r2"${P.slot === "r2" ? " selected" : ""}>Double Jeopardy</option></select></label>
+        <label class="xf"><span>Round</span><select data-change="lib-prompt-slot"><option value="r1" selected>Jeopardy</option></select></label>
       </div>
       <label class="xf wide"><span>Topics or categories you want <small>optional</small></span><input maxlength="300" value="${esc(P.topics)}" placeholder="e.g. The Grinch, Elf, classic TV specials, Christmas history" data-input="lib-prompt" data-f="topics" data-sticky></label>
       <label class="toggle"><input type="checkbox" data-change="lib-prompt-avoid"${P.avoid ? " checked" : ""}><span>Tell it not to repeat answers from my library (${avoid.length || "none yet"})</span></label>
@@ -326,7 +326,7 @@ function libModal(G, cur) {
     }
     return wrap(`<h3>Put “${esc(cur.name)}” on the board?</h3>
       <ul class="uselist">
-        <li><b>${counts.r1}</b> Jeopardy questions${counts.r2 ? ` + <b>${counts.r2}</b> Double Jeopardy` : ""} ${counts.final ? "+ Final Jeopardy" : "— <b>no Final Jeopardy</b>"}</li>
+        <li><b>${counts.r1}</b> Jeopardy questions ${counts.final ? "+ Final Jeopardy" : "— <b>no Final Jeopardy</b>"}</li>
         <li><b>${rows.filter((x) => x.type === "mcq").length}</b> multiple choice · <b>${rows.filter((x) => x.dailyDouble).length}</b> Daily Double</li>
         ${skipped ? `<li class="warn"><b>${skipped}</b> unfinished or unsorted ${skipped === 1 ? "question is" : "questions are"} left out</li>` : ""}
         ${warns.map((w) => `<li class="warn">${esc(w.text)}</li>`).join("")}

@@ -14,7 +14,7 @@ export function roundLabel(S) {
   if (S.phase === "minis") return "Mini Games";
   if (S.phase === "final") return "Final Jeopardy!";
   if (S.phase === "over") return S.vote && S.vote.stage !== "off" ? "Ugly sweater vote" : "Final scores";
-  return S.round === 2 ? "Double Jeopardy!" : "Jeopardy! Round";
+  return "Jeopardy! Round";
 }
 
 export function categories(G, round) {

@@ -19,7 +19,6 @@ export const DEFAULT_SETTINGS = {
   autoRebound: true,      // after a miss, instantly reopen buzzers for the other team
   finalNeedsPositive: true, // official rule: only teams with $1+ play Final Jeopardy
   playersRename: true,    // players may rename their own team before Jeopardy starts
-  doubleJeopardy: true,   // play the Double Jeopardy round (off = skip it; the questions are kept)
   announce: true,         // mini games: read "who's up next" out loud on the screen with sound on
 };
 
@@ -93,9 +92,9 @@ export const roundOf = (q) => (q && q.round === 2 ? 2 : 1);
 export const boardClues = (questions, round) =>
   (questions || []).filter((q) => !q.isFinal && roundOf(q) === round);
 export const finalClue = (questions) => (questions || []).find((q) => q.isFinal) || null;
-export const hasRound2 = (questions) => boardClues(questions, 2).length > 0;
-// Double Jeopardy is played only if it's switched on AND there are questions for it.
-export const r2On = (s, questions) => !(s && s.settings && s.settings.doubleJeopardy === false) && hasRound2(questions);
+// Double Jeopardy has been removed: the game is one round + Final Jeopardy.
+export const hasRound2 = () => false;
+export const r2On = () => false;
 export const roundMaxValue = (questions, round) =>
   boardClues(questions, round).reduce((m, q) => Math.max(m, Number(q.points) || 0), 0);
 export const cluesLeft = (questions, round) => boardClues(questions, round).filter((q) => !q.used).length;
@@ -151,7 +150,7 @@ export function startGame(s, { control } = {}, ctx) {
   if (!boardClues(ctx.questions, 1).length) return fail("Load your questions first (⚙ Settings → Questions).");
   const minis = { ...minisOf(s), current: null, back: null };
   // Already started earlier and the host stepped away: carry on where they left off.
-  if (s.jStarted) return builder(s, ctx).field("phase", "board").field("clue", null).field("minis", minis).sfx(s.round === 2 ? "double" : "intro").done();
+  if (s.jStarted) return builder(s, ctx).field("phase", "board").field("clue", null).field("minis", minis).sfx("intro").done();
   const ctrl = control === "random" ? TEAMS[Math.floor(Math.random() * 2)] : TEAMS.includes(control) ? control : null;
   return builder(s, ctx)
     .field("phase", "board").field("round", 1).field("control", ctrl).field("jStarted", true)
@@ -182,14 +181,13 @@ export function setControl(s, { team }, ctx) {
 }
 
 export function startRound2(s, _p, ctx) {
-  if (!hasRound2(ctx.questions)) return fail("There's no Double Jeopardy round in your questions.");
-  if (!r2On(s, ctx.questions)) return fail("Double Jeopardy is switched off in Settings → Game.");
+  if (!r2On(s, ctx.questions)) return fail("This game doesn't have a Double Jeopardy round.");
   const sc = s.scores || {};
   // Official rule: the player in last place picks first in Double Jeopardy.
   const ctrl = sc.team1 === sc.team2 ? s.control : sc.team1 < sc.team2 ? "team1" : "team2";
   return builder(s, ctx)
     .field("phase", "board").field("round", 2).field("control", ctrl).field("clue", null)
-    .sfx("double").done();
+    .sfx("intro").done();
 }
 
 // ---------- clues ----------

@@ -59,7 +59,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await host.click('.tab:has-text("Questions")');
   await host.setInputFiles('input[data-change="import"]', TEMPLATE);
   await until(host, () => (document.querySelector(".import-msg") || {}).textContent?.includes("Imported"));
-  ok((await host.textContent(".import-msg")).includes("30 Double Jeopardy"), "template imports both rounds + Final");
+  ok((await host.textContent(".import-msg")).includes("30 questions in 6 categories") && (await host.textContent(".import-msg")).includes("Final Jeopardy ✓"), "template imports 6 categories + Final");
   await key(host, "Escape");
 
   const board = await device("board", { width: 1920, height: 1080 });
@@ -284,22 +284,11 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await P.Amy.waitForSelector(".phone");
   await key(host, "Escape");
 
-  // ---------------- Double Jeopardy ----------------
-  console.log("Double Jeopardy");
-  await host.click('[data-action="drawer"][data-p*="game"]');
-  await host.click('[data-action="confirm"][data-p*="startRound2"]');
-  await host.click('[data-action="confirm-yes"]');
-  await until(board, () => window.__G.S.round === 2);
-  S = await state(board);
-  const trailing = S.scores.team1 < S.scores.team2 ? "team1" : "team2";
-  ok(S.control === trailing, "trailing team picks first in Double Jeopardy");
-  await until(board, () => document.querySelector(".jcell .val")?.textContent === "$200");
-  ok((await board.textContent(".roundtag")).includes("Double Jeopardy"), "board shows Double Jeopardy values");
-  await sleep(1000);
-  await shot(board, "12-board-dj");
+  // ---------------- the phone remote ----------------
+  console.log("Remote");
+  ok(!(await host.$('[data-p*="startRound2"]')), "there's no Double Jeopardy anywhere");
   await shot(remote, "13-remote-board");
-  // pick a DJ clue from the REMOTE
-  const djq = await q("Silver Screen Santas", 200, 2);
+  const djq = await q("Santa & Reindeer", 300);
   await remote.click(`.r-cell[data-id="${djq.id}"]`);
   await until(board, () => window.__G.S.phase === "clue");
   ok(true, "host can pick clues from the phone remote");

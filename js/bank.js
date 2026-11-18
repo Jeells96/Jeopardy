@@ -7,7 +7,9 @@
 // A clue with wrong options is multiple choice. A clue missing its question, answer or
 // category is an unfinished idea: it stays in the set but is not put on the board.
 
-export const SLOTS = ["r1", "r2", "final"];
+// Rounds a question can be in. (Double Jeopardy was removed; old "r2" questions are moved
+// into their own set by the library — see splitOldDoubleJeopardy in libctl.js.)
+export const SLOTS = ["r1", "final"];
 export const SLOT_LABEL = { r1: "Jeopardy", r2: "Double Jeopardy", final: "Final Jeopardy" };
 const STEP = { r1: 100, r2: 200 };
 export const MAX_CLUES = 400;
@@ -154,7 +156,7 @@ export function toGameRows(set) {
   let order = 0;
   let skipped = g.loose.length;
   const counts = { r1: 0, r2: 0, final: 0 };
-  for (const slot of ["r1", "r2"]) {
+  for (const slot of ["r1"]) {
     for (const cat of g.rounds[slot]) {
       for (const c of cat.clues) {
         if (!isReady(c)) { skipped++; continue; }
@@ -251,6 +253,11 @@ export const OPS = {
     });
     return touch(set, [...set.clues.filter((c) => !want.has(c.id)), ...moved]);
   },
+  // One-time clean-up: take the old Double Jeopardy questions out (they're copied to a new set first).
+  dropRound2(set) {
+    if (!set.clues.some((c) => c.slot === "r2")) return null;
+    return touch(set, set.clues.filter((c) => c.slot !== "r2"));
+  },
   removeCategory(set, { slot, name }) {
     const keep = set.clues.filter((c) => !(c.slot === slot && c.category && lc(c.category) === lc(name)));
     if (keep.length === set.clues.length) return null;
@@ -279,7 +286,7 @@ export const OPS = {
 export function applyOp(set, op, params) {
   const fn = OPS[op];
   if (!fn) return fail("Unknown edit: " + op);
-  if (set.locked && !(op === "meta" && params && params.patch && "locked" in params.patch)) return fail("This set is locked — unlock it to make changes.");
+  if (set.locked && op !== "dropRound2" && !(op === "meta" && params && params.patch && "locked" in params.patch)) return fail("This set is locked — unlock it to make changes.");
   return fn(set, params || {});
 }
 
@@ -332,7 +339,6 @@ export function repeatsFor(clue, setId, index) {
 const ROUND_RE = /^(?:[=#*\-\s]*)(double\s+jeopardy|final\s+jeopardy|jeopardy(?:\s+round)?|round\s+(?:1|one|2|two)|ideas?|unsorted|notes?)!?(?:\s+round)?\s*:?(?:[=#*\-\s]*)$/i;
 function roundSlot(name) {
   const n = lc(name);
-  if (/double|round\s+(2|two)/.test(n)) return "r2";
   if (/final/.test(n)) return "final";
   if (/idea|unsorted|note/.test(n)) return "ideas";
   return "r1";
@@ -487,7 +493,6 @@ function slotFrom(v, fallback) {
   const n = lc(v);
   if (!n) return fallback;
   if (/final/.test(n)) return "final";
-  if (/double|dj|^2$|r2|two/.test(n)) return "r2";
   return /jeopardy|^1$|r1|one/.test(n) ? "r1" : fallback;
 }
 function byHeader(f, header, cur) {
@@ -534,7 +539,7 @@ export function toText(set) {
   const g = groupSet(set);
   const safe = (s) => String(s || "").replace(/\|/g, "/");
   const out = [`# ${set.name}`, ""];
-  for (const slot of ["r1", "r2"]) {
+  for (const slot of ["r1"]) {
     if (!g.rounds[slot].length) continue;
     out.push(`== ${SLOT_LABEL[slot]} ==`);
     for (const cat of g.rounds[slot]) {
@@ -567,7 +572,7 @@ export function toText(set) {
 
 // A ready-to-paste request for ChatGPT / Claude that returns clues in the format above.
 export function aiPrompt({ categories = 6, perCategory = 5, slot = "r1", topics = "", avoid = [], audience = "adults at a family Christmas party" } = {}) {
-  const step = slot === "r2" ? 200 : 100;
+  const step = 100;
   const values = Array.from({ length: perCategory }, (_, i) => step * (i + 1));
   const lines = [
     `I'm writing questions for a Christmas-themed Jeopardy game for ${audience}.`,

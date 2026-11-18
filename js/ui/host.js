@@ -67,7 +67,7 @@ function toggle(id, label, on, hint) {
 function gameTab(G) {
   const S = G.S;
   const st = S.settings || E.DEFAULT_SETTINGS;
-  const r2 = E.r2On(S, G.Q), fq = E.finalClue(G.Q);
+  const fq = E.finalClue(G.Q);
   return `
   <section class="sect"><h4>Teams</h4>
     ${E.TEAMS.map((t) => `<label class="field"><span class="dot ${t}"></span><input value="${esc(tn(G, t))}" maxlength="24" data-change="team-name" data-team="${t}" aria-label="Team name"></label>`).join("")}
@@ -83,7 +83,6 @@ function gameTab(G) {
   <section class="sect"><h4>Rules</h4>
     ${toggle("autoRebound", "Auto-rebound", st.autoRebound, "After a miss, the other team can buzz in right away")}
     ${toggle("finalNeedsPositive", "Official Final Jeopardy rule", st.finalNeedsPositive, "Only teams above $0 can play Final")}
-    ${toggle("doubleJeopardy", "Play Double Jeopardy", st.doubleJeopardy !== false, E.hasRound2(G.Q) ? "Off = skip that round. Its questions stay in your set." : "No Double Jeopardy questions loaded right now")}
     ${toggle("playersRename", "Teams can rename themselves", st.playersRename !== false, "From their phones, until Jeopardy starts")}
     ${toggle("announce", "Announce who's up out loud", st.announce !== false, "Mini games: the screen with 🔊 on reads the names aloud")}
   </section>
@@ -93,7 +92,6 @@ function gameTab(G) {
   <section class="sect"><h4>Jump to</h4>
     <div class="btnrow">
       ${S.phase === "board" || S.phase === "lobby" ? `<button class="btn ghost sm" data-action="act" data-p='{"name":"minisStart","p":{},"then":"drawer"}'>🎯 Mini games</button>` : ""}
-      ${S.phase !== "lobby" && r2 && S.round !== 2 ? `<button class="btn ghost sm" data-action="confirm" data-p='{"what":"startRound2"}'>Double Jeopardy</button>` : ""}
       ${S.phase !== "lobby" && fq && S.phase !== "final" ? `<button class="btn ghost sm" data-action="confirm" data-p='{"what":"finalStart"}'>Final Jeopardy</button>` : ""}
       ${S.phase !== "lobby" && S.phase !== "over" ? `<button class="btn ghost sm" data-action="confirm" data-p='{"what":"endGame"}'>End game</button>` : ""}
     </div>
@@ -108,7 +106,7 @@ function gameTab(G) {
 }
 
 function questionsTab(G) {
-  const r1 = E.boardClues(G.Q, 1), r2 = E.boardClues(G.Q, 2), fq = E.finalClue(G.Q);
+  const r1 = E.boardClues(G.Q, 1), fq = E.finalClue(G.Q);
   const cats = (list) => [...new Set(list.map((q) => q.category))];
   const dd = (list) => list.filter((q) => q.dailyDouble).length;
   const mc = (list) => list.filter((q) => q.type === "mcq").length;
@@ -123,7 +121,7 @@ function questionsTab(G) {
     <button class="btn ${testOn ? "ghost" : "primary"} sm" data-action="confirm" data-p='{"what":"loadTest"}'>🧪 ${testOn ? "Reload the test game" : "Put the test game on the board"}</button>
   </section>
   <section class="sect"><h4>Your questions</h4>
-    ${G.Q.length ? `${row("Jeopardy!", r1)}${row("Double Jeopardy!", r2)}${fq ? `<div class="qstat"><b>Final Jeopardy!</b><span>${esc(fq.category)}</span></div>` : `<div class="qstat warn">No Final Jeopardy tab found.</div>`}` : `<p class="muted">No questions loaded yet.</p>`}
+    ${G.Q.length ? `${row("Jeopardy!", r1)}${fq ? `<div class="qstat"><b>Final Jeopardy!</b><span>${esc(fq.category)}</span></div>` : `<div class="qstat warn">No Final Jeopardy tab found.</div>`}` : `<p class="muted">No questions loaded yet.</p>`}
     <div class="import-msg" role="status">${esc(G.ui.importMsg || "")}</div>
   </section>
   <section class="sect"><h4>Question library</h4>
@@ -180,7 +178,6 @@ const CONFIRMS = {
   voteReveal: ["Reveal the sweater vote now?", "Not everyone has voted yet — anyone who hasn't won't get a say.", "Reveal now"],
   loadTest: ["Put the test game on the board?", "The questions on the board are swapped for the 1-category test game, and scores and mini-game results reset. Your question library isn't touched — load your real set again when you're done.", "Load test game"],
   resetBoard: ["Put every question back?", "All questions become available again. Scores don't change.", "Reset board"],
-  startRound2: ["Jump to Double Jeopardy?", "Any questions left in this round are skipped.", "Start Double Jeopardy"],
   finalStart: ["Jump to Final Jeopardy?", "Any questions left on the board are skipped.", "Start Final Jeopardy"],
   endGame: ["End the game now?", "Shows the final scores.", "End game"],
   startGame: ["Start Jeopardy now?", "The mini games you haven't played yet will be skipped (you can come back to them any time from the board).", "Start Jeopardy"],

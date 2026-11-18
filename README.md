@@ -74,10 +74,10 @@ switch off phone renaming there too.
 ## 🎮 Everything that's in the game
 
 **The board**
-- Jeopardy round + optional **Double Jeopardy** round (doubled values) + **Final Jeopardy**.
-  Switch Double Jeopardy off in Settings → Game to skip it — its questions are kept.
+- One Jeopardy round ($100–$500) + **Final Jeopardy**. (There's no Double Jeopardy round —
+  older sets that had one keep those questions in a separate "– extra categories" set.)
 - **Board control:** the team that answered correctly picks next (shown on the board and
-  phones). In Double Jeopardy the trailing team picks first, like the show.
+  phones).
 - Questions zoom in full-screen; categories, values and podium scores styled like the show.
 
 **Buzzing**
@@ -119,7 +119,7 @@ switch off phone renaming there too.
 
 **Host tools**
 - **Undo** the last score change (U), adjust any score from its podium, "put a question back"
-  if you misclick, switch who picks, jump to Double/Final, new game.
+  if you misclick, switch who picks, jump to Final, new game.
 - Rename or move players between teams (their phone updates instantly) or remove them —
   a removed player's phone is released and has to enter a name again to rejoin.
 - Keyboard: Space next step · C correct · W wrong · S skip · N nobody · P pause buzzers ·
@@ -151,7 +151,6 @@ past years, search them, and reuse a good question.
   ## Christmas Movies
   100 | Who lives on Mount Crumpit? | The Grinch
   300 | Which store introduced Rudolph in 1939? | Montgomery Ward | Macy's; Sears; Woolworth's | DD
-  == Double Jeopardy ==
   ## History
   200 | Which president made Christmas a federal holiday? | Ulysses S. Grant
   == Final Jeopardy ==

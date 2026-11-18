@@ -11,7 +11,6 @@ these **exact** names:
 | ⏰ Time's up | `times-up.mp3` |
 | 🎵 Final Jeopardy think music (plays once — the Final timer defaults to its length, 31 s) | `final-jeopardy.mp3` |
 | 🎬 Jeopardy starts (theme) | `this-is-jeopardy.mp3` |
-| 🎬 Double Jeopardy starts | `double-jeopardy.mp3` |
 | ⭐ Daily Double revealed | `daily-double.mp3` |
 | 🔔 Someone buzzed in | `buzz-in.mp3` |
 | 🎄 Board appears (used if a theme above is missing) | `board-fill.mp3` |

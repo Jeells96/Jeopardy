@@ -46,7 +46,7 @@ This poem begins 'Twas the night before Christmas | A Visit from St. Nicholas
 `;
   const r = B.parsePaste(text);
   eq(r.title, "Christmas 2026", "title line becomes the suggested set name");
-  eq(r.clues.map((c) => [c.slot, c.category]), [["r1", "Carols"], ["r2", "History"], ["r2", "History"], ["final", "Famous Poems"]], "round markers and categories");
+  eq(r.clues.map((c) => [c.slot, c.category]), [["r1", "Carols"], ["r1", "History"], ["r1", "History"], ["final", "Famous Poems"]], "round markers and categories (an old Double Jeopardy marker just means more categories)");
   eq([r.clues[2].points, r.clues[2].dd, r.clues[2].wrong.length], [400, true, 3], "double jeopardy clue with options + DD");
   eq([r.clues[3].question.startsWith("This poem"), r.clues[3].answer, r.clues[3].wrong], [true, "A Visit from St. Nicholas", []], "final clue is never multiple choice");
 }
@@ -89,8 +89,8 @@ D. 1901
 3. Who wrote "A Christmas Carol"?
 Answer: Charles Dickens
 `;
-  const l = B.parsePaste(lettered, { slot: "r2" });
-  eq([l.clues[0].answer, l.clues[0].wrong, l.clues[0].slot], ["Ulysses S. Grant", ["Abraham Lincoln", "Theodore Roosevelt", "Andrew Jackson"], "r2"], "lettered options + 'Answer: B' → the right option becomes the answer");
+  const l = B.parsePaste(lettered, { slot: "r1" });
+  eq([l.clues[0].answer, l.clues[0].wrong, l.clues[0].slot], ["Ulysses S. Grant", ["Abraham Lincoln", "Theodore Roosevelt", "Andrew Jackson"], "r1"], "lettered options + 'Answer: B' → the right option becomes the answer");
   eq([l.clues[1].answer, l.clues[1].wrong.length], ["1843", 3], "an option marked with * is the answer");
   eq([l.clues[2].answer, l.clues[2].wrong], ["Charles Dickens", []], "a plain question after a lettered one is not confused");
   eq(l.clues.map((c) => c.category), ["Christmas History", "Christmas History", "Christmas History"], "### heading sets the category");
@@ -120,7 +120,7 @@ Answer: Charles Dickens
     { category: "Songs", points: 100, question: "Q1", answer: "A1" },
     { Category: "Songs", Value: "$200", Clue: "Q2", Answer: "A2", options: ["W1", "W2", "A2"], dailyDouble: true, round: "Double Jeopardy" },
   ]));
-  eq(r.clues.map(brief), [["r1", "Songs", 100, "Q1", "A1", [], false], ["r2", "Songs", 200, "Q2", "A2", ["W1", "W2"], true]], "JSON with flexible key names; the answer is removed from the options");
+  eq(r.clues.map(brief), [["r1", "Songs", 100, "Q1", "A1", [], false], ["r1", "Songs", 200, "Q2", "A2", ["W1", "W2"], true]], "JSON with flexible key names; the answer is removed from the options");
 }
 
 // ---------- loose input still lands somewhere sensible ----------
@@ -167,18 +167,17 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
     { category: "A", question: "q1", answer: "a1" },
     { category: "A", question: "q2", answer: "a2", points: 100 },
     { category: "a", question: "q3", answer: "a3" },
-    { category: "B", question: "q4", answer: "a4", slot: "r2" },
+    { category: "B", question: "q4", answer: "a4" },
     { category: "", question: "idea", answer: "" },
     { slot: "final", category: "Poems", question: "fq", answer: "fa" },
   ]);
   const g = B.groupSet(set);
-  eq(g.rounds.r1.map((c) => [c.name, c.clues.map((x) => [x.question, x.pts, x.auto])]), [["A", [["q2", 100, false], ["q1", 200, true], ["q3", 300, true]]]], "categories merge case-insensitively; blank points fill the lowest unused value");
-  eq(g.rounds.r2[0].clues[0].pts, 200, "double jeopardy auto values step by 200");
+  eq(g.rounds.r1.map((c) => [c.name, c.clues.map((x) => [x.question, x.pts, x.auto])]), [["A", [["q2", 100, false], ["q1", 200, true], ["q3", 300, true]]], ["B", [["q4", 100, true]]]], "categories merge case-insensitively; blank points fill the lowest unused value");
   eq([g.loose.length, g.final.length], [1, 1], "unsorted and final are separate");
-  eq(B.setStats(set), { total: 6, ready: 5, ideas: 1, r1: 3, r2: 1, final: 1, mc: 0, dd: 0 }, "stats");
+  eq(B.setStats(set), { total: 6, ready: 5, ideas: 1, r1: 4, r2: 0, final: 1, mc: 0, dd: 0 }, "stats");
   const notes = B.checkSet(set).map((n) => n.text);
   ok(notes.some((t) => t.includes("Jeopardy › A: 3 of 5 questions written")), "check: short category");
-  ok(notes.some((t) => t.includes("1 category (the show uses 6")), "check: category count with correct grammar");
+  ok(notes.some((t) => t.includes("2 categories (the show uses 6")), "check: category count");
   ok(notes.some((t) => t.includes("0 Daily Doubles (the show has 1)")), "check: daily double count");
   ok(notes.some((t) => t.includes("1 unsorted idea — give it a category")), "check: unsorted ideas (singular)");
   ok(!notes.some((t) => t.includes("No Final")), "check: final present");
@@ -195,18 +194,18 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
     { category: "Movies", question: "q1", answer: "a1" },
     { category: "Movies", question: "q2", answer: "Right", wrong: ["W1", "W2", "W3"], dd: true, note: "accept X" },
     { category: "Movies", question: "unfinished", answer: "" },
-    { category: "DJ Cat", slot: "r2", question: "q3", answer: "a3" },
+    { category: "Extra Cat", question: "q3", answer: "a3" },
     { slot: "final", category: "Poems", question: "fq", answer: "fa" },
     { question: "loose", answer: "loose answer" },
   ]);
   const { rows, skipped, counts } = B.toGameRows(set);
-  eq([rows.length, skipped, counts], [4, 2, { r1: 2, r2: 1, final: 1 }], "unfinished + unsorted clues are skipped");
+  eq([rows.length, skipped, counts], [4, 2, { r1: 3, r2: 0, final: 1 }], "unfinished + unsorted clues are skipped");
   const mc = rows.find((r) => r.type === "mcq");
   ok(mc.choices.length === 4 && mc.choices[mc.correctIndex] === "Right" && mc.dailyDouble && mc.note === "accept X" && mc.points === 200, "multiple-choice row: shuffled options with the right index, DD, host note, auto value");
-  eq(rows.map((r) => [r.round, r.isFinal, r.category, r.points]), [[1, false, "Movies", 100], [1, false, "Movies", 200], [2, false, "DJ Cat", 200], [0, true, "Poems", 0]], "rounds, final and values");
+  eq(rows.map((r) => [r.round, r.isFinal, r.category, r.points]), [[1, false, "Movies", 100], [1, false, "Movies", 200], [1, false, "Extra Cat", 100], [0, true, "Poems", 0]], "rounds, final and values");
   ok(rows.every((r) => r.used === false && typeof r.order === "number"), "rows are ready for the game");
   const back = B.fromGameRows(rows);
-  eq(back.map((c) => [c.slot, c.category, c.points, c.answer, c.wrong.length, c.dd]), [["r1", "Movies", 100, "a1", 0, false], ["r1", "Movies", 200, "Right", 3, true], ["r2", "DJ Cat", 200, "a3", 0, false], ["final", "Poems", null, "fa", 0, false]], "game rows convert back into clues");
+  eq(back.map((c) => [c.slot, c.category, c.points, c.answer, c.wrong.length, c.dd]), [["r1", "Movies", 100, "a1", 0, false], ["r1", "Movies", 200, "Right", 3, true], ["r1", "Extra Cat", 100, "a3", 0, false], ["final", "Poems", null, "fa", 0, false]], "game rows convert back into clues");
   let seen = new Set();
   for (let i = 0; i < 40; i++) { const r = B.toGameRows(set).rows.find((x) => x.type === "mcq"); seen.add(r.correctIndex); }
   ok(seen.size > 1, "the right answer isn't always in the same position");
@@ -217,19 +216,19 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
   const set = mk([
     { category: "Movies", points: 100, question: "Who | what?", answer: "a1" },
     { category: "Movies", question: "q2", answer: "Right", wrong: ["W1", "W2"], dd: true, note: "host note" },
-    { category: "History", slot: "r2", question: "q3", answer: "a3", dd: true },
+    { category: "History", question: "q3", answer: "a3", dd: true },
     { slot: "final", category: "Poems", question: "fq", answer: "fa" },
     { question: "an idea" },
     { question: "loose q", answer: "loose a" },
   ]);
   const text = B.toText(set);
-  ok(text.startsWith("# Test\n") && text.includes("== Double Jeopardy ==") && text.includes("== Ideas =="), "export has a title and round markers");
+  ok(text.startsWith("# Test\n") && !text.includes("Double Jeopardy") && text.includes("== Ideas =="), "export has a title and round markers");
   const again = B.parsePaste(text);
   const strip = (c) => [c.slot, c.category, c.question, c.answer, c.wrong, c.dd, c.note];
   eq(again.clues.map(strip), B.groupSet(set) && [
     ["r1", "Movies", "Who / what?", "a1", [], false, ""],
     ["r1", "Movies", "q2", "Right", ["W1", "W2"], true, "host note"],
-    ["r2", "History", "q3", "a3", [], true, ""],
+    ["r1", "History", "q3", "a3", [], true, ""],
     ["final", "Poems", "fq", "fa", [], false, ""],
     ["r1", "", "an idea", "", [], false, ""],
     ["r1", "", "loose q", "loose a", [], false, ""],
@@ -294,8 +293,8 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
 
 // ---------- AI prompt ----------
 {
-  const p = B.aiPrompt({ categories: 4, perCategory: 5, slot: "r2", topics: "The Grinch, Elf", avoid: ["Max", "Clarice"] });
-  ok(p.includes("4 categories with 5 questions each") && p.includes("200, 400, 600, 800, 1000"), "prompt states the size and Double Jeopardy values");
+  const p = B.aiPrompt({ categories: 4, perCategory: 5, topics: "The Grinch, Elf", avoid: ["Max", "Clarice"] });
+  ok(p.includes("4 categories with 5 questions each") && p.includes("100, 200, 300, 400, 500"), "prompt states the size and values");
   ok(p.includes("The Grinch, Elf") && p.includes("Max; Clarice"), "prompt carries the topics and the answers to avoid");
   const sample = p.split("\n").filter((l) => /^(##|\d+ \|)/.test(l)).join("\n");
   const parsed = B.parsePaste(sample);
@@ -335,6 +334,16 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
   eq([set.clues.length, before], [1, 3], "deleting a category removes all its questions");
   eq(B.applyOp(set, "removeCategory", { slot: "r1", name: "Gone" }), null, "deleting a missing category is a no-op");
   ok(!!B.applyOp({ ...set, locked: true }, "removeCategory", { slot: "final", name: "F" }).error, "locked sets can't lose a category");
+}
+
+// ---------- old Double Jeopardy questions are moved out, not lost ----------
+{
+  const raw = { ...mk([{ category: "A", question: "q1", answer: "a1" }]), locked: true };
+  raw.clues = [...raw.clues, { id: "x1", slot: "r2", category: "DJ Stuff", points: 400, question: "dq", answer: "da", wrong: [], dd: false, note: "" }];
+  const out = B.applyOp(raw, "dropRound2", {});
+  eq(out.clues.map((c) => c.question), ["q1"], "round-2 questions are taken out (even from a locked set)");
+  eq(B.applyOp(out, "dropRound2", {}), null, "nothing left to move → no change");
+  ok(!B.SLOTS.includes("r2"), "Double Jeopardy isn't a round you can pick any more");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

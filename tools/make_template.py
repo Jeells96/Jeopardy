@@ -1,7 +1,8 @@
 """Builds christmas-jeopardy-template.xlsx (run: python3 tools/make_template.py).
 
 Phone-friendly: one tab per category, five short columns, wrapped text, tall rows,
-a Yes/No dropdown for Daily Double. Tabs starting with "DJ " are Double Jeopardy.
+a Yes/No dropdown for Daily Double. (The extra set of categories, SAMPLE2, is written
+to sets/sample-game-2.txt as a second sample set for the question library.)
 """
 import os
 import openpyxl
@@ -115,17 +116,15 @@ INSTRUCTIONS = [
     ["THE BASICS"],
     ["- Each CATEGORY is its own tab at the bottom. The tab name IS the category on the board."],
     ["- Add a tab = new category. Delete a tab = remove it. Rename a tab = rename the category."],
-    ["- Start a tab name with  DJ  (for example 'DJ Sweet Treats') to put it in Double Jeopardy."],
-    ["  No DJ tabs? The game simply goes straight from round one to Final Jeopardy."],
     ["- For most clues you only fill TWO things: Question and Answer."],
     [],
     ["THE COLUMNS"],
-    ["- Points: leave blank to auto-number ($100-$500, or $200-$1000 in Double Jeopardy)."],
+    ["- Points: leave blank to auto-number ($100-$500)."],
     ["- Question: the clue.   Answer: the correct answer."],
     ["- Other choices: ONLY for multiple choice. Type the WRONG options separated by a"],
     ["     semicolon ;   for example:   Elf; The Grinch; Klaus"],
     ["     The game adds your Answer as the right option and shuffles them. Blank = spoken clue."],
-    ["- Daily Double: pick Yes. The real show has 1 in round one and 2 in Double Jeopardy."],
+    ["- Daily Double: pick Yes. The real show has 1 per board."],
     [],
     ["FINAL JEOPARDY"],
     ["- The 'Final Jeopardy' tab: put the category, the clue and the answer in the first row."],
@@ -186,8 +185,6 @@ def category(name, rows, fill):
 
 for name, rows in ROUND1.items():
     category(name, rows, "0B6E3B")
-for name, rows in ROUND2.items():
-    category(name, rows, "1428D8")
 
 fj = wb.create_sheet(title="Final Jeopardy")
 fj.sheet_properties.tabColor = "C1121F"
@@ -209,10 +206,15 @@ def dump(groups):
             lines.append(" | ".join(parts))
         lines.append("")
 dump(ROUND1)
-lines.append("== Double Jeopardy ==")
-dump(ROUND2)
 lines += ["== Final Jeopardy ==", "## " + FINAL[0], FINAL[1] + " | " + FINAL[2], ""]
 os.makedirs(os.path.join(HERE, "..", "sets"), exist_ok=True)
 with open(os.path.join(HERE, "..", "sets", "sample-game.txt"), "w", encoding="utf-8") as f:
     f.write("\n".join(lines))
 print("wrote sets/sample-game.txt")
+
+# The second sample set: the categories that used to be Double Jeopardy, at $100-$500.
+lines = ["# Sample game 2", "", "== Jeopardy =="]
+dump({name[3:] if name.startswith("DJ ") else name: [[p // 2, q, a, w, dd] for p, q, a, w, dd in rows] for name, rows in ROUND2.items()})
+with open(os.path.join(HERE, "..", "sets", "sample-game-2.txt"), "w", encoding="utf-8") as f:
+    f.write("\n".join(lines))
+print("wrote sets/sample-game-2.txt")

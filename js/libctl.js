@@ -96,6 +96,7 @@ export async function libClick(a, el, ctx) {
       if (L.newFrom === "game") clues = B.fromGameRows(G.Q);
       else if (L.newFrom === "sample") clues = await sampleClues();
       else if (L.newFrom === "test") clues = await sampleClues("test-game");
+      else if (L.newFrom === "sample2") clues = await sampleClues("sample-game-2");
       const set = B.newSet({ name, year, clues });
       await D.createSet(set);
       L.setId = set.id; L.filter = "all"; clearSearch(L); close(); render();
@@ -263,6 +264,29 @@ async function pasteClip({ G, D, toast, render }, cur, slot, category) {
   const where = category ? `“${category}”` : slot === "final" ? "Final Jeopardy" : "Unsorted";
   render();
   return toast(`${C.mode === "copy" ? "Copied" : "Moved"} ${n} question${n === 1 ? "" : "s"} to ${where} ✓`, "good");
+}
+
+// Double Jeopardy was removed. Any set that still has Double Jeopardy questions gets them
+// moved (not deleted) into a new set of their own, as regular $100–$500 categories.
+let splitting = false;
+export async function splitOldDoubleJeopardy({ G, D, toast }) {
+  if (splitting) return;
+  const old = G.sets.find((s) => s.clues.some((c) => c.slot === "r2"));
+  if (!old) return;
+  splitting = true;
+  try {
+    const moved = old.clues.filter((c) => c.slot === "r2").map((c) => ({ ...c, slot: "r1", points: c.points ? Math.max(100, Math.round(c.points / 2)) : null }));
+    // Remove them first in a transaction: only one device can win this, so no duplicates.
+    const changed = await D.setOp(old.id, "dropRound2", {});
+    if (changed) {
+      const name = `${old.name} – extra categories`.slice(0, 60);
+      await D.createSet(B.newSet({ name, year: old.year, clues: moved }));
+      toast(`Double Jeopardy is gone — its ${moved.length} questions from “${old.name}” are saved in a new set: “${name}”.`, "good");
+    }
+  } finally {
+    splitting = false;
+  }
+  if (G.sets.some((s) => s.id !== old.id && s.clues.some((c) => c.slot === "r2"))) setTimeout(() => splitOldDoubleJeopardy({ G, D, toast }).catch(() => {}), 500);
 }
 
 // ---------- edits (fired when a field is committed) ----------

@@ -225,11 +225,9 @@ console.log("engine tests");
   st.state = { ...st.state, scores: { team1: 900, team2: 300 } };
   st = run(st, "startGame", { control: "team1" });
   st.state = { ...st.state, scores: { team1: 900, team2: 300 } };
-  st = run(st, "startRound2");
-  eq(st.state.round, 2, "double jeopardy round");
-  eq(st.state.control, "team2", "trailing team picks first in DJ");
-  ok(run(st, "pickClue", { qid: "a1" }).noop, "round 1 clues not pickable in round 2");
-  ok(!run(st, "pickClue", { qid: "b1" }).noop, "round 2 clue pickable");
+  const r2 = E.ACTIONS.startRound2(st.state, {}, { now: 1, questions: QS, players: [] });
+  ok(!!(r2 && r2.error) && st.state.round === 1, "Double Jeopardy is gone — the game is one round + Final");
+  ok(run(st, "pickClue", { qid: "b1" }).noop, "old round-2 questions never show up on the board");
 }
 
 // --- Final Jeopardy ---

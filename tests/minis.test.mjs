@@ -542,13 +542,9 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   const w = world(roster(1, 1));
   w.qs.push({ id: "d1", category: "DJ", points: 200, type: "spoken", round: 2 });
   w.run("startGame");
-  w.run("setSettings", { patch: { doubleJeopardy: false } });
-  ok(E.hasRound2(w.qs) && !E.r2On(w.state, w.qs), "Double Jeopardy switched off (questions kept)");
+  ok(!E.r2On(w.state, w.qs), "Double Jeopardy is never played, even with old round-2 questions loaded");
   w.run("startRound2");
-  ok(!!w.error && w.state.round === 1, "can't start Double Jeopardy while it's off");
-  w.run("setSettings", { patch: { doubleJeopardy: true } });
-  w.run("startRound2");
-  eq(w.state.round, 2, "switched back on, it plays");
+  ok(!!w.error && w.state.round === 1, "…and can't be started");
 }
 
 // ---------- clocks stop once answers are in ----------
