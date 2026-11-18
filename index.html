@@ -18,11 +18,36 @@
 </head>
 <body data-view="join">
   <div class="snow" aria-hidden="true"></div>
+  <div class="sky" aria-hidden="true"></div>
+  <div class="hills" aria-hidden="true"></div>
   <div class="string-lights" aria-hidden="true"></div>
   <main id="app"><div class="join"><div class="join-card loading"><div class="spinner"></div></div></div></main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script type="module" src="./js/app.js"></script>
   <script>
+    // A string of Christmas lights across the top: a drooping wire with a bulb hanging from
+    // each dip, glowing and twinkling at their own pace.
+    (function () {
+      var wire = document.querySelector(".string-lights");
+      var colors = ["red", "amber", "green", "blue", "pink"];
+      function hang() {
+        var gap = window.innerWidth < 600 ? 44 : 64;
+        var n = Math.ceil(window.innerWidth / gap) + 1;
+        wire.style.setProperty("--gap", gap + "px");
+        wire.innerHTML = "";
+        for (var i = 0; i < n; i++) {
+          var b = document.createElement("span");
+          b.className = "bulb " + colors[i % colors.length];
+          b.style.left = i * gap + gap / 2 + "px";
+          b.style.setProperty("--tilt", (i % 2 ? 9 : -9) + (Math.random() * 6 - 3) + "deg");
+          b.style.animationDuration = (1.6 + Math.random() * 2.2).toFixed(2) + "s";
+          b.style.animationDelay = (-Math.random() * 4).toFixed(2) + "s";
+          wire.appendChild(b);
+        }
+      }
+      hang();
+      var t; window.addEventListener("resize", function () { clearTimeout(t); t = setTimeout(hang, 200); });
+    })();
     // Falling snow (decorative). Fewer flakes on small screens.
     (function () {
       var layer = document.querySelector(".snow");

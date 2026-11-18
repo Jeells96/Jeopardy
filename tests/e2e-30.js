@@ -178,14 +178,14 @@ const dump = async () => (await fetch(URL + "__fs/dump", { method: "POST" })).js
   const m = (await state(host)).minis.list[0].matches[0];
   ok(Object.keys(m.done).length === N, `all ${N} drawings sent themselves at pencils down`);
   ok(judgedIn < 20, `all ${N} judged ${judgedIn.toFixed(1)} s after pencils down`);
-  await until(board, (n) => document.querySelectorAll(".dall .dall-item").length === n, N, 10000);
-  await until(board, () => document.querySelectorAll(".dall .dall-item svg.drawing").length >= 20, null, 15000);
-  const fits = await board.evaluate(() => { const r = document.querySelector(".dall").getBoundingClientRect(); return r.bottom <= window.innerHeight && r.right <= window.innerWidth; });
-  ok(fits, `the board shows all ${N} drawings ranked, and it fits on the screen`);
+  await until(board, () => document.querySelectorAll(".dverdict .dpanel svg.drawing").length >= 3, null, 15000);
+  const fits = await board.evaluate(() => { const r = document.querySelector(".dverdict").getBoundingClientRect(); return r.bottom <= window.innerHeight; });
+  ok(fits, "the board shows the picture, the best and the worst, and it fits on the screen");
   await sleep(600);
   await shot(board, "t02-board-30-drawings");
-  await until(phones[5], () => !!document.querySelector(".mysub svg.drawing"));
-  ok(true, "each phone shows the drawing it sent");
+  await until(phones[5], () => !!document.querySelector(".dbrowse .mysub svg.drawing") && document.querySelectorAll(".dlb-row").length >= 30);
+  ok(true, `each phone shows the drawing it sent, and a leaderboard of all ${N}`);
+  await shot(phones[5], "t03-phone-30-leaderboard");
 
   console.log(errors.length ? "\nPage errors:\n" + errors.slice(0, 20).join("\n") : "\nNo page errors.");
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -167,6 +167,9 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   // ---------------- multiple choice ----------------
   let base = (await state(board)).scores;
   const q2 = await pick("Christmas Movies", 200);
+  await until(P.Rick, () => document.querySelectorAll(".ph-clue .ph-opt").length >= 2);
+  ok(true, "multiple choice: every phone shows the options with the question — no need to look at the TV");
+  await shot(P.Rick, "08b-phone-mcq-options");
   await key(host, "Space");
   await until(P.Jo, () => !!document.querySelector(".buzz.live"));
   await P.Jo.dispatchEvent('[data-action="buzz"]', "pointerdown");
@@ -201,15 +204,26 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   const ddMax = ddScore > 0 ? ddScore : 500;
   const ddMaxTxt = "$" + ddMax.toLocaleString("en-US");
   ok((await host.textContent(".hint")).includes("Allowed $5 – " + ddMaxTxt), "DD limit is everything the team has (or the top value at $0 or less): " + ddMaxTxt);
-  await host.fill("#dd-wager", "9999");
-  await key(host, "Tab");
-  await host.click('[data-action="dd-lock"]');
-  await until(host, () => document.getElementById("toast").classList.contains("show"));
-  ok((await host.textContent("#toast")).includes("between $5 and " + ddMaxTxt), "over-limit DD wager is rejected");
-  await host.locator('.chipbtn', { hasText: ddScore > 0 ? "All in" : "Max" }).click();
-  await shot(host, "11-host-dd-wager");
-  await key(host, "Space");
+  // The player who earned the pick enters the wager on their phone (no need for Jaren to).
+  const ids = await Promise.all(Object.values(P).map((p) => p.evaluate(() => window.__G.deviceId)));
+  const byId = Object.fromEntries(Object.values(P).map((p, i) => [ids[i], p]));
+  const wagerer = ddS.clue.dd.by ? byId[ddS.clue.dd.by.deviceId] : Object.values(P).find((p) => p.team === ddS.clue.dd.team);
+  ok(!!ddS.clue.dd.by, `the player who earned the pick wagers (${ddS.clue.dd.by && ddS.clue.dd.by.name})`);
+  await until(wagerer, () => !!document.getElementById("ph-dd-wager"));
+  const mate = Object.values(P).find((p) => p.team === ddS.clue.dd.team && p !== wagerer);
+  if (mate) ok(!(await mate.$("#ph-dd-wager")) && (await mate.textContent(".dd-card")).includes("choosing your wager"), "their teammates see who's choosing the wager");
+  ok((await Object.values(P).find((p) => p.team !== ddS.clue.dd.team).textContent(".dd-card")).includes("choosing a wager"), "the other team sees it too");
+  await wagerer.fill("#ph-dd-wager", "9999");
+  await wagerer.click('[data-action="ph-dd-lock"]');
+  await until(wagerer, () => document.getElementById("toast").classList.contains("show"));
+  ok((await wagerer.textContent("#toast")).includes("between $5 and " + ddMaxTxt), "over-limit DD wager is rejected on the phone");
+  await wagerer.locator('.dd-card .chipbtn', { hasText: ddScore > 0 ? "All in" : "Max" }).click();
+  await shot(wagerer, "11-phone-dd-wager");
+  await wagerer.click('[data-action="ph-dd-lock"]');
   await until(board, () => window.__G.S.clue.stage === "answering");
+  const ddc = (await state(board)).clue;
+  const [ddMs, baseSecs] = await host.evaluate(async (c) => [(await import("/js/engine.js")).answerMs(c, window.__G.S.settings), window.__G.S.settings.answerSeconds || 15], ddc);
+  ok(ddMs === baseSecs * 2000, `twice the answer time on a Daily Double (${ddMs / 1000}s instead of ${baseSecs}s)`);
   ok((await board.textContent(".clue-val")).includes(ddMaxTxt), "DD wager shown on the question");
   const ddTeam = (await state(board)).clue.dd.team;
   const ddPlayer = Object.values(P).find((p) => p.team === ddTeam);
@@ -268,9 +282,10 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await key(host, "u");
   await until(board, (n) => window.__G.S.history.length === n - 1, s0.history.length);
   ok(true, "U undoes the last score change");
+  const t1before = (await state(board)).scores.team1;
   await host.click('.r-score.team1');
   await host.click('.modal .btn.good:has-text("$500")');
-  await until(board, (v) => window.__G.S.scores.team1 === v + 500, (await state(board)).scores.team1);
+  await until(board, (v) => window.__G.S.scores.team1 === v + 500, t1before);
   ok(true, "host adjusts a score from the podium");
   await key(host, "Escape");
 
@@ -319,6 +334,13 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(P.Jo, () => !!document.getElementById("fw-input"));
   await sleep(500);
   await shot(board, "14-board-final-category");
+  await until(host, () => document.querySelectorAll(".scorefix .chipbtn").length === 2);
+  ok(true, "while Final wagers are made, Jaren can adjust either team's score");
+  await host.click('.scorefix .chipbtn.team1');
+  await host.waitForSelector(".modal #exact-score");
+  await host.fill("#exact-score", "800");
+  await host.click('.modal [data-action="set-exact"]');
+  await until(board, () => window.__G.S.scores.team1 === 800);
   await P.Jo.fill("#fw-input", "900");
   await P.Jo.click('[data-action="final-wager"]');
   await until(P.Jo, () => document.getElementById("toast").classList.contains("show"));

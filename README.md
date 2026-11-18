@@ -46,8 +46,10 @@ and the points go straight onto the team's score and carry into Jeopardy.
 - **Who's up next?** Press the gold button and the big screen shuffles through the names,
   lands on the pick with a drum-roll, and **says it out loud** ("Up next: Jake versus
   Sarah!"). The picked players' phones buzz with **You're up!**
-- **Fair rotation:** nobody is drawn twice until everyone on their team has had a go, and
-  nobody plays twice in a row. Uneven teams are fine.
+- **Fair rotation:** a player leaves the "still to play" pool the moment they're picked (a
+  re-draw puts them back), so nobody is drawn twice until everyone on their team has had a
+  go, and the shuffle only shows names still in the pool. Across the night, people who
+  haven't played any mini game yet are picked first. Uneven teams are fine.
 - **Don't like the draw?** Tap 🎲 to re-draw one side, or choose a person from the list.
 - **Points:** head-to-head games can give the points to the team that wins the game, or
   *for every matchup win*. Best-overall games can be highest-wins or lowest-wins (fastest
@@ -99,10 +101,11 @@ Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing
    it comes in.
 4. **The website judges** every drawing as soon as they're all in — position, size, rotation
    and mirror image don't matter, and a few stray lines are forgiven. The big screen shows
-   **the picture, the winner and last place** side by side with a % match, then everyone's
-   drawing ranked best to worst. **The best drawing wins the round for its team.** Each phone
-   says how that player did ("You came 2nd of 9"). **⏭ Judge now** judges straight away if
-   someone never sends (no drawing = last).
+   **the picture, the winner and last place** side by side with a % match. **The best
+   drawing wins the round for its team.** Each phone says how that player did ("You came 2nd
+   of 9"), shows their own drawing, and has the **full leaderboard** — tap anyone to see
+   their drawing (or the original picture). **⏭ Judge now** judges straight away if someone
+   never sends (no drawing = last).
 5. **Another round** uses the next picture, or **🏁 Finish game**. Points go to the team that
    won the most rounds (or, if you choose, to the winning team every round).
 - **↶ Undo round** throws a round away as if it never started (the same picture comes up next).
@@ -150,7 +153,8 @@ switch off phone renaming there too.
 - **Typed answers:** whoever wins the buzz gets a text box, already open and ready to
   type. Their answer appears on the board and your screen says whether it matches. You tap
   Correct / Wrong / Skip.
-- **Multiple choice:** the player taps an option and it's scored automatically. A wrong
+- **Multiple choice:** every phone shows the options along with the question (nobody has to
+  look at the TV). Whoever buzzes in taps an option and it's scored automatically. A wrong
   option is crossed off for the rebound team.
 - **Answer timer** with show-style countdown lights. Out of time counts as wrong: the
   points come off automatically (just the time's-up sound), and the other team gets
@@ -159,10 +163,17 @@ switch off phone renaming there too.
 
 **Daily Doubles**
 - Splash screen and sound, no buzzing — the team that found it plays.
+- **The wager is entered on a phone:** by the player who earned the pick (the last one on
+  that team to answer right), or anyone on the team if nobody has yet. Their teammates and
+  the other team see who's choosing. Jaren can still enter it for them.
 - Wager **$5 up to everything the team has**. At $0 or below, they can wager up to the
   board's top value ($500), like the show. Quick buttons for min / half / **"All in!"**.
+- **Twice the usual answer time.**
 
 **Final Jeopardy**
+- **Fix up the scores first** if you need to: when the board is clear, and while wagers are
+  being made, your controls show both scores with ✏️ to adjust them (who plays and the
+  wager limits follow).
 - Only teams above $0 play (official rule — you can override per team).
 - Teams **lock their wager secretly on their phones** (teammates see it, the other team
   and the projector don't). You can also enter wagers by hand.
@@ -362,6 +373,7 @@ node tests/e2e-extras.js [shots]  # test game, mini-game tables, multiple-choice
 node tests/draw.test.mjs          # Blind Drawing: the shape judge and its rules
 node tests/e2e-draw.js [shots]    # Blind Drawing: everyone draws at once, verdict, undo
 node tests/e2e-30.js [shots]      # 30 phones: fair buzzing on a slow network, sync, 30-person drawing
+node tests/e2e-crowd.js [shots]   # 34 players with long names: every screen that lists players fits
 node tests/e2e-update.js          # open screens reload onto a new deploy (not mid-typing)
 # …and against a copy with versioned file URLs, the way the deploy builds it:
 #   cp -r . /tmp/site && (cd /tmp/site && tools/cache-bust.sh test1)

@@ -288,7 +288,7 @@ function automations() {
     if (c.stage === "open" && G.B.some((b) => b.key === key && Number.isFinite(b.t))) decideBuzz(key, false);
     const until = E.buzzDeadline(c, set);
     if (until && now >= until) fire("bw" + key + c.openedAt, "buzzWindowTimeout", { key });
-    if (c.stage === "answering" && c.locked && c.timeUp !== key && c.submitted !== key && now >= c.locked.at + (set.answerSeconds || 15) * 1000) fire("at" + key + c.locked.at, "answerTimeout", { key });
+    if (c.stage === "answering" && c.locked && c.timeUp !== key && c.submitted !== key && now >= c.locked.at + E.answerMs(c, set)) fire("at" + key + c.locked.at, "answerTimeout", { key });
   }
   if (S.phase === "final" && S.final.stage === "clue" && now >= S.final.deadline) fire("fl" + S.final.deadline, "finalLock", {});
   if (S.phase === "over" && S.vote && S.vote.stage === "open" && E.voteProgress(S, G.P).all) fire("vr" + S.vote.openedAt, "voteReveal", {});
@@ -527,6 +527,15 @@ async function handle(a, p, el) {
     case "first-pick": G.ui.firstPick = el.dataset.v; return render();
     case "dd-team": G.ui.ddTeam = el.dataset.team; G.ui.ddWager = ""; render(); await D.act("setDDTeam", { team: el.dataset.team }); return;
     case "dd-quick": G.ui.ddWager = el.dataset.v; return render();
+    case "ph-dd-quick": { const box = document.getElementById("ph-dd-wager"); if (box) box.value = el.dataset.v; return; }
+    case "ph-dd-lock": {
+      const box = document.getElementById("ph-dd-wager");
+      const c = S.clue;
+      if (!G.me || !c || !c.dd) return;
+      if (!box || box.value.trim() === "") { if (box) box.focus(); return toast("Type your wager first.", "bad"); }
+      await D.act("lockDDWager", { team: G.me.team, wager: Number(box.value), by: { deviceId: G.deviceId, name: G.me.name, team: G.me.team } });
+      return;
+    }
     case "dd-lock": {
       const team = G.ui.ddTeam || (S.clue && S.clue.dd && S.clue.dd.team);
       if (!team) return toast("Pick the team that found the Daily Double first.", "bad");
@@ -568,6 +577,7 @@ async function handle(a, p, el) {
       return;
     }
     case "mini-draw-judge": return judgeDrawMatch(p.id, p.matchId);
+    case "draw-view": G.ui.drawPick = { rid: el.dataset.rid, pid: el.dataset.pid }; return render();
     case "mini-unstart": {
       const g = E.miniById(G.S, p.id);
       if (!g) return;
@@ -818,7 +828,7 @@ document.addEventListener("keydown", (e) => {
       "new-cat-r1": '[data-action="lib-add-cat"][data-slot="r1"]',
       "mini-score": '[data-action="mini-score"]', "team-name-input": '[data-action="team-rename-save"]', "exact-score": '[data-action="set-exact"]',
       "add-player-team1": '[data-action="player-add"][data-team="team1"]', "add-player-team2": '[data-action="player-add"][data-team="team2"]',
-      "mini-new-name": '[data-action="mini-add"]', "dd-wager": '[data-action="dd-lock"]', "fw-input": '[data-action="final-wager"]' }[e.target.id];
+      "mini-new-name": '[data-action="mini-add"]', "dd-wager": '[data-action="dd-lock"]', "ph-dd-wager": '[data-action="ph-dd-lock"]', "fw-input": '[data-action="final-wager"]' }[e.target.id];
     const btn = go && document.querySelector(go);
     if (btn) { e.preventDefault(); btn.click(); return; }
   }

@@ -168,7 +168,7 @@ function clueStatus(G, c, q) {
   if (c.stage === "paused") return `<div class="status status--wait">Buzzers paused</div>`;
   if (c.stage === "answering" && c.locked) {
     const L = c.locked;
-    const total = (set.answerSeconds || 15) * 1000;
+    const total = E.answerMs(c, set);
     const key = E.lockKey(c);
     const sp = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard">✍️ “${esc(G.spoken.text)}”</div>` : "";
     const tu = c.timeUp === key ? `<div class="status-sub timeup">⏰ Time's up!</div>` : "";

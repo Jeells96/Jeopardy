@@ -301,6 +301,56 @@ console.log("engine tests");
   eq(bad, 0, "change sets never contain undefined");
 }
 
+// --- Daily Double: the player who earned the pick wagers on their phone; twice the time ---
+{
+  const players = [P1, P2, P3].map((p) => ({ id: p.deviceId, name: p.name, team: p.team }));
+  const raw = (st, name, params, dt = 0) => { const ch = E.ACTIONS[name](st.state, params, { now: (T += 10 + dt), questions: st.qs, players }); return ch && ch.error ? { ...st, error: ch.error } : { ...apply(st.state, st.qs, ch), error: null, noop: !ch }; };
+  let st = fresh();
+  st = run(st, "startGame", { control: "team2" });
+  st = run(st, "pickClue", { qid: "a1" });
+  st = run(st, "openBuzzers");
+  st = buzz(st, P1);
+  st = run(st, "judge", { result: "correct" });
+  eq([st.state.control, st.state.controlBy && st.state.controlBy.name], ["team1", "Ann"], "a right answer earns the pick for that player's team (and remembers who)");
+  st = run(st, "closeClue");
+  st = run(st, "pickClue", { qid: "a3" });
+  eq(st.state.clue.dd.by && st.state.clue.dd.by.name, "Ann", "a Daily Double is wagered by the player who earned the pick");
+  ok(!!raw(st, "lockDDWager", { team: "team1", wager: 100, by: { ...P3 } }).error, "…not a teammate (while Ann is still here)");
+  ok(!!raw(st, "lockDDWager", { team: "team2", wager: 100, by: { ...P2 } }).error, "…and not the other team");
+  const won = raw(st, "lockDDWager", { team: "team1", wager: 100, by: { ...P1 } });
+  eq([won.state.clue.stage, won.state.clue.dd.wager, won.state.clue.dd.by.name], ["answering", 100, "Ann"], "Ann locks the wager on her phone and the question appears");
+  ok(!run(st, "lockDDWager", { team: "team1", wager: 100 }).error, "Jaren can still enter it for them");
+  const c = won.state.clue;
+  eq(E.answerMs(c, {}), 30000, "twice the answer time on a Daily Double (30 s instead of 15)");
+  eq(E.answerMs({ dd: null }, { answerSeconds: 20 }), 20000, "normal questions keep the normal time");
+  const k = E.lockKey(c);
+  ok(raw(won, "answerTimeout", { key: k }, 16000).noop, "not out of time after 16 s on a Daily Double");
+  ok(!raw(won, "answerTimeout", { key: k }, 15000).noop, "…out of time after 30 s");
+  // nobody has earned a pick yet → anyone on the team can wager
+  let f = fresh();
+  f = run(f, "startGame", { control: "team1" });
+  f = run(f, "pickClue", { qid: "a3" });
+  eq(f.state.clue.dd.by, null, "at the start (nobody has earned the pick yet), anyone on the team can wager");
+  ok(!raw(f, "lockDDWager", { team: "team1", wager: 100, by: { ...P3 } }).error, "…e.g. Cy");
+  f = run(f, "setControl", { team: "team2" });
+  eq(f.state.controlBy, null, "switching who picks forgets who earned it");
+}
+
+// --- fixing scores up before Final Jeopardy ---
+{
+  let st = fresh();
+  st = run(st, "startGame", { control: "team1" });
+  st = run(st, "setScore", { team: "team1", value: 1000 });
+  st = run(st, "finalStart");
+  eq(st.state.final.eligible, { team1: true, team2: false }, "a team at $0 sits out Final");
+  st = run(st, "finalWager", { team: "team1", amount: 800, by: "Ann" });
+  st = run(st, "adjustScore", { team: "team2", delta: 400 });
+  eq([st.state.scores.team2, st.state.final.eligible.team2], [400, true], "giving them points before the question puts them back in");
+  st = run(st, "setScore", { team: "team1", value: 500 });
+  eq(st.state.final.wagers.team1, undefined, "a wager that's now more than the team has is cleared, to be entered again");
+  ok(!!run(st, "finalWager", { team: "team1", amount: 800, by: "Ann" }).error && !run(st, "finalWager", { team: "team1", amount: 500, by: "Ann" }).error, "…and the new limit applies");
+}
+
 // --- fair buzzing: scheduled open, fastest press wins ---
 {
   let st = fresh();

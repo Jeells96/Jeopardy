@@ -66,7 +66,8 @@ export function hostSteps(G, { privateView = false } = {}) {
         : `${privateView ? "Tap" : "Click"} any question on the board to begin. <span class="muted">${left} left</span>`;
       btn("⇄ Switch who picks", "act", act("setControl", { team: S.control ? E.otherTeam(S.control) : "team1" }), "ghost", "");
     } else if (E.finalClue(G.Q)) {
-      status = "The board is clear — time for Final Jeopardy!";
+      status = "The board is clear — time for Final Jeopardy! <span class=\"muted\">Fix up the scores first if you need to.</span>";
+      panel = scoreFix(G);
       btn("▶ Start Final Jeopardy!", "act", act("finalStart"), "primary", "Space");
     } else {
       status = "The board is clear!";
@@ -85,11 +86,16 @@ export function hostSteps(G, { privateView = false } = {}) {
     if (c.stage === "dd") {
       const team = G.ui.ddTeam || c.dd.team || null;
       const lim = team ? E.ddLimits(S, G.Q, team) : null;
-      status = "⭐ <b>Daily Double!</b> Ask the team that found it for their wager.";
+      const who = c.dd.team && c.dd.by && G.P.some((p) => p.id === c.dd.by.deviceId) ? c.dd.by : null;
+      const phones = c.dd.team && G.P.some((p) => p.team === c.dd.team && !p.manual);
+      status = !c.dd.team ? "⭐ <b>Daily Double!</b> Which team found it?"
+        : who ? `⭐ <b>Daily Double!</b> <b>${esc(who.name)}</b> is entering ${esc(tn(G, c.dd.team))}' wager on their phone… <span class="muted">(or enter it for them below)</span>`
+        : phones ? `⭐ <b>Daily Double!</b> ${esc(tn(G, c.dd.team))} can enter their wager on any of their phones… <span class="muted">(or enter it for them below)</span>`
+        : "⭐ <b>Daily Double!</b> Ask the team that found it for their wager.";
       panel = ddPanel(G, team, lim);
       const w = Number(G.ui.ddWager);
       const valid = lim && Number.isFinite(w) && G.ui.ddWager !== "" && w >= lim.min && w <= lim.max;
-      btn(valid ? `🔒 Lock ${money(w)} & show question` : "🔒 Lock wager & show question", "dd-lock", {}, "primary", "Space");
+      btn(valid ? `🔒 Lock ${money(w)} & show question` : "🔒 Lock wager & show question", "dd-lock", {}, valid || !phones ? "primary" : "ghost", "Space");
       btn("↩ Put question back", "act", act("unpickClue"), "ghost", "");
       return { status, panel, buttons: B };
     }
@@ -132,7 +138,7 @@ export function hostSteps(G, { privateView = false } = {}) {
         ? `<span class="timeup">✓ Answer in — your call.</span>`
         : c.timeUp === key
         ? `<span class="timeup">⏰ Time's up — your call.</span>`
-        : `<span class="pill-cd"><span class="cd" data-deadline="${L.at + (set.answerSeconds || 15) * 1000}" data-format="s"></span></span>`;
+        : `<span class="pill-cd"><span class="cd" data-deadline="${L.at + E.answerMs(c, set)}" data-format="s"></span></span>`;
       const heard = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard-line">✍️ “${esc(G.spoken.text)}”</div>` : "";
       const isMcq = q && q.type === "mcq";
       const fastest = !c.dd && c.order && c.order.length ? `<div class="muted fastest">⚡ ${c.order.slice(0, 3).map((o) => `${esc(o.name)} ${(o.ms / 1000).toFixed(2)}s`).join(" · ")}</div>` : "";
@@ -159,7 +165,7 @@ export function hostSteps(G, { privateView = false } = {}) {
     const f = S.final;
     if (f.stage === "wager") {
       status = `<b>Final Jeopardy!</b> Teams lock their wagers on their phones.`;
-      panel = finalWagerPanel(G, privateView);
+      panel = scoreFix(G) + finalWagerPanel(G, privateView);
       const missing = E.TEAMS.filter((t) => f.eligible[t] && !f.wagers[t]);
       btn(missing.length ? `▶ Reveal question (${missing.map((t) => esc(tn(G, t))).join(" & ")} → $0)` : "▶ Reveal the Final question", "act", act("finalRevealClue"), "primary", "Space");
       return { status, panel, buttons: B };
@@ -250,6 +256,11 @@ function ddPanel(G, team, lim) {
   </div>`;
 }
 
+// Adjust either team's score (opens the score editor) — before and during Final wagers.
+function scoreFix(G) {
+  return `<div class="mpanel wrap scorefix"><span class="muted">Scores:</span>${E.TEAMS.map((t) =>
+    `<button class="chipbtn ${t}" data-action="score-panel" data-team="${t}">${esc(tn(G, t))} <b>${money(G.S.scores[t] || 0)}</b> ✏️</button>`).join("")}</div>`;
+}
 function finalWagerPanel(G, privateView) {
   const f = G.S.final;
   return `<div class="fwpanel">${E.TEAMS.map((t) => {

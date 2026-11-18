@@ -683,6 +683,38 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq(f.state.final.wagers.team1.amount, 300, "…and locked in again");
 }
 
+// ---------- the to-play pool: out the moment you're picked; everyone gets a turn tonight ----------
+{
+  const w = world(roster(4, 4), 11);
+  const a = w.add({ name: "Toss", type: "h2h" });
+  w.run("miniPlay", { id: a });
+  w.run("miniNext", { id: a });
+  let m = E.openMatch(w.game());
+  eq([w.game().played.team1, w.game().played.team2], [[m.p1.id], [m.p2.id]], "picked players leave the pool right away (before the result)");
+  const was = m.p1.id;
+  w.run("miniRepick", { id: a, team: "team1" });
+  m = E.openMatch(w.game());
+  ok(m.p1.id !== was && !w.game().played.team1.includes(was) && w.game().played.team1.includes(m.p1.id), "a re-draw puts the replaced player back in the pool");
+  ok(!w.state.minis.tonight.team1.includes(was), "…for the rest of the night too");
+  w.run("miniSetPlayer", { id: a, team: "team1", pid: "h4" });
+  eq(w.game().played.team1, ["h4"], "Jaren hand-picking someone swaps them in the pool as well");
+  w.run("miniMatch", { id: a, winner: "team1" });
+  eq(w.game().played.team1, ["h4"], "recording the result doesn't count them twice");
+  w.run("miniNext", { id: a });
+  ok(E.openMatch(w.game()).p1.id !== "h4", "nobody who's been picked comes up again before the rest of their team");
+  w.run("miniMatch", { id: a, winner: "tie" });
+  w.run("miniFinish", { id: a, winner: "tie" });
+  const tonight = [...w.state.minis.tonight.team1];
+  eq(tonight.length, 2, "two husbands have played a mini game tonight");
+  // the next game starts with the people who haven't played yet
+  const b = w.add({ name: "Stack", type: "best" });
+  w.run("miniPlay", { id: b });
+  const seen = [];
+  for (let i = 0; i < 4; i++) { w.run("miniNext", { id: b }); const t = E.turnsOf(w.game(1))[0]; seen.push(t); w.run("miniScore", { id: b, score: i }); }
+  const husbands = seen.filter((t) => t.team === "team1").map((t) => t.pid);
+  ok(husbands.length === 2 && husbands.every((pid) => !tonight.includes(pid)), "the next mini game picks people who haven't played tonight first");
+}
+
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -74,9 +74,12 @@ function body(G) {
   return card("⏳", "Hang tight…");
 }
 
-function clueBox(G, c, q) {
+// The question (and, for multiple choice, the options — so nobody has to look at the TV).
+function clueBox(G, c, q, { options = true } = {}) {
   const value = c.dd ? `Daily Double${c.dd.wager ? " · " + money(c.dd.wager) : ""}` : money(q.points);
-  return `<div class="${cls("ph-clue", c.dd && "dd")}"><div class="ph-cat"><span>${esc(q.category)}</span><span>${esc(value)}</span></div><div class="ph-q">${esc(q.question)}</div></div>`;
+  const list = options && q.type === "mcq" && Array.isArray(q.choices)
+    ? `<div class="ph-opts">${q.choices.map((ch, i) => (ch ? `<div class="${cls("ph-opt", c.eliminated.includes(i) && "out")}"><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></div>` : "")).join("")}</div>` : "";
+  return `<div class="${cls("ph-clue", c.dd && "dd")}"><div class="ph-cat"><span>${esc(q.category)}</span><span>${esc(value)}</span></div><div class="ph-q">${esc(q.question)}</div>${list}</div>`;
 }
 
 function choices(G, c, q) {
@@ -101,8 +104,24 @@ function clueBody(G) {
   const key = E.lockKey(c);
 
   if (c.stage === "dd") {
-    const mine = c.dd.team === me.team;
-    return `<div class="ph-card dd-card"><div class="dd-mini">DAILY DOUBLE!</div><p>${mine ? "Your team found it! Tell Jaren your wager." : c.dd.team ? `${esc(tn(G, c.dd.team))} found it and ${verb(tn(G, c.dd.team), "is", "are")} wagering…` : "Someone found a Daily Double!"}</p><small class="muted">${esc(q.category)}</small></div>`;
+    const team = c.dd.team;
+    const head = `<div class="dd-mini">DAILY DOUBLE!</div>`;
+    const cat = `<small class="muted">${esc(q.category)}</small>`;
+    if (!team) return `<div class="ph-card dd-card">${head}<p>Someone found a Daily Double!</p>${cat}</div>`;
+    // The player who earned the pick wagers (anyone on the team if nobody has yet).
+    const who = c.dd.by && G.P.some((p) => p.id === c.dd.by.deviceId) ? c.dd.by : null;
+    if (me.team !== team) return `<div class="ph-card dd-card">${head}<p>${esc(tn(G, team))} found it — ${who ? `${esc(who.name)} is` : `${verb(tn(G, team), "is", "are")}`} choosing a wager…</p>${cat}</div>`;
+    if (who && who.deviceId !== G.deviceId) return `<div class="ph-card dd-card">${head}<p>Your team found it! <b>${esc(who.name)}</b> is choosing your wager…</p>${cat}</div>`;
+    const lim = E.ddLimits(S, G.Q, team);
+    const half = Math.max(lim.min, Math.round(lim.max / 2 / 50) * 50);
+    const quick = [[lim.min, `Min ${money(lim.min)}`], [half, money(half)], [lim.max, (S.scores[team] || 0) > 0 ? "All in!" : `Max ${money(lim.max)}`]]
+      .filter((o, i, a) => a.findIndex((x) => x[0] === o[0]) === i)
+      .map(([v, l]) => `<button class="chipbtn" data-action="ph-dd-quick" data-v="${v}">${l}</button>`).join("");
+    return `<div class="ph-card dd-card">${head}<p>${who ? "You found it — you choose the wager!" : "Your team found it — choose your wager!"}</p>${cat}
+      <label class="wager-box big"><span>$</span><input id="ph-dd-wager" class="wager-input" type="number" inputmode="numeric" min="${lim.min}" max="${lim.max}" placeholder="Wager" autocomplete="off" data-sticky></label>
+      <div class="quick">${quick}</div>
+      <div class="hint">${money(lim.min)} – ${money(lim.max)}</div>
+      <button class="btn primary big" data-action="ph-dd-lock">🔒 Lock my wager</button></div>`;
   }
   if (c.stage === "reading") {
     if (Date.now() < (G.earlyUntil || 0)) return `${clueBox(G, c, q)}<button class="buzz early" data-action="buzz" aria-label="Too soon"><span>TOO SOON!</span><small>Wait for it to turn green</small></button>`;
@@ -121,18 +140,18 @@ function clueBody(G) {
 
   if (c.stage === "answering" && c.locked) {
     const L = c.locked;
-    const total = (set.answerSeconds || 15) * 1000;
+    const total = E.answerMs(c, set);
     const clock = c.submitted === key ? `<div class="ph-note">✓ Answer in — waiting for Jaren to judge</div>` : c.timeUp === key ? `<div class="ph-note timeup">⏰ Time's up!</div>` : timer(L.at + total, total);
     if (c.dd) {
       if (me.team === c.dd.team) {
         return q.type === "mcq"
-          ? `${clueBox(G, c, q)}<div class="youup">⭐ Your team's Daily Double — pick together!</div>${choices(G, c, q)}${clock}`
+          ? `${clueBox(G, c, q, { options: false })}<div class="youup">⭐ Your team's Daily Double — pick together!</div>${choices(G, c, q)}${clock}`
           : `<div class="youup">⭐ Your team's Daily Double!</div>${answerBox(G, key, "Your team's answer", c)}${clock}${clueBox(G, c, q)}`;
       }
       return `${clueBox(G, c, q)}<div class="ph-note">${esc(tn(G, c.dd.team))} ${verb(tn(G, c.dd.team), "is", "are")} answering their Daily Double (${money(c.dd.wager)}).</div>${clock}`;
     }
     if (L.deviceId === G.deviceId) {
-      if (q.type === "mcq") return `<div class="youup big">🎉 You're up! Tap your answer</div>${clueBox(G, c, q)}${choices(G, c, q)}${clock}`;
+      if (q.type === "mcq") return `<div class="youup big">🎉 You're up! Tap your answer</div>${clueBox(G, c, q, { options: false })}${choices(G, c, q)}${clock}`;
       return `<div class="youup big">🎉 You're up!</div>${answerBox(G, key, "Your answer", c)}${clock}${clueBox(G, c, q)}`;
     }
     const mine = L.team === me.team;
@@ -237,7 +256,7 @@ function voteBody(G) {
   const options = V.candidates.filter((pid) => pid !== G.deviceId);
   return `<div class="ph-card">
     <div class="lbl">🧶 Vote for the ugliest sweater</div>
-    <div class="ph-vote">${options.map((pid) => `<button class="${cls("mcqbtn", mine === pid && "picked")}" data-action="vote-cast" data-pid="${esc(pid)}"><b>${mine === pid ? "✓" : "🧶"}</b><span>${esc(V.names[pid] || "?")}</span></button>`).join("")}</div>
+    <div class="${cls("ph-vote", options.length > 10 && "many")}">${options.map((pid) => `<button class="${cls("mcqbtn", mine === pid && "picked")}" data-action="vote-cast" data-pid="${esc(pid)}"><b>${mine === pid ? "✓" : "🧶"}</b><span>${esc(V.names[pid] || "?")}</span></button>`).join("")}</div>
     ${mine ? `<div class="locked-note">✓ Vote saved for <b>${esc(V.names[mine] || "?")}</b> <small>— you can change it until everyone has voted</small></div>` : `<p class="muted">Your vote is secret. Results show once everyone has voted.</p>`}
     <p class="muted">${pr.cast} of ${pr.total} votes in</p>
   </div>`;

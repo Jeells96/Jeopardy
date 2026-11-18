@@ -148,10 +148,21 @@ export function matchPercent(refEncoded, drawingEncoded) {
 }
 
 // ---------------------------------------------------------------- showing a drawing
-export function svg(strokesEncoded, cls = "") {
-  const lines = decode(strokesEncoded).map((s) =>
+// fit: zoom in on the ink (a drawing made on a tall phone sits small in the middle of its square).
+export function svg(strokesEncoded, cls = "", { fit = false } = {}) {
+  const strokes = decode(strokesEncoded);
+  const lines = strokes.map((s) =>
     s.length === 1 ? `<circle cx="${s[0][0]}" cy="${s[0][1]}" r="9"/>` : `<polyline points="${s.map((p) => p.join(",")).join(" ")}"/>`).join("");
-  return `<svg class="drawing ${cls}" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${lines}</svg>`;
+  let box = "0 0 1000 1000", zoom = 1;
+  const pts = strokes.flat();
+  if (fit && pts.length > 1) {
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const side = Math.max(x1 - x0, y1 - y0, 250) * 1.25; // never zoom in more than 4x (a dot stays a dot)
+    box = `${Math.round((x0 + x1) / 2 - side / 2)} ${Math.round((y0 + y1) / 2 - side / 2)} ${Math.round(side)} ${Math.round(side)}`;
+    zoom = side / 1000;
+  }
+  return `<svg class="drawing ${cls}" viewBox="${box}" preserveAspectRatio="xMidYMid meet"${zoom !== 1 ? ` style="--z:${zoom.toFixed(3)}"` : ""} aria-hidden="true">${lines}</svg>`;
 }
 
 // A ready-made picture up to step `upto` (0-based): earlier steps in black, the newest in red.
