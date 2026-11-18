@@ -20,8 +20,13 @@ export function renderPlayer(G) {
 }
 
 // Box the answering player types into (opens as soon as they win the buzz).
-function answerBox(G, key, label) {
+function answerBox(G, key, label, c) {
   const sent = G.spoken && G.spoken.key === key ? G.spoken : null;
+  if (c && c.timeUp === key) {
+    // Out of time: no more typing. Whatever was sent before the buzzer is what Jaren judges.
+    return `<div class="typebox closed" data-key="tb-${esc(key)}-up"><div class="ph-note timeup">⏰ Out of time — answers are closed.</div>
+      ${sent && sent.text ? `<div class="locked-note">Sent in time: “${esc(sent.text)}”</div>` : ""}</div>`;
+  }
   return `<div class="typebox" data-key="tb-${esc(key)}">
     <label class="lbl" for="typed-answer">${label}</label>
     <textarea id="typed-answer" class="answer-input" rows="2" maxlength="200" placeholder="Type your answer…" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" data-sticky></textarea>
@@ -110,13 +115,13 @@ function clueBody(G) {
       if (me.team === c.dd.team) {
         return q.type === "mcq"
           ? `${clueBox(G, c, q)}<div class="youup">⭐ Your team's Daily Double — pick together!</div>${choices(G, c, q)}${clock}`
-          : `<div class="youup">⭐ Your team's Daily Double!</div>${answerBox(G, key, "Your team's answer")}${clock}${clueBox(G, c, q)}`;
+          : `<div class="youup">⭐ Your team's Daily Double!</div>${answerBox(G, key, "Your team's answer", c)}${clock}${clueBox(G, c, q)}`;
       }
       return `${clueBox(G, c, q)}<div class="ph-note">${esc(tn(G, c.dd.team))} ${verb(tn(G, c.dd.team), "is", "are")} answering their Daily Double (${money(c.dd.wager)}).</div>${clock}`;
     }
     if (L.deviceId === G.deviceId) {
       if (q.type === "mcq") return `<div class="youup big">🎉 You're up! Tap your answer</div>${clueBox(G, c, q)}${choices(G, c, q)}${clock}`;
-      return `<div class="youup big">🎉 You're up!</div>${answerBox(G, key, "Your answer")}${clock}${clueBox(G, c, q)}`;
+      return `<div class="youup big">🎉 You're up!</div>${answerBox(G, key, "Your answer", c)}${clock}${clueBox(G, c, q)}`;
     }
     const mine = L.team === me.team;
     const pun = c.pun || {};

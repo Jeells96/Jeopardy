@@ -283,10 +283,13 @@ async function submitTyped() {
   const text = box ? box.value.replace(/\s+/g, " ").trim().slice(0, 200) : "";
   if (!text) { if (box) box.focus(); return toast("Type your answer first.", "bad"); }
   if (!c || c.stage !== "answering" || !G.me) return toast("Too late — the answer is closed.", "bad");
+  const key = E.lockKey(c);
+  if (c.timeUp === key) return toast("⏰ Out of time — answers are closed.", "bad");
+  try { await D.act("answerSubmitted", { key }); } // checked by the database, so a late answer is refused
+  catch (err) { return toast(err.message || "Too late — the answer is closed.", "bad"); }
   box.value = "";
   box.blur();
-  await D.writeSpoken({ key: E.lockKey(c), deviceId: G.deviceId, name: G.me.name, team: G.me.team, text, at: G.now(), final: true });
-  D.act("answerSubmitted", { key: E.lockKey(c) }).catch(() => {});
+  await D.writeSpoken({ key, deviceId: G.deviceId, name: G.me.name, team: G.me.team, text, at: G.now(), final: true });
   toast("Answer sent ✓", "good");
 }
 function focusAnswerBox() {

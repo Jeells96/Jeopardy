@@ -151,7 +151,7 @@ export function startGame(s, { control } = {}, ctx) {
   if (!boardClues(ctx.questions, 1).length) return fail("Load your questions first (⚙ Settings → Questions).");
   const minis = { ...minisOf(s), current: null, back: null };
   // Already started earlier and the host stepped away: carry on where they left off.
-  if (s.jStarted) return builder(s, ctx).field("phase", "board").field("clue", null).field("minis", minis).done();
+  if (s.jStarted) return builder(s, ctx).field("phase", "board").field("clue", null).field("minis", minis).sfx(s.round === 2 ? "double" : "intro").done();
   const ctrl = control === "random" ? TEAMS[Math.floor(Math.random() * 2)] : TEAMS.includes(control) ? control : null;
   return builder(s, ctx)
     .field("phase", "board").field("round", 1).field("control", ctrl).field("jStarted", true)
@@ -342,7 +342,9 @@ export function mcqPick(s, { index, me }, ctx) {
 // A typed answer came in: stop the answer clock and wait for the host to judge.
 export function answerSubmitted(s, { key }, ctx) {
   const c = s.clue;
-  if (!c || c.stage !== "answering" || !c.locked || lockKey(c) !== key || c.submitted === key) return null;
+  if (!c || c.stage !== "answering" || !c.locked || lockKey(c) !== key) return fail("Too late — the answer is closed.");
+  if (c.timeUp === key) return fail("⏰ Out of time — answers are closed.");
+  if (c.submitted === key) return null;
   return builder(s, ctx).field("clue", { ...c, submitted: key }).done();
 }
 

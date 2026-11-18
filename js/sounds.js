@@ -47,17 +47,44 @@ export function resume() {
 export function enableSound() { enabled = true; store.set("jeop_sound", "1"); resume(); probe(); play("buzz"); unlockSpeech(); }
 export function disableSound() { enabled = false; store.set("jeop_sound", "0"); setFinalMusic(false); }
 
-// Check once which MP3s exist so a missing file never delays a cue.
-async function probe() {
-  if (probed) return;
+// Load every MP3 once and decode it for the Web Audio engine. Playing decoded buffers works
+// the same on every device (iPads included, where a new <audio> element started without a
+// tap is refused) and starts instantly. Until a file is loaded, a cue waits for it briefly
+// instead of falling back to the built-in sound.
+const buffers = {};     // slot -> AudioBuffer
+let loading = null;     // promise while the MP3s are being fetched/decoded
+function decode(c, data) {
+  return new Promise((ok, bad) => {
+    try { const p = c.decodeAudioData(data, ok, bad); if (p && p.then) p.then(ok, bad); } catch (e) { bad(e); }
+  });
+}
+function probe() {
+  if (probed) return loading;
   probed = true;
-  await Promise.all(Object.entries(SLOTS).map(async ([k, f]) => {
+  loading = Promise.all(Object.entries(SLOTS).map(async ([k, f]) => {
     try {
-      const r = await fetch(BASE + f, { method: "HEAD", cache: "no-store" });
+      const r = await fetch(BASE + f, { cache: "no-cache" });
       const type = r.headers.get("content-type") || "";
       available[k] = r.ok && !type.includes("text/html");
+      if (!available[k]) return;
+      const c = ensureCtx();
+      if (c) { try { buffers[k] = await decode(c, await r.arrayBuffer()); } catch { /* <audio> fallback below */ } }
     } catch { available[k] = false; }
   }));
+  return loading;
+}
+export const loadedSounds = () => Object.keys(buffers);
+const sources = {};     // slot -> Set of playing buffer sources (so long cues can be stopped)
+function playBuffer(name) {
+  const c = ensureCtx();
+  if (!c || !buffers[name]) return null;
+  const src = c.createBufferSource();
+  src.buffer = buffers[name];
+  src.connect(master);
+  (sources[name] = sources[name] || new Set()).add(src);
+  src.onended = () => sources[name] && sources[name].delete(src);
+  src.start();
+  return src;
 }
 
 // ---------------- synth building blocks ----------------
@@ -136,18 +163,32 @@ const SYNTH = {
 
 // Stop long cues (the theme songs) — e.g. when a question is picked.
 export function stop(...names) {
-  for (const n of names) { const a = cache[n]; if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } } }
+  for (const n of names) {
+    for (const src of sources[n] || []) { try { src.stop(); } catch { /* already done */ } }
+    if (sources[n]) sources[n].clear();
+    const a = cache[n];
+    if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } }
+  }
+}
+function playFile(name) {
+  if (playBuffer(name)) return true;
+  if (!available[name]) return false;
+  let a = cache[name];
+  if (!a) { a = new Audio(BASE + SLOTS[name]); a.preload = "auto"; cache[name] = a; }
+  try { a.currentTime = 0; } catch { /* ignore */ }
+  const p = a.play();
+  if (p && p.catch) p.catch(() => SYNTH[name] && SYNTH[name]());
+  return true;
 }
 export function play(name) {
   if (!enabled) return;
   if (!SYNTH[name] && SYNTH.fill && (name === "intro" || name === "double")) SYNTH[name] = SYNTH.fill;
   resume();
-  if (available[name]) {
-    let a = cache[name];
-    if (!a) { a = new Audio(BASE + SLOTS[name]); a.preload = "auto"; cache[name] = a; }
-    try { a.currentTime = 0; } catch { /* ignore */ }
-    const p = a.play();
-    if (p && p.catch) p.catch(() => SYNTH[name] && SYNTH[name]());
+  if (playFile(name)) return;
+  const asked = Date.now();
+  if (loading && available[name] !== false) {
+    // Still loading: play the real file as soon as it's ready (if that's within 3 s).
+    loading.then(() => { if (enabled && Date.now() - asked < 3000 && playFile(name)) return; if (enabled && SYNTH[name]) SYNTH[name](); });
     return;
   }
   if (SYNTH[name]) SYNTH[name]();
@@ -180,7 +221,7 @@ export function unlockSpeech() {
   } catch { /* ignore */ }
 }
 if (typeof document !== "undefined") {
-  const first = () => { if (enabled) unlockSpeech(); document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
+  const first = () => { if (enabled) { resume(); unlockSpeech(); } document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
   document.addEventListener("pointerdown", first, true);
   document.addEventListener("keydown", first, true);
 }
@@ -203,6 +244,7 @@ export function say(text) {
 // ---------------- Final Jeopardy music ----------------
 // Your final-jeopardy.mp3 if present, otherwise an original music-box waltz placeholder.
 let finalEl = null;
+let finalOn = false;
 let loopTimer = null;
 let loopNext = 0;
 let loopStep = 0;
@@ -230,10 +272,14 @@ export function setFinalMusic(on) {
   if (!on || !enabled) {
     if (finalEl) { try { finalEl.pause(); } catch { /* ignore */ } finalEl = null; }
     if (loopTimer) { clearInterval(loopTimer); loopTimer = null; }
+    stop("final");
+    finalOn = false;
     return;
   }
-  if (finalEl || loopTimer) return;
+  if (finalOn || finalEl || loopTimer) return;
+  finalOn = true;
   resume();
+  if (playBuffer("final")) return;
   if (available.final) {
     finalEl = new Audio(BASE + SLOTS.final);
     finalEl.loop = false;

@@ -157,6 +157,25 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   console.log("Final Jeopardy multiple choice");
   ok(!!(await host.evaluate(() => window.__G.S.settings.doubleJeopardy !== false)), "Double Jeopardy is on by default");
   await act(host, "startGame", { control: "team1" });
+  // ---- your MP3s are loaded; out of time = no more answering ----
+  await until(board, async () => { const m = await import("/js/sounds.js"); return ["correct", "wrong", "timesup", "final", "intro", "double"].every((k) => m.loadedSounds().includes(k)); }, null, 10000);
+  ok(true, "all six MP3s are loaded and decoded on the board");
+  await act(host, "startGame", { control: "team1" });
+  await act(host, "setSettings", { patch: { answerSeconds: 3 } });
+  const slow = await host.evaluate(() => window.__G.Q.find((q) => q.points === 500 && !q.isFinal).id);
+  await act(host, "pickClue", { qid: slow });
+  await act(host, "openBuzzers");
+  await until(P.Jen, () => !!document.querySelector(".buzz.live"));
+  await P.Jen.dispatchEvent('[data-action="buzz"]', "pointerdown");
+  await until(P.Jen, () => !!document.getElementById("typed-answer"));
+  await until(host, () => !!(window.__G.S.clue && window.__G.S.clue.timeUp), null, 8000);
+  await until(P.Jen, () => !document.getElementById("typed-answer") && !!document.querySelector(".typebox.closed"));
+  ok(true, "when time runs out, the answer box closes on the phone");
+  const refused = await P.Jen.evaluate(async (k) => { const D = await import("/js/data.js"); try { await D.act("answerSubmitted", { key: k }); return false; } catch { return true; } }, await host.evaluate(() => window.__G.S.clue.timeUp));
+  ok(refused, "…and a late answer is refused by the database");
+  await act(host, "judge", { result: "skip" });
+  await act(host, "nobody");
+  await act(host, "closeClue");
   await act(host, "setSettings", { patch: { finalSeconds: 10 } });
   await act(host, "setScore", { team: "team1", value: 500 });
   await act(host, "setScore", { team: "team2", value: 400 });
