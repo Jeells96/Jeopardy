@@ -74,8 +74,9 @@ ok(!!E.ACTIONS.miniUpdate(st, { id: g0.id, patch: { type: "best" } }, { now: 1 }
 
 // ---------- ready-made pictures ----------
 eq(PICTURES.length, 10, "10 ready-made pictures");
-ok(PICTURES.every((p) => p.steps.length >= 2 && p.steps.length <= 5), "each is built up in 2–5 steps");
-ok(PICTURES.every((p) => p.steps.every((st) => st.text.length > 10 && st.strokes.length >= 1 && st.strokes.length <= 4)), "every step says what to draw and is only a few strokes");
+ok(PICTURES.every((p) => p.steps.length === 10), "every picture is built up in exactly 10 steps");
+ok(PICTURES.every((p) => p.steps.every((st) => st.text.length > 10 && st.strokes.length >= 1 && st.strokes.length <= 6)), "every step says what to draw and is only a few strokes");
+ok(PICTURES.every((p) => Dr.decode(builtinStrokes("builtin:" + p.key)).every((s) => { const xs = s.map((q) => q[0]), ys = s.map((q) => q[1]); return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) >= 36; })), "no tiny details (every line is at least finger-sized)");
 ok(PICTURES.every((p) => Dr.decode(builtinStrokes("builtin:" + p.key)).flat().every(([x, y]) => x >= 0 && x <= 1000 && y >= 0 && y <= 1000)), "everything fits on the pad");
 ok(PICTURES.every((p) => Dr.matchPercent(builtinStrokes("builtin:" + p.key), builtinStrokes("builtin:" + p.key)) === 100), "each picture matches itself perfectly");
 ok(isBuiltin("builtin:tree") && !isBuiltin("drawpic-x"), "ready-made vs hand-drawn ids");

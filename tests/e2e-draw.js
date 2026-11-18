@@ -136,14 +136,14 @@ async function hold(page, sel) {
   await host.keyboard.press("Space");
   await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Starting in"));
   ok(true, "a short countdown before step 1");
-  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 1 of 3"), null, 6000);
-  ok((await board.textContent(".steppanel")).includes("three circles"), "step 1 is shown on the big screen");
-  ok((await board.$$(".steppanel svg.example polyline.now")).length === 3 && (await board.$$(".steppanel svg.example polyline.done")).length === 0, "with an example of what to draw (the new step in red)");
-  await until(P.Jake, () => document.querySelector(".df-top")?.textContent.includes("Step 1 of 3"));
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 1 of 10"), null, 6000);
+  ok((await board.textContent(".steppanel")).includes("big circle for the bottom"), "step 1 is shown on the big screen");
+  ok((await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.$$(".steppanel svg.example polyline.done")).length === 0, "with an example of what to draw (the new step in red)");
+  await until(P.Jake, () => document.querySelector(".df-top")?.textContent.includes("Step 1 of 10"));
   ok(true, "the drawer's phone says which step it is");
   await shot(board, "d02a-board-step1");
-  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 2 of 3"), null, 7000);
-  ok((await board.$$(".steppanel svg.example polyline.done")).length === 3 && (await board.$$(".steppanel svg.example polyline.now")).length === 2, "after the set time it moves on: the example now shows steps 1 + 2");
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 2 of 10"), null, 7000);
+  ok((await board.$$(".steppanel svg.example polyline.done")).length === 1 && (await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.textContent(".steppanel")).includes("medium circle"), "after the set time it moves on: the example now shows steps 1 + 2");
   await sleep(700);
   await shot(board, "d02b-board-step2");
   // Jake draws the snowman scene, off to the side and mirrored. Emma scribbles.

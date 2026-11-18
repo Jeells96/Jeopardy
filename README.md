@@ -73,12 +73,13 @@ and the points go straight onto the team's score and carry into Jeopardy.
 ### ✏️ Blind Drawing
 Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing" as a game's type).
 1. **Pick the pictures:** under the game, tap **🎄 Ready-made drawings** and choose from 10
-   simple Christmas pictures (snowman & tree, Christmas tree, present, candy cane, stocking,
-   ornament, gingerbread man, Santa hat, wreath, candle), each built up in 2–5 steps. Or tap
+   Christmas pictures (snowman, gingerbread man, Santa, reindeer, decorated Christmas tree,
+   snowy cottage, stocking, penguin in a Santa hat, hot cocoa, stack of presents), each built
+   up in exactly 10 finger-friendly steps (no tiny details). Or tap
    **✍️ Draw my own** and type how many steps you'll describe. Each round uses the next picture.
    Set how many seconds each step lasts ("New step every … seconds", default 20).
 2. **Play:** draw who's up, then **▶ Start drawing** when phones are on heads. After a 3-second
-   countdown the big screen shows **Step 1 of 3: "Draw a snowman…"** with an example of what
+   countdown the big screen shows **Step 1 of 10: "Draw a big circle…"** with an example of what
    the drawing should look like so far (the new step in red), and moves to the next step
    every X seconds. Drawers' phones show the step number and buzz on each new step. For a
    picture you drew yourself, the screen shows "Step 2 of 4 — listen to Jaren" (no example),
