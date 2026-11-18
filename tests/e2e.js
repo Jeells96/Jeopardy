@@ -194,17 +194,21 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "Daily Double splash on the board");
   await sleep(700);
   await shot(board, "10-board-dd");
-  ok((await host.textContent(".hint")).includes("Allowed $5 – $500"), "DD limits shown (score below round max)");
+  const ddS = await state(board);
+  const ddScore = ddS.scores[ddS.clue.dd.team];
+  const ddMax = ddScore > 0 ? ddScore : 500;
+  const ddMaxTxt = "$" + ddMax.toLocaleString("en-US");
+  ok((await host.textContent(".hint")).includes("Allowed $5 – " + ddMaxTxt), "DD limit is everything the team has (or the top value at $0 or less): " + ddMaxTxt);
   await host.fill("#dd-wager", "9999");
   await key(host, "Tab");
   await host.click('[data-action="dd-lock"]');
   await until(host, () => document.getElementById("toast").classList.contains("show"));
-  ok((await host.textContent("#toast")).includes("between $5 and $500"), "over-limit DD wager is rejected");
-  await host.locator('.chipbtn', { hasText: "Max" }).click();
+  ok((await host.textContent("#toast")).includes("between $5 and " + ddMaxTxt), "over-limit DD wager is rejected");
+  await host.locator('.chipbtn', { hasText: ddScore > 0 ? "All in" : "Max" }).click();
   await shot(host, "11-host-dd-wager");
   await key(host, "Space");
   await until(board, () => window.__G.S.clue.stage === "answering");
-  ok((await board.textContent(".clue-val")).includes("$500"), "DD wager shown on the clue");
+  ok((await board.textContent(".clue-val")).includes(ddMaxTxt), "DD wager shown on the question");
   const ddTeam = (await state(board)).clue.dd.team;
   const ddPlayer = Object.values(P).find((p) => p.team === ddTeam);
   const ddOther = Object.values(P).find((p) => p.team !== ddTeam);
@@ -213,7 +217,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   const before = (await state(board)).scores[ddTeam];
   await ddPlayer.click(`.mcqbtn[data-i="${dd.correctIndex}"]`);
   await until(board, () => window.__G.S.clue.stage === "done");
-  ok((await state(board)).scores[ddTeam] === before + 500, "correct Daily Double adds the wager");
+  ok((await state(board)).scores[ddTeam] === before + ddMax, "correct Daily Double adds the wager");
   await key(host, "Space");
   await until(board, () => window.__G.S.phase === "board");
 

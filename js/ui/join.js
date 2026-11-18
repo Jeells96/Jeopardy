@@ -23,7 +23,7 @@ export function renderJoin(G) {
           <span class="tb-name">${esc(tn(G, t))}</span><span class="tb-count">${n} player${n === 1 ? "" : "s"}</span></button>`;
       }).join("")}</div>
       <div class="warn">🔒 Choose carefully — once you join, your name and team are locked in.</div>
-      <button class="btn primary big" data-action="join"${ok ? "" : " disabled"}>Join the game 🎁</button>
+      <button class="btn primary big" data-action="join"${ok ? "" : " disabled"}>Join &amp; turn on sound 🔊</button>
     </div>
     <div class="join-foot"><a href="#/admin">Host login</a><span>·</span><a href="#/board">Projector board</a></div>
   </div>`;

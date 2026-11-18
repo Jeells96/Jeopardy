@@ -119,7 +119,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   }
   await until(board, () => document.querySelector(".sound-btn")?.textContent.includes("Sound on"));
   ok(true, "the board has a clear sound on/off button");
-  ok(await P.Jen.evaluate(() => window.__G.soundOn === true), "phones have sound on by default too");
+  ok(await P.Jen.evaluate(async () => window.__G.soundOn === true && !(await import("/js/sounds.js")).blocked()), "tapping Join also turned the phone's sound on");
   await P.Jen.click(".ph-sound");
   await until(P.Jen, () => window.__G.soundOn === false);
   await P.Jen.reload();

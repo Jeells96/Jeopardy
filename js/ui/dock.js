@@ -223,12 +223,11 @@ export function hostSteps(G, { privateView = false } = {}) {
 
 function ddPanel(G, team, lim) {
   const S = G.S;
-  const roundMax = E.roundMaxValue(G.Q, S.round);
   let quick = "";
+  const score = (team && S.scores[team]) || 0;
   if (lim) {
     const half = Math.max(lim.min, Math.round(lim.max / 2 / 50) * 50);
-    const score = S.scores[team] || 0;
-    const opts = [[lim.min, `Min ${money(lim.min)}`], [half, money(half)], [lim.max, score >= roundMax && score > 0 ? "All in! (True DD)" : `Max ${money(lim.max)}`]];
+    const opts = [[lim.min, `Min ${money(lim.min)}`], [half, money(half)], [lim.max, score > 0 ? "All in! (True DD)" : `Max ${money(lim.max)}`]];
     quick = opts.filter((o, i, a) => a.findIndex((x) => x[0] === o[0]) === i)
       .map(([v, l]) => `<button class="chipbtn" data-action="dd-quick" data-v="${v}">${l}</button>`).join("");
   }
@@ -238,7 +237,7 @@ function ddPanel(G, team, lim) {
       <label class="wager-box"><span>$</span><input id="dd-wager" class="wager-input" type="number" inputmode="numeric" min="${lim.min}" max="${lim.max}" placeholder="Wager" value="${esc(G.ui.ddWager)}" data-input="dd-wager"></label>
       <div class="quick">${quick}</div>
     </div>
-    <div class="hint">Allowed ${money(lim.min)} – ${money(lim.max)} (their score, or ${money(roundMax)} if that's higher)</div>`
+    <div class="hint">Allowed ${money(lim.min)} – ${money(lim.max)} ${score > 0 ? "(up to everything they have)" : `(they have ${money(score)}, so up to the top value on the board, like the show)`}</div>`
     : `<div class="hint">Which team found the Daily Double?</div>`}
   </div>`;
 }

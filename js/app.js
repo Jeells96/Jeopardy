@@ -486,6 +486,9 @@ async function handle(a, p, el) {
       if (!name || !G.ui.joinTeam) return;
       G.me = { name, team: G.ui.joinTeam };
       G.ui.kicked = false;
+      // Joining is also the tap that switches this phone's sound on (browsers need one).
+      Sounds.enableSound();
+      G.soundOn = true;
       render();
       keepAwake();
       try { await D.joinGame(name, G.me.team); } catch (e) { console.warn(e); }

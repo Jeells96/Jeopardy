@@ -102,7 +102,9 @@ export const lockKey = (clue) => (clue ? `${clue.id}:${clue.buzzRound}` : "");
 
 export function ddLimits(state, questions, team) {
   const score = (state.scores && state.scores[team]) || 0;
-  const max = Math.max(score, roundMaxValue(questions, state.round) || 1000);
+  // Up to everything the team has. At $0 or below, they can wager up to the board's top
+  // value instead (that's how the show handles a broke player).
+  const max = score > 0 ? score : roundMaxValue(questions, state.round) || 500;
   return { min: Math.min(5, max), max };
 }
 export function finalMax(state, team) {

@@ -20,8 +20,8 @@ laptop) with the answer key and every control. Finish with an **ugly sweater vot
    players' phones. Sound is on by default; 🔊/🔇 turns it off on one screen, and a refresh
    turns it back on. Browsers need one tap on a page before it can make sound, so tap the
    board once (it shows **👆 Tap to start sound** until you do).
-4. **Players** scan the QR code on the lobby screen, type their name and pick **Husbands**
-   or **Wives**. (A team can rename itself from a phone.)
+4. **Players** scan the QR code on the lobby screen, type their name, pick **Husbands**
+   or **Wives** and tap **Join & turn on sound** (one tap joins and starts their phone's sound). (A team can rename itself from a phone.)
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
    mini games first if you've set any up, then Jeopardy.
 
@@ -105,8 +105,8 @@ switch off phone renaming there too.
 
 **Daily Doubles**
 - Splash screen and sound, no buzzing — the team that found it plays.
-- Wager rules from the show: **$5 up to their score, or the round's top value if that's
-  higher**, with quick buttons for min / half / max / **"All in!" (True Daily Double)**.
+- Wager **$5 up to everything the team has**. At $0 or below, they can wager up to the
+  board's top value ($500), like the show. Quick buttons for min / half / **"All in!"**.
 
 **Final Jeopardy**
 - Only teams above $0 play (official rule — you can override per team).
