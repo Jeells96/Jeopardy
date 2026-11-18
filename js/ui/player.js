@@ -155,14 +155,23 @@ function finalBody(G) {
     if (!playing) return card("🍿", "Your team is sitting out Final Jeopardy", "Teams need more than $0 to play. Cheer everyone on!");
     const max = E.finalMax(S, me.team);
     const cur = f.wagers[me.team];
+    if (cur) {
+      // Locked in for the whole team; anyone on the team can take it back to change it.
+      return `<div class="ph-card final-card">
+      <div class="kicker">Final Jeopardy!</div>
+      <div class="ph-final-cat">${esc(cat)}</div>
+      <div class="sent-note"><div>✓ <b>Wager locked in for your team</b> by ${esc(cur.by)}</div><div class="sent-ans">${money(cur.amount)}</div>
+        <button class="btn ghost" data-action="final-wager-undo">↩ Undo &amp; change it</button></div>
+      <small class="muted">The other team can't see it.</small>
+    </div>`;
+    }
     return `<div class="ph-card final-card">
       <div class="kicker">Final Jeopardy!</div>
       <div class="ph-final-cat">${esc(cat)}</div>
       <p>Huddle up and choose your team's wager. The other team can't see it.</p>
       <label class="wager-box big"><span>$</span><input id="fw-input" class="wager-input" type="number" inputmode="numeric" min="0" max="${max}" placeholder="0 – ${max}" data-sticky></label>
       <div class="quick">${[[0, "$0"], [Math.floor(max / 2), "Half"], [max, "All in!"]].map(([v, l]) => `<button class="chipbtn" data-action="fw-quick" data-v="${v}">${l}</button>`).join("")}</div>
-      <button class="btn primary big" data-action="final-wager">${cur ? "Update our wager" : "Lock in our wager"}</button>
-      ${cur ? `<div class="locked-note">✓ Your team's wager: <b>${money(cur.amount)}</b> <small>set by ${esc(cur.by)}</small></div>` : ""}
+      <button class="btn primary big" data-action="final-wager">Lock in our wager</button>
       <small class="muted">Your team has ${money(S.scores[me.team])} — you can wager up to ${money(max)}.</small>
     </div>`;
   }

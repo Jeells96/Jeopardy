@@ -496,6 +496,13 @@ async function handle(a, p, el) {
     }
     case "typed-submit": return submitTyped();
     case "final-choice": return saveFinalAnswer(el.dataset.v, true);
+    case "final-wager-undo": {
+      const f = G.S && G.S.final, cur = f && G.me && f.wagers[G.me.team];
+      if (!cur) return;
+      await D.act("finalWagerUndo", { team: G.me.team });
+      setTimeout(() => { const i = document.getElementById("fw-input"); if (i) { i.value = cur.amount; i.focus(); } }, 120);
+      return toast("Unlocked — change the wager and lock it in again.");
+    }
     case "final-undo": {
       const f = G.S && G.S.final, cur = f && G.me && f.answers[G.me.team];
       if (!cur) return;

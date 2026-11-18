@@ -605,6 +605,37 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq(E.migrate(mine), null, "a Final time the host chose is left alone");
 }
 
+// ---------- host picks the table; Final wager undo ----------
+{
+  const w = world(roster(2, 2), 5);
+  w.run("miniTables", { tables: "Kitchen, Garage" });
+  const id = w.add({ name: "Toss", type: "h2h" });
+  w.run("miniPlay", { id });
+  w.run("miniNext", { id });
+  const other = E.currentPick(w.state).table === "Kitchen" ? "Garage" : "Kitchen";
+  w.run("miniSetTable", { id, table: other });
+  eq(E.currentPick(w.state).table, other, "host sends the drawn players to a different table");
+  w.run("miniSetTable", { id, table: "Attic" });
+  ok(w.noop, "only tables that exist");
+  const b = w.add({ name: "Stack", type: "best" });
+  w.run("miniPlay", { id: b });
+  w.run("miniNext", { id: b });
+  const t2 = E.currentPick(w.state).table === "Kitchen" ? "Garage" : "Kitchen";
+  w.run("miniSetTable", { id: b, table: t2 });
+  eq(E.currentPick(w.state).table, t2, "works for best-overall turns too");
+
+  const f = world(roster(1, 1));
+  f.run("startGame", { control: "team1" });
+  f.run("setScore", { team: "team1", value: 500 });
+  f.run("setScore", { team: "team2", value: 400 });
+  f.run("finalStart");
+  f.run("finalWager", { team: "team1", amount: 100, by: "Hub1" });
+  f.run("finalWagerUndo", { team: "team1" });
+  ok(!f.state.final.wagers.team1, "a locked Final wager can be taken back to change it");
+  f.run("finalWager", { team: "team1", amount: 300, by: "Hub1" });
+  eq(f.state.final.wagers.team1.amount, 300, "…and locked in again");
+}
+
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

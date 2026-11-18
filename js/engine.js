@@ -462,6 +462,15 @@ export function finalWager(s, { team, amount, by }, ctx) {
   }).done();
 }
 
+// Anyone on the team can take the wager back to change it (like the Final answer).
+export function finalWagerUndo(s, { team }, ctx) {
+  const f = s.final;
+  if (!f || f.stage !== "wager" || !TEAMS.includes(team) || !f.wagers[team]) return null;
+  const wagers = { ...f.wagers };
+  delete wagers[team];
+  return builder(s, ctx).field("final", { ...f, wagers }).done();
+}
+
 export function finalRevealClue(s, _p, ctx) {
   const f = s.final;
   if (!f || f.stage !== "wager") return null;
@@ -831,6 +840,22 @@ export function miniRepick(s, { id, team }, ctx) {
   const pl = placeFor(s, g, ctx, g.turn.table);
   return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn: { ...turn, ...pl.where } })), pl.extra)).sfx("pick").done();
 }
+// Host sends the current draw to a particular table.
+export function miniSetTable(s, { id, table }, ctx) {
+  const g = miniById(s, id);
+  const tables = minisTables(s);
+  if (!g || g.status !== "active" || !tables.includes(table)) return null;
+  const summon = (x) => (x.summon == null ? Math.floor(random(ctx) * SUMMONS.length) : x.summon);
+  if (g.type === "h2h") {
+    const m = openMatch(g);
+    if (!m || m.table === table) return null;
+    const next = { ...m, table, summon: summon(m) };
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? next : y)) })))).done();
+  }
+  if (!g.turn || g.turn.table === table) return null;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn: { ...x.turn, table, summon: summon(x.turn) } })))).done();
+}
+
 // Host hand-picks who's up instead of the random draw.
 export function miniSetPlayer(s, { id, team, pid }, ctx) {
   const g = miniById(s, id);
@@ -988,9 +1013,9 @@ export const ACTIONS = {
   startGame, setControl, startRound2, pickClue, unpickClue, setDDTeam, lockDDWager, openBuzzers,
   autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, answerSubmitted, answerTimeout, buzzWindowTimeout, nobody,
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
-  finalRevealClue, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
+  finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
-  voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
+  miniSetTable, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
   miniTables, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

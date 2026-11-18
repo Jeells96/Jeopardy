@@ -140,6 +140,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await host.keyboard.press("Escape");
   await act(host, "miniPlay", { id: (await host.evaluate(() => window.__G.S.minis.list[0].id)) });
   await act(host, "miniNext", { id: (await host.evaluate(() => window.__G.S.minis.list[0].id)) });
+  await until(host, () => !!document.querySelector(".r-status .spin.hspin.spinning"), null, 3000);
+  ok(true, "the host's screen shuffles the names too");
   await until(board, () => !!document.querySelector(".summon"), null, 5000);
   const summon = await board.textContent(".summon");
   ok(/Kitchen|Living room/.test(summon) && summon.includes("Jen") && summon.includes("Kim"), `board shows the summon: “${summon}”`);
@@ -147,6 +149,11 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(/Kitchen|Living room/.test(await P.Jen.textContent(".tabletag")), "the drawn player's phone says which table");
   ok((await P.Jen.textContent(".ph-summon")) === summon, "…with the same Christmas summons");
   ok((await host.textContent(".r-status")).match(/at (Kitchen|Living room)/), "host sees the table too");
+  const curTable = (await host.textContent(".r-status")).includes("at Kitchen") ? "Kitchen" : "Living room";
+  const otherTable = curTable === "Kitchen" ? "Living room" : "Kitchen";
+  await host.locator(".tablepick .chipbtn", { hasText: otherTable }).click();
+  await until(board, (t) => document.querySelector(".summon")?.textContent.includes(t), otherTable);
+  ok(true, "host sends them to a different table from the mini-game controls");
   await sleep(400);
   await shot(board, "x02-board-summon");
   await shot(P.Jen, "x03-phone-summon");

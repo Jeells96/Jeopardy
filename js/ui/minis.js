@@ -224,7 +224,7 @@ export function miniSteps(G, { privateView = false } = {}) {
   }
 
   const st = E.miniStanding(g);
-  const spinning = isSpinning(G) && !privateView; // keep the suspense on the mirrored screen
+  const spinning = isSpinning(G); // the host's screen shuffles the names too
   const everyone = E.miniEveryonePlayed(g, G.P);
   const [n1, n2] = [tn(G, "team1"), tn(G, "team2")];
 
@@ -236,13 +236,13 @@ export function miniSteps(G, { privateView = false } = {}) {
       const a = m.p1 ? m.p1.name : n1;
       const b = m.p2 ? m.p2.name : n2;
       if (spinning) {
-        status = `🎲 Drawing names… <span class="muted">${tally}</span>`;
+        status = `<span class="hspins">🎲 ${m.p1 ? spin(namesOn(G, "team1"), a, m.p1.at, "hspin") : esc(a)} <i>vs</i> ${m.p2 ? spin(namesOn(G, "team2"), b, m.p2.at, "hspin") : esc(b)}</span> <span class="muted">${tally}</span>`;
       } else {
         status = `<b>${esc(a)}</b> vs <b>${esc(b)}</b>${m.table ? ` at <b>${esc(m.table)}</b>` : ""} — who won? <span class="muted">${tally}</span>`;
         btn(`🏆 ${esc(a)}`, "act", act("miniMatch", { id: g.id, winner: "team1" }), "t1", "1");
         btn(`🏆 ${esc(b)}`, "act", act("miniMatch", { id: g.id, winner: "team2" }), "t2", "2");
         btn("🤝 Tie", "act", act("miniMatch", { id: g.id, winner: "tie" }), "ghost", "T");
-        panel = `<div class="mpanel"><span class="muted">Swap a player:</span>${E.TEAMS.map((t) => sidePicker(G, g, t, t === "team1" ? m.p1 : m.p2)).join("")}</div>`;
+        panel = `<div class="mpanel"><span class="muted">Swap a player:</span>${E.TEAMS.map((t) => sidePicker(G, g, t, t === "team1" ? m.p1 : m.p2)).join("")}</div>${tablePicker(G, g, m.table)}`;
       }
     } else {
       const played = g.matches.length;
@@ -263,14 +263,14 @@ export function miniSteps(G, { privateView = false } = {}) {
   const leaderTxt = top ? `Best so far: <b>${esc(top.name)}</b> <span class="muted">(${esc(tn(G, top.team))})</span> ${scoreText(g, top.score)}` : `${g.better === "low" ? "Lowest" : "Highest"} score wins.`;
   if (g.turn) {
     if (spinning) {
-      status = `🎲 Drawing a name… <span class="muted">${leaderTxt}</span>`;
+      status = `<span class="hspins">🎲 ${spin(namesOn(G), g.turn.name, g.turn.at, "hspin")}</span> <span class="muted">${leaderTxt}</span>`;
     } else {
       status = `<b>${esc(g.turn.name)}</b> <span class="muted">(${esc(tn(G, g.turn.team))})</span> is up${g.turn.table ? ` at <b>${esc(g.turn.table)}</b>` : ""} — type their score. <span class="muted">${leaderTxt}</span>`;
       btn("✓ Save score", "mini-score", { id: g.id }, "primary", "Space");
       panel = `<div class="mpanel">
         <label class="score-box"><input id="mini-score" class="wager-input" type="number" step="any" inputmode="decimal" placeholder="Score" autocomplete="off" data-sticky>${g.unit ? `<span>${esc(g.unit)}</span>` : ""}</label>
         <span class="mside"><span class="muted">Swap player:</span>${playerSelect(G, g, null, g.turn.pid)}<button class="btn ghost sm" ${actAttr("miniRepick", { id: g.id })} title="Draw someone else">🎲 Someone else</button></span>
-      </div>`;
+      </div>${tablePicker(G, g, g.turn.table)}`;
     }
   } else {
     status = `<b>${esc(g.name)}</b> · ${leaderTxt}${everyone ? ` <span class="muted">Everyone's had a turn.</span>` : ""}`;
@@ -283,6 +283,16 @@ export function miniSteps(G, { privateView = false } = {}) {
     }
   }
   return { status, panel, buttons: B };
+}
+
+// Which table to send the drawn player(s) to — right in the mini-game controls.
+function tablePicker(G, g, current) {
+  const tables = E.minisTables(G.S);
+  if (!tables.length) {
+    return `<div class="mpanel"><span class="muted">📍 Playing at more than one table?</span><button class="btn ghost sm" data-action="drawer" data-p='{"tab":"minis"}'>Set up tables</button></div>`;
+  }
+  return `<div class="mpanel wrap tablepick"><span class="muted">📍 Send them to:</span>${tables.map((t) =>
+    `<button class="${cls("chipbtn", t === current && "on")}" ${actAttr("miniSetTable", { id: g.id, table: t })} aria-pressed="${t === current}">${t === current ? "✓ " : ""}${esc(t)}</button>`).join("")}</div>`;
 }
 
 function playerSelect(G, g, team, selectedId) {

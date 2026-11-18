@@ -323,9 +323,16 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok((await P.Jo.textContent("#toast")).includes("between $0 and $800"), "can't wager more than your score");
   await P.Jo.click('.chipbtn:has-text("All in")');
   await P.Jo.click('[data-action="final-wager"]');
-  await until(P.Amy, () => document.querySelector(".locked-note")?.textContent.includes("$800"));
+  await until(P.Amy, () => document.querySelector(".sent-note")?.textContent.includes("$800"));
   ok(true, "teammate's phone shows the locked team wager");
-  ok(!(await P.Rick.$(".locked-note")) && !/Wager \$/.test(await board.textContent(".final")), "other team and the board can't see the wager");
+  ok(!(await P.Rick.$(".sent-note")) && !/Wager \$/.test(await board.textContent(".final")), "other team and the board can't see the wager");
+  await P.Amy.click('[data-action="final-wager-undo"]');
+  await until(P.Jo, () => !!document.getElementById("fw-input"));
+  ok(true, "a teammate can undo the locked wager — it opens for editing on every teammate's phone");
+  await P.Amy.fill("#fw-input", "800");
+  await P.Amy.click('[data-action="final-wager"]');
+  await until(P.Jo, () => document.querySelector(".sent-note")?.textContent.includes("Amy"));
+  ok(true, "…and lock it in again");
   await shot(P.Amy, "15-phone-final-wager");
   await P.Rick.fill("#fw-input", "300");
   await P.Rick.click('[data-action="final-wager"]');
