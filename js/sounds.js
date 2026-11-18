@@ -44,7 +44,7 @@ function ensureCtx() {
 export function resume() {
   try { ensureCtx(); if (ctx && ctx.state === "suspended") ctx.resume(); } catch { /* ignore */ }
 }
-export function enableSound() { enabled = true; store.set("jeop_sound", "1"); resume(); probe(); play("buzz"); unlockSpeech(true); }
+export function enableSound() { enabled = true; store.set("jeop_sound", "1"); resume(); probe(); play("buzz"); unlockSpeech(); }
 export function disableSound() { enabled = false; store.set("jeop_sound", "0"); setFinalMusic(false); }
 
 // Check once which MP3s exist so a missing file never delays a cue.
@@ -153,20 +153,6 @@ export function play(name) {
   if (SYNTH[name]) SYNTH[name]();
 }
 
-// Read a question out loud in a deep, slow, jolly "Santa" voice. Uses the best male
-// English voice the device has; the pitch and pace do the rest.
-const SANTA_NO = /female|woman|girl|samantha|victoria|karen|zira|susan|moira|tessa|fiona|veena|kathy|allison|ava|serena|kate|catherine|hazel|libby|sonia|jenny|aria/i;
-const SANTA_YES = /male|man\b|daniel|fred|alex|david|mark|george|james|arthur|aaron|ralph|guy|thomas|ryan|rishi|oliver|gordon|lee|bruce|junior/i;
-function santaVoice() {
-  const all = (window.speechSynthesis.getVoices && window.speechSynthesis.getVoices()) || [];
-  const en = all.filter((v) => /^en/i.test(v.lang || ""));
-  const male = en.filter((v) => SANTA_YES.test(v.name) && !SANTA_NO.test(v.name));
-  const pick = (list) => list.find((v) => /en[-_](GB|UK)/i.test(v.lang)) || list.find((v) => /en[-_]US/i.test(v.lang)) || list[0];
-  return pick(male) || pick(en.filter((v) => !SANTA_NO.test(v.name))) || null;
-}
-if (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.getVoices) {
-  try { window.speechSynthesis.getVoices(); } catch { /* voices load later on some browsers */ }
-}
 // Browsers are fussy about speech: Chrome can silently drop an utterance spoken right
 // after cancel(), can get stuck "paused", and can garbage-collect an utterance mid-way;
 // iPhones only allow speech after it has been started once from a tap. This handles all of it.
@@ -184,33 +170,19 @@ function speakNow(u, { delay = 0 } = {}) {
   if (busy || delay) setTimeout(go, Math.max(delay, busy ? 120 : 0)); else go();
 }
 function canSpeak() { return typeof window !== "undefined" && "speechSynthesis" in window && !!window.SpeechSynthesisUtterance; }
-function santaUtterance(text) {
-  const u = new SpeechSynthesisUtterance(text);
-  const v = santaVoice();
-  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = "en-US";
-  u.pitch = 0.45;  // deep
-  u.rate = 0.86;   // unhurried
-  u.volume = 1;
-  return u;
-}
 // Call from a tap: lets this device talk later (needed on iPhone/iPad and some Androids).
-export function unlockSpeech(sayHello) {
+export function unlockSpeech() {
   if (!canSpeak()) return;
   try {
     const synth = window.speechSynthesis;
-    if (sayHello) { synth.cancel(); synth.speak(santaUtterance("Ho ho ho! Merry Christmas!")); }
-    else if (!speechUnlocked) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); }
+    if (!speechUnlocked) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); }
     speechUnlocked = true;
   } catch { /* ignore */ }
 }
 if (typeof document !== "undefined") {
-  const first = () => { if (enabled) unlockSpeech(false); document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
+  const first = () => { if (enabled) unlockSpeech(); document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
   document.addEventListener("pointerdown", first, true);
   document.addEventListener("keydown", first, true);
-}
-export function santa(text) {
-  if (!enabled || !text || !canSpeak()) return;
-  try { speakNow(santaUtterance(text)); } catch { /* no voice available — the question is on screen anyway */ }
 }
 export function hush() {
   try { if (canSpeak()) window.speechSynthesis.cancel(); } catch { /* ignore */ }

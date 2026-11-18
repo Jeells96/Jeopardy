@@ -57,7 +57,7 @@ export function renderBoardPage(G) {
   return `<div class="boardpage">
     ${stage(G, { pick: false })}
     <div class="board-tools">
-      <button class="${cls("hbtn", G.soundOn && "on")}" data-action="toggle-sound">${G.soundOn ? "🔊" : "🔇 Tap for sound"}</button>
+      <button class="${cls("hbtn sound-btn", G.soundOn && "on")}" data-action="toggle-sound" title="Sound on this screen">${G.soundOn ? "🔊 Sound on" : "🔇 Sound off"}</button>
       <button class="hbtn" data-action="fullscreen" title="Fullscreen">⛶</button>
     </div>
   </div>`;

@@ -116,6 +116,10 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
     await p.waitForSelector(".phone");
     P[n] = p;
   }
+  ok((await board.textContent(".sound-btn")).includes("Sound on"), "the board has a clear sound on/off button");
+  await P.Jen.click(".ph-sound");
+  await until(P.Jen, () => window.__G.soundOn === true);
+  ok(true, "phones can turn game sounds on too");
   await host.click('.r-tools [data-action="drawer"]');
   await host.click('.tab:has-text("Mini games")');
   await host.fill('input[data-change="mini-tables"]', "Kitchen, Living room");
@@ -153,32 +157,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   console.log("Final Jeopardy multiple choice");
   ok(!!(await host.evaluate(() => window.__G.S.settings.doubleJeopardy !== false)), "Double Jeopardy is on by default");
   await act(host, "startGame", { control: "team1" });
-  // ---- Santa reads the question ----
-  const elephant = await host.evaluate(() => window.__G.Q.find((q) => q.points === 100 && !q.isFinal).id);
-  const santaSaid = () => board.evaluate(() => window.__said.filter((x) => x.pitch < 0.6).map((x) => x.text));
-  await act(host, "pickClue", { qid: elephant });
-  await until(board, () => window.__said.some((x) => x.pitch < 0.6 && x.text.includes("largest land animal")), null, 5000);
-  ok(true, "Santa reads the picked question out loud (deep voice)");
-  await act(host, "openBuzzers");
-  await P.Jen.dispatchEvent('[data-action="buzz"]', "pointerdown");
-  await until(board, () => window.__G.S.clue && window.__G.S.clue.stage === "answering");
-  await until(board, () => (window.__hushed || 0) > 0);
-  ok(true, "Santa stops talking when someone buzzes in");
-  await act(host, "judge", { result: "correct" });
-  await act(host, "closeClue");
-  const crows = await host.evaluate(() => window.__G.Q.find((q) => q.points === 200 && !q.isFinal && q.type === "mcq").id);
-  await act(host, "pickClue", { qid: crows });
-  await until(board, () => window.__said.some((x) => x.text.includes("Is it: A,")), null, 5000);
-  ok(true, "multiple-choice options are read out too");
-  await act(host, "unpickClue");
-  await act(host, "setSettings", { patch: { readAloud: false } });
-  const n = (await santaSaid()).length;
-  await act(host, "pickClue", { qid: crows });
-  await sleep(1500);
-  ok((await santaSaid()).length === n, "switched off in Settings, Santa stays quiet");
-  await act(host, "unpickClue");
-  await act(host, "setSettings", { patch: { readAloud: true } });
-
+  await act(host, "setSettings", { patch: { finalSeconds: 10 } });
   await act(host, "setScore", { team: "team1", value: 500 });
   await act(host, "setScore", { team: "team2", value: 400 });
   await act(host, "finalStart");
@@ -190,14 +169,15 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "phones get the Final as four choices");
   await until(board, () => document.querySelectorAll(".bchoice").length === 4);
   ok(true, "board shows the four choices");
-  await until(board, () => window.__said.some((x) => x.pitch < 0.6 && x.text.includes("Final") && x.text.includes("Red Planet")), null, 5000);
-  ok(true, "Santa reads the Final Jeopardy question");
+
   await P.Jen.click('[data-action="final-choice"][data-v="Mars"]');
   await P.Kim.click('[data-action="final-choice"][data-v="Venus"]');
   await until(host, () => window.__G.S.final.answers.team1 && window.__G.S.final.answers.team2);
   ok((await host.evaluate(() => window.__G.S.final.answers.team1.text)) === "Mars", "a tapped choice is saved as the team's answer");
-  await until(host, () => window.__G.S.final.stage === "reveal");
-  ok(true, "both teams answered → the Final clock stops and answers lock right away");
+  await sleep(1500);
+  ok((await host.evaluate(() => window.__G.S.final.stage)) === "clue", "both teams answered, but the music and timer keep running");
+  await until(host, () => window.__G.S.final.stage === "reveal", null, 14000);
+  ok(true, "answers lock when the timer runs out");
   await act(host, "finalShowAnswer", { team: "team2" });
   await until(host, () => window.__G.S.final.results.team2 === "wrong");
   ok(true, "a wrong multiple-choice Final is marked wrong the moment it's revealed");

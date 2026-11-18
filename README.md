@@ -16,7 +16,8 @@ laptop) with the answer key and every control. Finish with an **ugly sweater vot
 2. **You:** open the site, tap **Host login**, enter **2325**. Host and Remote are the same
    private screen: the answer to every question, who's buzzed, wagers, and all the
    buttons. Keep it to yourself and host from anywhere in the room.
-3. **Sound:** tap **🔊** on whichever screen is connected to speakers.
+3. **Sound:** every screen with **🔊 Sound on** plays the sounds — the board, your host
+   screen, and any player's phone that turns it on (top-right of their screen).
 4. **Players** scan the QR code on the lobby screen, type their name and pick **Husbands**
    or **Wives**. (A team can rename itself from a phone.)
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
@@ -91,13 +92,6 @@ switch off phone renaming there too.
 - Phones buzz on touch-down for speed, vibrate when buzzers open / when you're up, and
   stay awake during the game.
 
-**🎅 Santa reads the questions**
-- When a question is picked, the screen with 🔊 on reads it aloud in a deep, slow Santa
-  voice (with the odd "Ho ho ho!"), including multiple-choice options, Daily Doubles and
-  the Final. He stops as soon as someone buzzes in. Switch it off in Settings → Game.
-  The voice comes from the device's built-in voices, so it sounds best on a computer
-  with a male English voice installed.
-
 **Answering**
 - **Typed answers:** whoever wins the buzz gets a text box, already open and ready to
   type. Their answer appears on the board and your screen says whether it matches. You tap
@@ -116,8 +110,10 @@ switch off phone renaming there too.
 - Only teams above $0 play (official rule — you can override per team).
 - Teams **lock their wager secretly on their phones** (teammates see it, the other team
   and the projector don't). You can also enter wagers by hand.
-- Think music + timer; teams type their answer on their phones (auto-saves) — or, if the
-  Final has wrong options, it's **multiple choice** and they tap one.
+- Think music + timer (31 s by default — the length of the music, and it always plays to
+  the end). One answer per team: whoever submits first submits it for everyone, and any
+  teammate can **Undo & change it** until time's up. If the Final has wrong options it's
+  **multiple choice** and they tap one.
 - Dramatic reveal, lowest score first: answer → you judge → wager → new score. Winner
   screen with confetti.
 

@@ -20,7 +20,6 @@ export const DEFAULT_SETTINGS = {
   finalNeedsPositive: true, // official rule: only teams with $1+ play Final Jeopardy
   playersRename: true,    // players may rename their own team before Jeopardy starts
   doubleJeopardy: true,   // play the Double Jeopardy round (off = skip it; the questions are kept)
-  readAloud: true,        // read each question out loud in a Santa voice on the screen with sound on
   announce: true,         // mini games: read "who's up next" out loud on the screen with sound on
 };
 
@@ -471,17 +470,14 @@ export function finalRevealClue(s, _p, ctx) {
   return builder(s, ctx).field("final", { ...f, wagers, stage: "clue", deadline: ctx.now + secs * 1000 }).done();
 }
 
-// done: the team pressed Submit (or tapped a choice). Once every playing team is done,
-// the clock stops and answers lock straight away.
+// done: someone on the team pressed Submit (or tapped a choice) — it counts for the whole
+// team. The think music and timer always run to the end; until then anyone can undo it.
 export function finalAnswer(s, { team, text, by, done }, ctx) {
   const f = s.final;
   if (!f || f.stage !== "clue" || !TEAMS.includes(team) || !f.eligible[team]) return null;
   if (ctx.now > f.deadline + 1500) return fail("Time's up — answers are locked.");
   const answers = { ...f.answers, [team]: { text: String(text || "").trim().slice(0, 200), by: String(by || "").slice(0, 40), at: ctx.now, done: !!done || !!(f.answers[team] && f.answers[team].done && done !== false) } };
-  const allIn = TEAMS.filter((t) => f.eligible[t]).every((t) => answers[t] && answers[t].done && answers[t].text);
-  const b = builder(s, ctx);
-  if (allIn) return b.field("final", { ...f, answers, stage: "reveal" }).sfx("buzz").done();
-  return b.field("final", { ...f, answers }).done();
+  return builder(s, ctx).field("final", { ...f, answers }).done();
 }
 
 export function finalLock(s, { force } = {}, ctx) {

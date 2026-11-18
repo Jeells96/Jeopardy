@@ -12,6 +12,7 @@ export function renderPlayer(G) {
   return `<div class="phone ${me.team}">
     <header class="ph-top">
       <div class="me"><span class="dot ${me.team}"></span><div><b>${esc(me.name)}</b><small>${esc(tn(G, me.team))}</small></div></div>
+      <button class="${cls("ph-sound", G.soundOn && "on")}" data-action="toggle-sound" title="Game sounds on this phone" aria-label="Sound ${G.soundOn ? "on" : "off"}">${G.soundOn ? "🔊" : "🔇"}</button>
       <div class="ph-scores">${E.TEAMS.map((t) => `<div class="${cls("phs", t, t === me.team && "mine")}"><small>${esc(tn(G, t))}</small><b class="${S.scores[t] < 0 ? "neg" : ""}">${money(S.scores[t])}</b></div>`).join("")}</div>
     </header>
     <main class="ph-main">${body(G)}</main>

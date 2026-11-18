@@ -582,7 +582,9 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq([w.state.final.answers.team1.done, w.state.final.answers.team1.text], [false, "Mars"], "a teammate can undo the team's submission (answer kept to edit)");
   w.run("finalAnswer", { team: "team1", text: "Mars", by: "Hub2", done: true });
   w.run("finalAnswer", { team: "team2", text: "Venus", by: "Wife1", done: true });
-  eq(w.state.final.stage, "reveal", "both teams in — answers lock right away");
+  eq(w.state.final.stage, "clue", "both teams in — the music and timer still run to the end");
+  w.run("finalLock", {}, 40000);
+  eq(w.state.final.stage, "reveal", "answers lock when time runs out");
   w.run("finalShowAnswer", { team: "team2" });
   eq([w.state.final.results.team2, w.state.scores.team2], ["wrong", 100], "multiple-choice Final: a wrong pick is marked wrong instantly");
   w.run("finalShowAnswer", { team: "team1" });

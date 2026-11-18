@@ -1079,3 +1079,11 @@ p.small { font-size: 13px; margin: 6px 0 0; }
 .pastehere:hover { background: rgba(255, 207, 64, 0.22); }
 .sent-note { display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; padding: 12px; margin-top: 10px; border-radius: 14px; background: rgba(23, 164, 87, 0.18); border: 1px solid rgba(125, 255, 176, 0.5); }
 .sent-ans { font: 700 20px var(--ui); color: #fff; }
+
+/* ---- sound buttons: projector board + phones ---- */
+.board-tools { opacity: 0.9; }
+.sound-btn { font-size: 16px; padding: 10px 16px; }
+.sound-btn:not(.on) { background: rgba(215, 38, 61, 0.85); border-color: #ff8a9a; color: #fff; }
+.sound-btn.on { background: rgba(23, 164, 87, 0.85); border-color: #7dffb0; color: #fff; }
+.ph-sound { flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.08); font-size: 18px; cursor: pointer; }
+.ph-sound.on { background: rgba(23, 164, 87, 0.5); border-color: #7dffb0; }
