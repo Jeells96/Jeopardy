@@ -196,6 +196,11 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await P.Kim.click('[data-action="final-choice"][data-v="Venus"]');
   await until(host, () => window.__G.S.final.answers.team1 && window.__G.S.final.answers.team2);
   ok((await host.evaluate(() => window.__G.S.final.answers.team1.text)) === "Mars", "a tapped choice is saved as the team's answer");
+  await until(host, () => window.__G.S.final.stage === "reveal");
+  ok(true, "both teams answered → the Final clock stops and answers lock right away");
+  await act(host, "finalShowAnswer", { team: "team2" });
+  await until(host, () => window.__G.S.final.results.team2 === "wrong");
+  ok(true, "a wrong multiple-choice Final is marked wrong the moment it's revealed");
   await sleep(300);
   await shot(board, "x04-board-final-mc");
   await shot(P.Jen, "x05-phone-final-mc");

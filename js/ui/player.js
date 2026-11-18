@@ -104,7 +104,7 @@ function clueBody(G) {
   if (c.stage === "answering" && c.locked) {
     const L = c.locked;
     const total = (set.answerSeconds || 15) * 1000;
-    const clock = c.timeUp === key ? `<div class="ph-note timeup">⏰ Time's up!</div>` : timer(L.at + total, total);
+    const clock = c.submitted === key ? `<div class="ph-note">✓ Answer in — waiting for Jaren to judge</div>` : c.timeUp === key ? `<div class="ph-note timeup">⏰ Time's up!</div>` : timer(L.at + total, total);
     if (c.dd) {
       if (me.team === c.dd.team) {
         return q.type === "mcq"

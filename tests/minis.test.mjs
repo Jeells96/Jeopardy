@@ -551,6 +551,41 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq(w.state.round, 2, "switched back on, it plays");
 }
 
+// ---------- clocks stop once answers are in ----------
+{
+  const w = world(roster(1, 1));
+  w.run("startGame", { control: "team1" });
+  w.run("pickClue", { qid: "a1" });
+  w.run("openBuzzers");
+  w.run("claimBuzz", { me: { deviceId: "h1", name: "Hub1", team: "team1" }, buzzRound: w.state.clue.buzzRound });
+  const key = E.lockKey(w.state.clue);
+  ok(w.state.clue.stage === "answering", "someone buzzed in");
+  w.run("answerSubmitted", { key });
+  eq(w.state.clue.submitted, key, "a typed answer stops the answer clock");
+  w.run("answerTimeout", { key }, 60000);
+  ok(w.noop && !w.state.clue.timeUp, "…so time can't run out on it");
+  w.run("judge", { result: "correct" });
+  eq(w.state.scores.team1, 100, "host still judges it");
+
+  // Final: everyone answered → locks at once; multiple choice scores itself on reveal
+  w.qs = w.qs.map((q) => (q.isFinal ? { ...q, type: "mcq", choices: ["Mars", "Venus"], correctIndex: 0 } : q));
+  w.run("setScore", { team: "team2", value: 300 });
+  w.run("finalStart");
+  w.run("finalWager", { team: "team1", amount: 50, by: "Hub1" });
+  w.run("finalWager", { team: "team2", amount: 200, by: "Wife1" });
+  w.run("finalRevealClue");
+  w.run("finalAnswer", { team: "team1", text: "Mars", by: "Hub1" });
+  eq(w.state.final.stage, "clue", "auto-saved typing doesn't count as submitted");
+  w.run("finalAnswer", { team: "team1", text: "Mars", by: "Hub1", done: true });
+  eq(w.state.final.stage, "clue", "one team in — the clock keeps going for the other");
+  w.run("finalAnswer", { team: "team2", text: "Venus", by: "Wife1", done: true });
+  eq(w.state.final.stage, "reveal", "both teams in — answers lock right away");
+  w.run("finalShowAnswer", { team: "team2" });
+  eq([w.state.final.results.team2, w.state.scores.team2], ["wrong", 100], "multiple-choice Final: a wrong pick is marked wrong instantly");
+  w.run("finalShowAnswer", { team: "team1" });
+  eq([w.state.final.results.team1, w.state.scores.team1], ["correct", 150], "…and a right one is marked right");
+}
+
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

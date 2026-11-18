@@ -232,10 +232,12 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "typed answer shows up for the host");
   await until(board, () => document.querySelector(".stage")?.textContent.includes("Jingle Bells"));
   ok(true, "typed answer shows on the board");
-  await until(board, () => !!window.__G.S.clue.timeUp, null, 9000);
-  ok(true, "spoken answer timer runs out (time's up flagged)");
-  await until(host, () => document.querySelector(".r-status")?.textContent.includes("Time's up"));
-  ok(true, "host sees 'Time's up — your call'");
+  await until(board, () => !!window.__G.S.clue.submitted);
+  ok(true, "submitting stops the answer clock");
+  await until(host, () => document.querySelector(".r-status")?.textContent.includes("Answer in"));
+  ok(true, "host sees 'Answer in — your call'");
+  await sleep(6500);
+  ok(!(await state(board)).clue.timeUp, "the clock doesn't run out after the answer is in");
   await key(host, "s"); // skip (no penalty) → rebound to team 2
   await until(board, () => window.__G.S.clue.stage === "open");
   ok((await state(board)).scores.team1 === base.team1, "skip has no penalty");

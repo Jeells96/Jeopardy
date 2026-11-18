@@ -172,7 +172,8 @@ function clueStatus(G, c, q) {
     const sp = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard">✍️ “${esc(G.spoken.text)}”</div>` : "";
     const tu = c.timeUp === key ? `<div class="status-sub timeup">⏰ Time's up!</div>` : "";
     const who = c.dd ? `${esc(tn(G, L.team))}` : `${esc(L.name)} <small>${esc(tn(G, L.team))}</small>`;
-    return `<div class="answerer ${L.team}">${who}</div>${c.timeUp === key ? "" : timerLights(L.at + total, total)}${tu}${sp}`;
+    const done = c.submitted === key ? `<div class="status-sub">✓ Answer in</div>` : "";
+    return `<div class="answerer ${L.team}">${who}</div>${c.timeUp === key || c.submitted === key ? "" : timerLights(L.at + total, total)}${tu}${done}${sp}`;
   }
   if (c.stage === "done") {
     let banner = "";

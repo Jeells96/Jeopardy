@@ -338,9 +338,16 @@ export function mcqPick(s, { index, me }, ctx) {
   return resolve(s, "wrong", ctx, { mcq, eliminated: [...c.eliminated, index] });
 }
 
+// A typed answer came in: stop the answer clock and wait for the host to judge.
+export function answerSubmitted(s, { key }, ctx) {
+  const c = s.clue;
+  if (!c || c.stage !== "answering" || !c.locked || lockKey(c) !== key || c.submitted === key) return null;
+  return builder(s, ctx).field("clue", { ...c, submitted: key }).done();
+}
+
 export function answerTimeout(s, { key }, ctx) {
   const c = s.clue;
-  if (!c || c.stage !== "answering" || !c.locked || lockKey(c) !== key || c.timeUp === key) return null;
+  if (!c || c.stage !== "answering" || !c.locked || lockKey(c) !== key || c.timeUp === key || c.submitted === key) return null;
   const secs = (s.settings && s.settings.answerSeconds) || 15;
   if (ctx.now < c.locked.at + secs * 1000 - 60) return null;
   const q = findQ(ctx, c.id);
@@ -462,13 +469,17 @@ export function finalRevealClue(s, _p, ctx) {
   return builder(s, ctx).field("final", { ...f, wagers, stage: "clue", deadline: ctx.now + secs * 1000 }).done();
 }
 
-export function finalAnswer(s, { team, text, by }, ctx) {
+// done: the team pressed Submit (or tapped a choice). Once every playing team is done,
+// the clock stops and answers lock straight away.
+export function finalAnswer(s, { team, text, by, done }, ctx) {
   const f = s.final;
   if (!f || f.stage !== "clue" || !TEAMS.includes(team) || !f.eligible[team]) return null;
   if (ctx.now > f.deadline + 1500) return fail("Time's up — answers are locked.");
-  return builder(s, ctx).field("final", {
-    ...f, answers: { ...f.answers, [team]: { text: String(text || "").trim().slice(0, 200), by: String(by || "").slice(0, 40), at: ctx.now } },
-  }).done();
+  const answers = { ...f.answers, [team]: { text: String(text || "").trim().slice(0, 200), by: String(by || "").slice(0, 40), at: ctx.now, done: !!done || !!(f.answers[team] && f.answers[team].done && done !== false) } };
+  const allIn = TEAMS.filter((t) => f.eligible[t]).every((t) => answers[t] && answers[t].done && answers[t].text);
+  const b = builder(s, ctx);
+  if (allIn) return b.field("final", { ...f, answers, stage: "reveal" }).sfx("buzz").done();
+  return b.field("final", { ...f, answers }).done();
 }
 
 export function finalLock(s, { force } = {}, ctx) {
@@ -481,6 +492,13 @@ export function finalLock(s, { force } = {}, ctx) {
 export function finalShowAnswer(s, { team }, ctx) {
   const f = s.final;
   if (!f || f.stage !== "reveal" || !TEAMS.includes(team) || f.shown[team].answer) return null;
+  // Multiple-choice Final: scored the moment the answer is revealed.
+  const fq = finalClue(ctx.questions);
+  if (fq && fq.type === "mcq" && f.eligible[team] && !f.results[team]) {
+    const a = f.answers[team];
+    const right = fq.choices[fq.correctIndex];
+    return finalJudge(s, { team, correct: !!(a && right && a.text.toLowerCase() === String(right).toLowerCase()) }, ctx);
+  }
   return builder(s, ctx).field("final", { ...f, shown: { ...f.shown, [team]: { ...f.shown[team], answer: true } } }).done();
 }
 
@@ -968,7 +986,7 @@ export function voteBack(s, _p, ctx) {
 
 export const ACTIONS = {
   startGame, setControl, startRound2, pickClue, unpickClue, setDDTeam, lockDDWager, openBuzzers,
-  autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, answerTimeout, buzzWindowTimeout, nobody,
+  autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, answerSubmitted, answerTimeout, buzzWindowTimeout, nobody,
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,

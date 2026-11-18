@@ -294,7 +294,7 @@ function automations() {
     const key = E.lockKey(c);
     if (c.stage === "reading" && set.readSeconds > 0 && now >= c.pickedAt + set.readSeconds * 1000) fire("ao" + c.pickedAt, "autoOpen", { pickedAt: c.pickedAt });
     if (c.stage === "open" && set.buzzWindowSeconds > 0 && now >= c.openedAt + set.buzzWindowSeconds * 1000) fire("bw" + key + c.openedAt, "buzzWindowTimeout", { key });
-    if (c.stage === "answering" && c.locked && c.timeUp !== key && now >= c.locked.at + (set.answerSeconds || 15) * 1000) fire("at" + key + c.locked.at, "answerTimeout", { key });
+    if (c.stage === "answering" && c.locked && c.timeUp !== key && c.submitted !== key && now >= c.locked.at + (set.answerSeconds || 15) * 1000) fire("at" + key + c.locked.at, "answerTimeout", { key });
   }
   if (S.phase === "final" && S.final.stage === "clue" && now >= S.final.deadline) fire("fl" + S.final.deadline, "finalLock", {});
   if (S.phase === "over" && S.vote && S.vote.stage === "open" && E.voteProgress(S, G.P).all) fire("vr" + S.vote.openedAt, "voteReveal", {});
@@ -323,6 +323,7 @@ async function submitTyped() {
   box.value = "";
   box.blur();
   await D.writeSpoken({ key: E.lockKey(c), deviceId: G.deviceId, name: G.me.name, team: G.me.team, text, at: G.now(), final: true });
+  D.act("answerSubmitted", { key: E.lockKey(c) }).catch(() => {});
   toast("Answer sent ✓", "good");
 }
 function focusAnswerBox() {
@@ -382,7 +383,7 @@ async function buzz() {
 let faTimer = 0;
 function saveFinalAnswer(text, announce) {
   if (!G.me) return;
-  D.act("finalAnswer", { team: G.me.team, text, by: G.me.name })
+  D.act("finalAnswer", { team: G.me.team, text, by: G.me.name, done: announce ? true : undefined })
     .then(() => { if (announce) toast("Answer saved ✓", "good"); })
     .catch((e) => toast(e.message, "bad"));
 }
@@ -526,7 +527,17 @@ async function handle(a, p, el) {
       if (!G.me) return;
       await D.act("castVote", { voter: G.deviceId, pick: el.dataset.pid });
       return;
-    case "mcq": await D.act("mcqPick", { index: Number(el.dataset.i), me: { deviceId: G.deviceId, name: G.me.name, team: G.me.team } }); return;
+    case "mcq": {
+      // Instant feedback on this phone, before the database even answers.
+      const c = G.S && G.S.clue, q = c && findQ(G, c.id), i = Number(el.dataset.i);
+      if (q && c.stage === "answering") {
+        const right = i === q.correctIndex;
+        toast(right ? "✅ Correct!" : "❌ Wrong!", right ? "good" : "bad");
+        vibrate(right ? [40, 40, 40] : [250]);
+      }
+      await D.act("mcqPick", { index: i, me: { deviceId: G.deviceId, name: G.me.name, team: G.me.team } });
+      return;
+    }
     case "fw-quick": { const i = document.getElementById("fw-input"); if (i) i.value = el.dataset.v; return; }
     case "final-wager": {
       const i = document.getElementById("fw-input");

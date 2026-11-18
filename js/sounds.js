@@ -42,7 +42,7 @@ function ensureCtx() {
 export function resume() {
   try { ensureCtx(); if (ctx && ctx.state === "suspended") ctx.resume(); } catch { /* ignore */ }
 }
-export function enableSound() { enabled = true; store.set("jeop_sound", "1"); resume(); probe(); play("buzz"); }
+export function enableSound() { enabled = true; store.set("jeop_sound", "1"); resume(); probe(); play("buzz"); unlockSpeech(true); }
 export function disableSound() { enabled = false; store.set("jeop_sound", "0"); setFinalMusic(false); }
 
 // Check once which MP3s exist so a missing file never delays a cue.
@@ -160,33 +160,64 @@ function santaVoice() {
 if (typeof window !== "undefined" && window.speechSynthesis && window.speechSynthesis.getVoices) {
   try { window.speechSynthesis.getVoices(); } catch { /* voices load later on some browsers */ }
 }
-export function santa(text) {
-  if (!enabled || !text || !("speechSynthesis" in window) || !window.SpeechSynthesisUtterance) return;
+// Browsers are fussy about speech: Chrome can silently drop an utterance spoken right
+// after cancel(), can get stuck "paused", and can garbage-collect an utterance mid-way;
+// iPhones only allow speech after it has been started once from a tap. This handles all of it.
+const talking = new Set(); // keep utterances alive until they finish
+let speechUnlocked = false;
+function speakNow(u, { delay = 0 } = {}) {
+  const synth = window.speechSynthesis;
+  talking.add(u);
+  const done = () => talking.delete(u);
+  u.onend = done;
+  u.onerror = done;
+  const go = () => { try { if (synth.resume) synth.resume(); synth.speak(u); } catch { done(); } };
+  const busy = synth.speaking || synth.pending;
+  if (busy) { try { synth.cancel(); } catch { /* ignore */ } }
+  if (busy || delay) setTimeout(go, Math.max(delay, busy ? 120 : 0)); else go();
+}
+function canSpeak() { return typeof window !== "undefined" && "speechSynthesis" in window && !!window.SpeechSynthesisUtterance; }
+function santaUtterance(text) {
+  const u = new SpeechSynthesisUtterance(text);
+  const v = santaVoice();
+  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = "en-US";
+  u.pitch = 0.45;  // deep
+  u.rate = 0.86;   // unhurried
+  u.volume = 1;
+  return u;
+}
+// Call from a tap: lets this device talk later (needed on iPhone/iPad and some Androids).
+export function unlockSpeech(sayHello) {
+  if (!canSpeak()) return;
   try {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    const v = santaVoice();
-    if (v) { u.voice = v; u.lang = v.lang; }
-    u.pitch = 0.45;  // deep
-    u.rate = 0.86;   // unhurried
-    u.volume = 1;
-    window.speechSynthesis.speak(u);
-  } catch { /* no voice available — the question is on screen anyway */ }
+    const synth = window.speechSynthesis;
+    if (sayHello) { synth.cancel(); synth.speak(santaUtterance("Ho ho ho! Merry Christmas!")); }
+    else if (!speechUnlocked) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); }
+    speechUnlocked = true;
+  } catch { /* ignore */ }
+}
+if (typeof document !== "undefined") {
+  const first = () => { if (enabled) unlockSpeech(false); document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
+  document.addEventListener("pointerdown", first, true);
+  document.addEventListener("keydown", first, true);
+}
+export function santa(text) {
+  if (!enabled || !text || !canSpeak()) return;
+  try { speakNow(santaUtterance(text)); } catch { /* no voice available — the question is on screen anyway */ }
 }
 export function hush() {
-  try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch { /* ignore */ }
+  try { if (canSpeak()) window.speechSynthesis.cancel(); } catch { /* ignore */ }
 }
 
 // Read a short line out loud with the browser's built-in voice (mini games: "who's up next").
 export function say(text) {
-  if (!enabled || !text || !("speechSynthesis" in window) || !window.SpeechSynthesisUtterance) return;
+  if (!enabled || !text || !canSpeak()) return;
   try {
-    window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 1;
     u.pitch = 1.05;
     u.volume = 1;
-    window.speechSynthesis.speak(u);
+    speakNow(u);
   } catch { /* no voice available — the names are on screen anyway */ }
 }
 

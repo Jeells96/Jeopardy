@@ -124,7 +124,9 @@ export function hostSteps(G, { privateView = false } = {}) {
       const L = c.locked;
       const key = E.lockKey(c);
       const who = c.dd ? `<b>${esc(tn(G, L.team))}</b>` : `<b>${esc(L.name)}</b> <span class="muted">(${esc(tn(G, L.team))})</span>`;
-      const clock = c.timeUp === key
+      const clock = c.submitted === key
+        ? `<span class="timeup">✓ Answer in — your call.</span>`
+        : c.timeUp === key
         ? `<span class="timeup">⏰ Time's up — your call.</span>`
         : `<span class="pill-cd"><span class="cd" data-deadline="${L.at + (set.answerSeconds || 15) * 1000}" data-format="s"></span></span>`;
       const heard = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard-line">✍️ “${esc(G.spoken.text)}”</div>` : "";
