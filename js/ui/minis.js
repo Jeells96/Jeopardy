@@ -14,10 +14,19 @@ const prize = (g) => (g.type === "h2h" && g.award === "match" ? `${money(g.point
 const namesOn = (G, team) => G.P.filter((p) => !team || p.team === team).map((p) => p.name);
 const currentGame = (M) => (M.current ? M.list.find((x) => x.id === M.current) : null) || null;
 // The Christmas summon for the current draw (only when tables are set up), as plain text.
+export const itemSummon = (it) => (it && it.table && it.summon != null ? summonText(it.summon, it.names, it.table) : "");
 export function pickSummon(S) {
   const pick = E.currentPick(S);
-  if (!pick || !pick.table || pick.summon == null) return "";
-  return summonText(pick.summon, pick.names, pick.table);
+  return pick ? pick.items.map(itemSummon).filter(Boolean).join(" ") : "";
+}
+const pickOf = (S, id) => { const p = E.currentPick(S); return (p && p.items.find((x) => x.id === id)) || null; };
+const itemSpinning = (G, it) => !!it && G.now() < it.at + E.SPIN_MS;
+const freeTables = (G, g, used) => E.miniSlots(G.S, g).filter((t) => t !== null && !used.includes(t));
+// Is there anyone left to send to another table? (Head-to-head needs someone free on each team.)
+function canDrawMore(G, g, items) {
+  const busy = new Set(items.flatMap((x) => (x.pid ? [x.pid] : [x.p1 && x.p1.id, x.p2 && x.p2.id].filter(Boolean))));
+  const free = (t) => G.P.some((p) => p.team === t && !busy.has(p.id));
+  return g.type === "h2h" ? E.TEAMS.every((t) => free(t) || !G.P.some((p) => p.team === t)) && E.TEAMS.some(free) : E.TEAMS.some(free);
 }
 const tableTag = (pick) => (pick && pick.table ? `<span class="tabletag">📍 ${esc(pick.table)}</span>` : "");
 function summonBanner(G) {
@@ -107,9 +116,39 @@ function gameHead(M, g) {
     ${g.desc ? `<div class="mg-desc">${esc(g.desc)}</div>` : ""}`;
 }
 
+// Several tables playing the same game at once: one card per table.
+function tableCards(G, g, items) {
+  const used = items.map((x) => x.table);
+  const cards = items.map((x) => {
+    const it = pickOf(G.S, x.id);
+    const sum = !itemSpinning(G, it) ? itemSummon(it) : "";
+    const who = g.type === "h2h"
+      ? `<div class="tc-vs"><span class="team1">${x.p1 ? spin(namesOn(G, "team1"), x.p1.name, x.p1.at, "tspin") : esc(tn(G, "team1"))}</span><i>vs</i><span class="team2">${x.p2 ? spin(namesOn(G, "team2"), x.p2.name, x.p2.at, "tspin") : esc(tn(G, "team2"))}</span></div>`
+      : `<div class="tc-vs solo ${x.team}">${spin(namesOn(G), x.name, x.at, "tspin")}<small>${esc(tn(G, x.team))}</small></div>`;
+    return `<div class="tcard" data-key="tc-${esc(x.id)}"><div class="tc-name">📍 ${esc(x.table || "")}</div>${who}${sum ? `<div class="tc-sum">${esc(sum)}</div>` : ""}</div>`;
+  });
+  for (const t of freeTables(G, g, used)) cards.push(`<div class="tcard free" data-key="tc-free-${esc(t)}"><div class="tc-name">📍 ${esc(t)}</div><div class="tc-free">Free — next draw 🎲</div></div>`);
+  return `<div class="tcards n${Math.min(cards.length, 4)}">${cards.join("")}</div>`;
+}
+const multiTable = (G, g, items) => items.length > 1 || (items.length && E.miniSlots(G.S, g).length > 1);
+
 function h2hView(G, M, g) {
   const st = E.miniStanding(g);
+  const open = E.openMatches(g);
   const m = E.openMatch(g);
+  if (multiTable(G, g, open)) {
+    const past = g.matches.filter((x) => x.winner).slice(-5).reverse();
+    return `<div class="mgame" data-key="mg-${esc(g.id)}">
+      ${gameHead(M, g)}
+      ${tableCards(G, g, open)}
+      <div class="tally">
+        <span class="t team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span>
+        <span class="t-sep">–</span>
+        <span class="t team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span>
+      </div>
+      <div class="mhistory">${past.map((x) => matchChip(G, x)).join("")}</div>
+    </div>`;
+  }
   const side = (team, p) => `<div class="vs-side ${team}" data-key="vs-${team}-${p ? esc(p.id) + "-" + p.at : "none"}">
       <small>${esc(tn(G, team))}</small>
       ${p ? spin(namesOn(G, team), p.name, p.at) : `<span class="spin">${esc(tn(G, team))}</span>`}
@@ -133,7 +172,9 @@ function h2hView(G, M, g) {
 
 function bestView(G, M, g) {
   const st = E.miniStanding(g);
-  const t = g.turn;
+  const turns = E.turnsOf(g);
+  const t = turns[0] || null;
+  const multi = multiTable(G, g, turns);
   const up = t
     ? `<div class="upnext ${t.team}" data-key="turn-${esc(t.id)}"><small>Up now</small>${spin(namesOn(G), t.name, t.at)}<em>${esc(tn(G, t.team))}</em></div>`
     : `<div class="upnext idle" data-key="idle-${g.entries.length}"><small>${g.entries.length ? "Next up" : "First up"}</small><span class="spin">🎲</span><em>${g.better === "low" ? "Lowest" : "Highest"} score wins</em></div>`;
@@ -142,7 +183,7 @@ function bestView(G, M, g) {
   return `<div class="mgame mgame--best" data-key="mg-${esc(g.id)}">
     ${gameHead(M, g)}
     <div class="best-cols">
-      <div class="upcol">${up}${t ? summonBanner(G) : ""}</div>
+      <div class="upcol">${multi ? tableCards(G, g, turns) : up + (t ? summonBanner(G) : "")}</div>
       <div class="lboard" style="--rows:${Math.max(3, Math.min(8, st.sorted.length))}"><div class="lb-head">Leaderboard${st.sorted.length > 8 ? ` <small>top 8 of ${st.sorted.length}</small>` : ""}</div>${rows || `<div class="lb-empty">No scores yet</div>`}</div>
     </div>
   </div>`;
@@ -231,8 +272,28 @@ export function miniSteps(G, { privateView = false } = {}) {
   // ---- head-to-head ----
   if (g.type === "h2h") {
     const tally = `${esc(n1)} <b>${st.wins.team1}</b> – <b>${st.wins.team2}</b> ${esc(n2)}`;
-    const m = E.openMatch(g);
-    if (m) {
+    const open = E.openMatches(g);
+    const m = open[0] || null;
+    const free = canDrawMore(G, g, open) ? freeTables(G, g, open.map((x) => x.table)) : [];
+    if (m && multiTable(G, g, open)) {
+      // Several tables at once: a row of controls per table.
+      status = `<b>${esc(g.name)}</b> · ${open.length} table${open.length === 1 ? "" : "s"} playing · ${tally}`;
+      panel = `<div class="trows">${open.map((x) => {
+        const a = x.p1 ? x.p1.name : n1, b = x.p2 ? x.p2.name : n2;
+        const it = pickOf(G.S, x.id);
+        if (itemSpinning(G, it)) return `<div class="trow" data-key="tr-${esc(x.id)}"><b class="tr-t">📍 ${esc(x.table || "")}</b><span class="hspins">🎲 ${x.p1 ? spin(namesOn(G, "team1"), a, x.p1.at, "hspin") : esc(a)} <i>vs</i> ${x.p2 ? spin(namesOn(G, "team2"), b, x.p2.at, "hspin") : esc(b)}</span></div>`;
+        const win = (w, label, k) => `<button class="btn sm ${k}" ${actAttr("miniMatch", { id: g.id, matchId: x.id, winner: w })}>${label}</button>`;
+        return `<div class="trow" data-key="tr-${esc(x.id)}"><b class="tr-t">📍 ${esc(x.table || "")}</b>
+          <span class="tr-who">${esc(a)} <i>vs</i> ${esc(b)}</span>
+          <span class="tr-btns">${win("team1", `🏆 ${esc(a)}`, "t1")}${win("team2", `🏆 ${esc(b)}`, "t2")}${win("tie", "🤝", "ghost")}
+          <button class="btn ghost sm" ${actAttr("miniRepick", { id: g.id, matchId: x.id })} title="Draw two different players">🎲</button>
+          <button class="btn ghost sm" data-action="mini-row-edit" data-id="${esc(x.id)}" aria-expanded="${!!editing(G, x.id)}">✏️</button></span>
+          ${editing(G, x.id) ? `<span class="tr-swap">${E.TEAMS.map((t) => (G.P.some((p) => p.team === t) ? playerSelect(G, g, t, ((t === "team1" ? x.p1 : x.p2) || {}).id || "", x.id) : "")).join("")}${tableMove(G, g, x)}</span>` : ""}</div>`;
+      }).join("")}</div>`;
+      if (free.length) btn(`🎲 Draw for ${free.length === 1 ? free[0] : `${free.length} free tables`}`, "act", act("miniNext", { id: g.id }), "primary", "Space");
+      btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, free.length ? "ghost" : "primary", free.length ? "" : "");
+      btn("↩ Games list", "act", act("miniClose"));
+    } else if (m) {
       const a = m.p1 ? m.p1.name : n1;
       const b = m.p2 ? m.p2.name : n2;
       if (spinning) {
@@ -246,14 +307,17 @@ export function miniSteps(G, { privateView = false } = {}) {
       }
     } else {
       const played = g.matches.length;
+      const slots = E.miniSlots(G.S, g).filter((t) => t !== null);
       status = `<b>${esc(g.name)}</b> · ${tally}${st.wins.ties ? ` · ${st.wins.ties} tied` : ""}${everyone ? ` <span class="muted">Everyone's had a turn.</span>` : ""}`;
-      btn(played ? "🎲 Next matchup" : "🎲 Who's up first?", "act", act("miniNext", { id: g.id }), everyone ? "ghost" : "primary", everyone ? "" : "Space");
+      const label = slots.length > 1 ? `🎲 Draw for all ${slots.length} tables` : played ? "🎲 Next matchup" : "🎲 Who's up first?";
+      btn(label, "act", act("miniNext", { id: g.id }), everyone ? "ghost" : "primary", everyone ? "" : "Space");
       btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, everyone ? "primary" : "ghost", everyone ? "Space" : "");
       btn("↩ Games list", "act", act("miniClose"));
       if (played) {
         panel = `<div class="mpanel wrap"><span class="muted">Results:</span>${g.matches.filter((x) => x.winner).map((x) =>
           `<span class="echip">${matchChip(G, x)}<button class="x" title="Remove this result" ${actAttr("miniMatchRemove", { id: g.id, matchId: x.id })}>✕</button></span>`).join("")}</div>`;
       }
+      if (!E.minisTables(G.S).length) panel += tablePicker(G, g, null);
     }
     return { status, panel, buttons: B };
   }
@@ -261,7 +325,25 @@ export function miniSteps(G, { privateView = false } = {}) {
   // ---- best overall ----
   const top = st.sorted[0];
   const leaderTxt = top ? `Best so far: <b>${esc(top.name)}</b> <span class="muted">(${esc(tn(G, top.team))})</span> ${scoreText(g, top.score)}` : `${g.better === "low" ? "Lowest" : "Highest"} score wins.`;
-  if (g.turn) {
+  const turns = E.turnsOf(g);
+  const freeB = canDrawMore(G, g, turns) ? freeTables(G, g, turns.map((x) => x.table)) : [];
+  if (turns.length && multiTable(G, g, turns)) {
+    status = `<b>${esc(g.name)}</b> · ${turns.length} table${turns.length === 1 ? "" : "s"} playing · <span class="muted">${leaderTxt}</span>`;
+    panel = `<div class="trows">${turns.map((x) => {
+      const it = pickOf(G.S, x.id);
+      if (itemSpinning(G, it)) return `<div class="trow" data-key="tr-${esc(x.id)}"><b class="tr-t">📍 ${esc(x.table || "")}</b><span class="hspins">🎲 ${spin(namesOn(G), x.name, x.at, "hspin")}</span></div>`;
+      return `<div class="trow" data-key="tr-${esc(x.id)}"><b class="tr-t">📍 ${esc(x.table || "")}</b>
+        <span class="tr-who ${x.team}">${esc(x.name)} <small class="muted">${esc(tn(G, x.team))}</small></span>
+        <span class="tr-btns"><label class="score-box sm"><input id="mini-score-${esc(x.id)}" class="wager-input" type="number" step="any" inputmode="decimal" placeholder="Score" autocomplete="off" data-sticky>${g.unit ? `<span>${esc(g.unit)}</span>` : ""}</label>
+        <button class="btn primary sm" data-action="mini-score" data-p="${J({ id: g.id, turnId: x.id })}">✓ Save</button>
+        <button class="btn ghost sm" ${actAttr("miniRepick", { id: g.id, turnId: x.id })} title="Draw someone else">🎲</button>
+        <button class="btn ghost sm" data-action="mini-row-edit" data-id="${esc(x.id)}" aria-expanded="${!!editing(G, x.id)}">✏️</button></span>
+        ${editing(G, x.id) ? `<span class="tr-swap">${playerSelect(G, g, null, x.pid, x.id)}${tableMove(G, g, x)}</span>` : ""}</div>`;
+    }).join("")}</div>`;
+    if (freeB.length) btn(`🎲 Draw for ${freeB.length === 1 ? freeB[0] : `${freeB.length} free tables`}`, "act", act("miniNext", { id: g.id }), "primary", "Space");
+    btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, "ghost", "");
+    btn("↩ Games list", "act", act("miniClose"));
+  } else if (g.turn) {
     if (spinning) {
       status = `<span class="hspins">🎲 ${spin(namesOn(G), g.turn.name, g.turn.at, "hspin")}</span> <span class="muted">${leaderTxt}</span>`;
     } else {
@@ -274,7 +356,8 @@ export function miniSteps(G, { privateView = false } = {}) {
     }
   } else {
     status = `<b>${esc(g.name)}</b> · ${leaderTxt}${everyone ? ` <span class="muted">Everyone's had a turn.</span>` : ""}`;
-    btn(g.entries.length ? "🎲 Who's next?" : "🎲 Who's up first?", "act", act("miniNext", { id: g.id }), everyone ? "ghost" : "primary", everyone ? "" : "Space");
+    const slotsB = E.miniSlots(G.S, g).filter((t) => t !== null);
+    btn(slotsB.length > 1 ? `🎲 Draw for all ${slotsB.length} tables` : g.entries.length ? "🎲 Who's next?" : "🎲 Who's up first?", "act", act("miniNext", { id: g.id }), everyone ? "ghost" : "primary", everyone ? "" : "Space");
     btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, everyone ? "primary" : "ghost", everyone ? "Space" : "");
     btn("↩ Games list", "act", act("miniClose"));
     if (g.entries.length) {
@@ -285,6 +368,13 @@ export function miniSteps(G, { privateView = false } = {}) {
   return { status, panel, buttons: B };
 }
 
+const editing = (G, id) => G.ui.miniEdit && G.ui.miniEdit[id];
+// Move one table's matchup / player to another table (swaps with whoever is there).
+function tableMove(G, g, x) {
+  const tables = E.minisTables(G.S);
+  if (tables.length < 2) return "";
+  return `<select class="msel" data-change="mini-move" data-id="${esc(g.id)}" data-ref="${esc(x.id)}" aria-label="Move to table">${tables.map((t) => `<option value="${esc(t)}"${t === x.table ? " selected" : ""}>📍 ${esc(t)}</option>`).join("")}</select>`;
+}
 // Which table to send the drawn player(s) to — right in the mini-game controls.
 function tablePicker(G, g, current) {
   const tables = E.minisTables(G.S);
@@ -295,10 +385,10 @@ function tablePicker(G, g, current) {
     `<button class="${cls("chipbtn", t === current && "on")}" ${actAttr("miniSetTable", { id: g.id, table: t })} aria-pressed="${t === current}">${t === current ? "✓ " : ""}${esc(t)}</button>`).join("")}</div>`;
 }
 
-function playerSelect(G, g, team, selectedId) {
+function playerSelect(G, g, team, selectedId, ref = "") {
   const list = G.P.filter((p) => !team || p.team === team);
   const opt = (p) => `<option value="${esc(p.id)}"${p.id === selectedId ? " selected" : ""}>${esc(p.name)}${team ? "" : " — " + esc(tn(G, p.team))}</option>`;
-  return `<select class="msel" data-change="mini-player" data-id="${esc(g.id)}"${team ? ` data-team="${team}"` : ""} aria-label="Choose who's up">${list.map(opt).join("")}</select>`;
+  return `<select class="msel" data-change="mini-player" data-id="${esc(g.id)}"${team ? ` data-team="${team}"` : ""}${ref ? ` data-ref="${esc(ref)}"` : ""} aria-label="Choose who's up">${list.map(opt).join("")}</select>`;
 }
 function sidePicker(G, g, team, p) {
   const has = G.P.some((x) => x.team === team);
@@ -388,7 +478,7 @@ export function minisTab(G) {
       </div>
       <input class="desc" value="${esc(g.desc)}" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>
       ${tables.length ? `<div class="mini-row"><span class="muted">Played at</span><select class="grow" aria-label="Which table" ${field(g, "table")}>
-        <option value=""${tables.includes(g.table) ? "" : " selected"}>🎲 Any table — drawn each time</option>
+        <option value=""${tables.includes(g.table) ? "" : " selected"}>🎲 All tables at once</option>
         ${tables.map((t) => `<option value="${esc(t)}"${g.table === t ? " selected" : ""}>📍 ${esc(t)}</option>`).join("")}
       </select></div>` : ""}
       <div class="mini-row foot">${state}<span class="grow"></span>
@@ -400,7 +490,7 @@ export function minisTab(G) {
   return `
   <section class="sect"><h4>Tables <small>optional</small></h4>
     <input class="newname" value="${esc(tables.join(", "))}" maxlength="240" placeholder="e.g. Kitchen table, Living room, Garage" aria-label="Table names" data-change="mini-tables" data-key="mini-tables">
-    <p class="muted small">Playing at more than one spot? Name the tables, separated by commas. When a name is drawn, everyone is told which table they're summoned to (a different Christmas summons every time). Leave empty for one spot.</p>
+    <p class="muted small">Want to get through the mini games faster? Name your tables, separated by commas, and each game is played at <b>all of them at once</b> — one draw puts a different matchup at every table, and everyone is told which table they're summoned to (a different Christmas summons every time). Set a game to one table below if it only has one station. Leave empty to play one at a time.</p>
   </section>
   <section class="sect"><h4>Your mini games <small>${M.list.length ? `(${M.list.length})` : ""}</small></h4>
     ${cards || `<p class="muted">None yet. Mini games are played before Jeopardy and the points count toward each team's score.</p>`}
@@ -470,23 +560,24 @@ export function playerMinis(G, extra = "") {
   const mine = !!pick && pick.pids.includes(G.deviceId);
   const st = E.miniStanding(g);
   let now;
+  const myItem = pick ? pick.items.find((x) => x.pids.includes(G.deviceId)) : null;
   if (!pick) now = `<div class="ph-note">Get ready — the next name is about to be drawn! 🎲</div>`;
   else if (spinning) now = `<div class="ph-note drawing">🎲 Drawing who's up…</div>`;
-  else if (g.type === "h2h") {
-    const m = E.openMatch(g);
-    const a = m.p1 ? m.p1.name : tn(G, "team1");
-    const b = m.p2 ? m.p2.name : tn(G, "team2");
-    const rival = me.team === "team1" ? b : a;
-    now = mine
-      ? `<div class="youup big">🎯 You're up!<small>You vs ${esc(rival)}</small>${tableTag(pick)}</div>`
-      : `<div class="ph-versus"><span class="team1">${esc(a)}</span><i>vs</i><span class="team2">${esc(b)}</span></div>${tableTag(pick)}`;
+  else if (myItem) {
+    // You're up: what you're playing, against whom, and which table to go to.
+    const rival = g.type === "h2h" ? (me.team === "team1" ? myItem.names[1] : myItem.names[0]) || tn(G, E.otherTeam(me.team)) : "";
+    now = `<div class="youup big">🎯 You're up!<small>${g.type === "h2h" ? `You vs ${esc(rival)}` : `${g.better === "low" ? "Lowest" : "Highest"} score wins`}</small>${tableTag(myItem)}</div>`;
+    const sum = itemSummon(myItem);
+    if (sum) now += `<div class="ph-summon">${esc(sum)}</div>`;
   } else {
-    const t = g.turn;
-    now = mine
-      ? `<div class="youup big">🎯 You're up!<small>${g.better === "low" ? "Lowest" : "Highest"} score wins</small>${tableTag(pick)}</div>`
-      : `<div class="ph-versus solo"><small>Up now</small><span class="${t.team}">${esc(t.name)}</span></div>${tableTag(pick)}`;
+    // Everyone else sees who's playing where.
+    now = pick.items.map((x) => {
+      const where = x.table ? `<span class="tabletag">📍 ${esc(x.table)}</span>` : "";
+      return g.type === "h2h"
+        ? `<div class="ph-versus"><span class="team1">${esc(x.names[0] || tn(G, "team1"))}</span><i>vs</i><span class="team2">${esc(x.names[1] || tn(G, "team2"))}</span></div>${where}`
+        : `<div class="ph-versus solo"><small>Up now</small><span class="${x.team}">${esc(x.names[0])}</span></div>${where}`;
+    }).join("");
   }
-  if (pick && !spinning && pickSummon(S)) now += `<div class="ph-summon">${esc(pickSummon(S))}</div>`;
   let board;
   if (g.type === "h2h") {
     board = `<div class="ph-tally"><span class="team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span><span>–</span><span class="team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span></div>`;

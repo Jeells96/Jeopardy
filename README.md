@@ -58,11 +58,15 @@ and the points go straight onto the team's score and carry into Jeopardy.
 - **Fixing mistakes:** remove a wrong result with ✕, **Undo** the last points, or **↺ Reset**
   a game to hand its points back.
 - **No phone?** Add people by hand in **Settings → Players** — they're drawn like anyone else.
-- **More than one table?** In **Settings → Mini games → Tables**, name your stations
-  (e.g. "Kitchen, Living room"). Each game can be set to one table or *any table* (drawn
-  each time). When names are drawn, the board, the phones and the announcer tell people
-  which table they're summoned to — with a different Christmas summons every time
-  ("🦌 Rudolph's nose is pointing straight at Jake — guide your sleigh to the Kitchen!").
+- **Several tables at once (to get through the games faster):** in **Settings → Mini
+  games → Tables**, name your tables (e.g. "Kitchen, Living room, Garage"). Every mini game
+  is then played at **all of them at the same time**: one draw puts a different matchup (or
+  player) at every table — nobody is drawn for two tables — and the board, the phones and
+  the announcer tell everyone which table they're summoned to, with a different Christmas
+  summons every time. Your controls show a row per table: tap who won (or type the score)
+  for each table as it finishes, then **🎲 Draw for [table]** refills just that table.
+  🎲 re-draws a table; ✏️ lets you swap a player or move a matchup to another table. A game
+  with only one station can be set to a single table.
 - **Mid-game bonus round:** Settings → Jump to → **Mini games** pauses Jeopardy; the gold
   button brings you back to the same board.
 

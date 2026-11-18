@@ -600,8 +600,13 @@ export const minisTables = (s) => minisOf(s).tables || [];
 export function minisOf(s) { return (s && s.minis) || freshMinis(); }
 export const miniById = (s, id) => minisOf(s).list.find((g) => g.id === id) || null;
 export const openMatch = (g) => (g.matches || []).find((m) => !m.winner) || null;
+// Matchups still being played (one per table when a game runs at several tables at once).
+export const openMatches = (g) => (g.matches || []).filter((m) => !m.winner);
+// Best-overall players currently up (one per table). Older saves only had a single `turn`.
+export const turnsOf = (g) => (Array.isArray(g.turns) ? g.turns : g.turn ? [g.turn] : []);
+const withTurns = (x, turns) => ({ ...x, turns, turn: turns[0] || null });
 function blankProgress() {
-  return { status: "pending", matches: [], entries: [], turn: null, played: { team1: [], team2: [] }, result: null };
+  return { status: "pending", matches: [], entries: [], turn: null, turns: [], played: { team1: [], team2: [] }, result: null };
 }
 
 function cleanMini(src) {
@@ -639,26 +644,32 @@ export function miniStanding(g) {
   return { wins, sorted, best, leader };
 }
 
-// The pick currently on screen (a matchup or a turn) and when it was made.
+// The pick(s) currently on screen and when they were made. With several tables there's
+// one item per table; `items` lists them, and the top-level fields describe the first.
 export function currentPick(s) {
   const M = minisOf(s);
   const g = M.current ? M.list.find((x) => x.id === M.current) : null;
   if (!g || g.status !== "active") return null;
+  let items;
   if (g.type === "h2h") {
-    const m = openMatch(g);
-    if (!m) return null;
-    const sides = [m.p1, m.p2].filter(Boolean);
-    return {
-      type: "h2h",
-      key: m.id + sides.map((p) => ":" + p.id + "@" + p.at).join(""),
-      at: sides.reduce((t, p) => Math.max(t, p.at || 0), 0),
-      pids: sides.map((p) => p.id),
-      names: [m.p1 ? m.p1.name : null, m.p2 ? m.p2.name : null],
-      table: m.table || null, summon: m.summon == null ? null : m.summon,
-    };
+    items = openMatches(g).map((m) => {
+      const sides = [m.p1, m.p2].filter(Boolean);
+      return {
+        id: m.id, key: m.id + sides.map((p) => ":" + p.id + "@" + p.at).join(""),
+        at: sides.reduce((t, p) => Math.max(t, p.at || 0), 0), pids: sides.map((p) => p.id),
+        names: [m.p1 ? m.p1.name : null, m.p2 ? m.p2.name : null],
+        table: m.table || null, summon: m.summon == null ? null : m.summon,
+      };
+    });
+  } else {
+    items = turnsOf(g).map((t) => ({ id: t.id, key: t.id, at: t.at || 0, pids: [t.pid], names: [t.name], team: t.team, table: t.table || null, summon: t.summon == null ? null : t.summon }));
   }
-  if (!g.turn) return null;
-  return { type: "best", key: g.turn.id, at: g.turn.at || 0, pids: [g.turn.pid], names: [g.turn.name], table: g.turn.table || null, summon: g.turn.summon == null ? null : g.turn.summon };
+  if (!items.length) return null;
+  const first = items[0];
+  return {
+    type: g.type, items, key: items.map((x) => x.key).join("|"), at: Math.max(...items.map((x) => x.at)),
+    pids: items.flatMap((x) => x.pids), names: first.names, table: first.table, summon: first.summon,
+  };
 }
 
 // Everyone on both teams has had a go in this game.
@@ -674,8 +685,9 @@ const teamPlayers = (ctx, team) => (ctx.players || []).filter((p) => p.team === 
 const random = (ctx) => (ctx.rand || Math.random)();
 
 // Random player from a team: nobody repeats until the whole team has had a turn.
-function choose(ctx, team, played, avoid = []) {
-  const all = teamPlayers(ctx, team);
+// busy: players already playing at another table right now — never drawn twice at once.
+function choose(ctx, team, played, avoid = [], busy = []) {
+  const all = teamPlayers(ctx, team).filter((p) => !busy.includes(p.id));
   if (!all.length) return null;
   let pool = all.filter((p) => !played.includes(p.id) && !avoid.includes(p.id));
   if (!pool.length) pool = all.filter((p) => !avoid.includes(p.id)); // whole team has been — start a new cycle
@@ -694,36 +706,46 @@ function lastSide(g, key) {
   for (let i = g.matches.length - 1; i >= 0; i--) if (g.matches[i][key]) return g.matches[i][key].id;
   return null;
 }
-function pickTurn(g, ctx, replacing) {
-  const has = TEAMS.filter((t) => teamPlayers(ctx, t).length);
+function pickTurn(g, ctx, replacing, busy = [], lastTeam) {
+  const free = (t) => teamPlayers(ctx, t).filter((p) => !busy.includes(p.id));
+  const has = TEAMS.filter((t) => free(t).length);
   if (!has.length) return null;
   let team;
-  if (replacing && teamPlayers(ctx, replacing.team).length > 1) {
+  if (replacing && free(replacing.team).length > 1) {
     team = replacing.team; // swap in a teammate
   } else {
-    const fresh = has.filter((t) => teamPlayers(ctx, t).some((p) => !g.played[t].includes(p.id)));
+    const fresh = has.filter((t) => free(t).some((p) => !g.played[t].includes(p.id)));
     const cands = fresh.length ? fresh : has;
-    const last = g.entries.length ? g.entries[g.entries.length - 1].team : null;
+    const last = lastTeam !== undefined ? lastTeam : g.entries.length ? g.entries[g.entries.length - 1].team : null;
     team = cands.length === 1 ? cands[0] : last ? otherTeam(last) : TEAMS[Math.floor(random(ctx) * 2)];
   }
   const lastPid = g.entries.length ? g.entries[g.entries.length - 1].pid : null;
-  const p = choose(ctx, team, g.played[team], [replacing ? replacing.pid : null, lastPid]);
+  const p = choose(ctx, team, g.played[team], [replacing ? replacing.pid : null, lastPid], busy);
+  if (!p) return null;
   return { id: rid(), pid: p.id, name: p.name, team, at: ctx.now };
 }
 const withList = (s, list, extra = {}) => ({ ...minisOf(s), list, ...extra });
-// Where the drawn player(s) should go, and a summon line that hasn't been used lately.
-// With no tables set up there's nothing to say. keep: the table to stay at (a re-draw).
-function placeFor(s, g, ctx, keep) {
-  const M = minisOf(s);
-  const tables = M.tables || [];
-  if (!tables.length) return { where: {}, extra: {} };
-  const table = keep && tables.includes(keep) ? keep : tables.includes(g.table) ? g.table : tables[Math.floor(random(ctx) * tables.length)];
-  const recent = M.recent || [];
-  let pool = SUMMONS.map((_, i) => i).filter((i) => !recent.includes(i));
-  if (!pool.length) pool = SUMMONS.map((_, i) => i);
-  const summon = pool[Math.floor(random(ctx) * pool.length)];
-  return { where: { table, summon }, extra: { recent: [...recent, summon].slice(-Math.min(24, SUMMONS.length - 1)) } };
+// The tables a game runs at, all at once: every table, or the one it's fixed to.
+// No tables set up → a single spot (null).
+export const miniSlots = (s, g) => slotsFor(s, g);
+function slotsFor(s, g) {
+  const tables = minisTables(s);
+  if (!tables.length) return [null];
+  return tables.includes(g.table) ? [g.table] : tables;
 }
+// Christmas summon lines that haven't been used lately.
+function summonPicker(s, ctx) {
+  let recent = [...(minisOf(s).recent || [])];
+  const next = () => {
+    let pool = SUMMONS.map((_, i) => i).filter((i) => !recent.includes(i));
+    if (!pool.length) pool = SUMMONS.map((_, i) => i);
+    const k = pool[Math.floor(random(ctx) * pool.length)];
+    recent = [...recent, k].slice(-Math.min(24, SUMMONS.length - 1));
+    return k;
+  };
+  return { next, extra: () => ({ recent }) };
+}
+const busyIn = (items) => items.flatMap((x) => (x.pid ? [x.pid] : [x.p1 && x.p1.id, x.p2 && x.p2.id].filter(Boolean)));
 const mapMini = (s, id, fn) => minisOf(s).list.map((g) => (g.id === id ? fn(g) : g));
 const NO_MINIS_NOW = { clue: "Finish the current question first.", final: "Final Jeopardy has already started.", over: "The game is over — start a new game to play mini games." };
 
@@ -808,88 +830,127 @@ export function miniClose(s, _p, ctx) {
 }
 
 // ---------- who's up next ----------
-export function miniNext(s, { id }, ctx) {
+// Draws for every free table at once (or just `table`). Nobody is drawn for two tables.
+export function miniNext(s, { id, table }, ctx) {
   const g = miniById(s, id);
   if (!g || g.status !== "active") return null;
+  const slots = slotsFor(s, g);
+  const sp = summonPicker(s, ctx);
+  const withTable = (slot) => (slot === null ? {} : { table: slot, summon: sp.next() });
   if (g.type === "h2h") {
-    if (openMatch(g)) return null;
-    const m = {
-      id: rid(), winner: null, at: ctx.now,
-      p1: choose(ctx, "team1", g.played.team1, [lastSide(g, "p1")]),
-      p2: choose(ctx, "team2", g.played.team2, [lastSide(g, "p2")]),
-    };
-    const pl = placeFor(s, g, ctx);
-    Object.assign(m, pl.where);
-    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, m] })), pl.extra))
-      .sfx(m.p1 || m.p2 ? "pick" : "buzz").done();
+    const open = openMatches(g);
+    let free = slots.filter((t) => !open.some((m) => (m.table || null) === t));
+    if (table !== undefined) free = free.filter((t) => t === table);
+    if (!free.length) return null;
+    const busy = busyIn(open);
+    const added = [];
+    const anyone = TEAMS.some((t) => teamPlayers(ctx, t).length);
+    for (const slot of free) {
+      const p1 = choose(ctx, "team1", g.played.team1, [lastSide(g, "p1")], busy);
+      const p2 = choose(ctx, "team2", g.played.team2, [lastSide(g, "p2")], busy);
+      const short = (!p1 && teamPlayers(ctx, "team1").length) || (!p2 && teamPlayers(ctx, "team2").length);
+      if (added.length && (short || !anyone)) break; // not enough free players for another table
+      if (short && open.length) break;
+      added.push({ id: rid(), winner: null, at: ctx.now, p1, p2, ...withTable(slot) });
+      if (p1) busy.push(p1.id);
+      if (p2) busy.push(p2.id);
+      if (!anyone) break;
+    }
+    if (!added.length) return fail("Everyone is already playing at a table.");
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, ...added] })), sp.extra()))
+      .sfx(added.some((m) => m.p1 || m.p2) ? "pick" : "buzz").done();
   }
-  if (g.turn) return null;
-  const turn = pickTurn(g, ctx, null);
-  if (!turn) return fail("No players yet. Add them in ⚙ Settings → Players, or just finish the game and choose the winner.");
-  const pl = placeFor(s, g, ctx);
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn: { ...turn, ...pl.where } })), pl.extra)).sfx("pick").done();
+  const turns = turnsOf(g);
+  let free = slots.filter((t) => !turns.some((x) => (x.table || null) === t));
+  if (table !== undefined) free = free.filter((t) => t === table);
+  if (!free.length) return null;
+  const busy = busyIn(turns);
+  const added = [];
+  let lastTeam;
+  for (const slot of free) {
+    const t = pickTurn(g, ctx, null, busy, lastTeam);
+    if (!t) break;
+    added.push({ ...t, ...withTable(slot) });
+    busy.push(t.pid);
+    lastTeam = t.team;
+  }
+  if (!added.length) {
+    if (!TEAMS.some((t) => teamPlayers(ctx, t).length)) return fail("No players yet. Add them in ⚙ Settings → Players, or just finish the game and choose the winner.");
+    return fail("Everyone is already playing at a table.");
+  }
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => withTurns(x, [...turnsOf(x), ...added])), sp.extra())).sfx("pick").done();
 }
-export function miniRepick(s, { id, team }, ctx) {
+const findOpen = (g, matchId) => (matchId ? openMatches(g).find((m) => m.id === matchId) : openMatch(g)) || null;
+const findTurn = (g, turnId) => (turnId ? turnsOf(g).find((t) => t.id === turnId) : turnsOf(g)[0]) || null;
+export function miniRepick(s, { id, team, matchId, turnId }, ctx) {
   const g = miniById(s, id);
   if (!g || g.status !== "active") return null;
+  const sp = summonPicker(s, ctx);
   if (g.type === "h2h") {
-    const m = openMatch(g);
+    const m = findOpen(g, matchId);
     if (!m) return null;
+    const busy = busyIn(openMatches(g).filter((x) => x.id !== m.id));
     const next = { ...m };
     for (const t of TEAMS.includes(team) ? [team] : TEAMS) {
       const key = t === "team1" ? "p1" : "p2";
-      next[key] = choose(ctx, t, g.played[t], [m[key] ? m[key].id : null]);
+      const other = t === "team1" ? m.p2 : m.p1;
+      next[key] = choose(ctx, t, g.played[t], [m[key] ? m[key].id : null], [...busy, ...(other ? [other.id] : [])]) || m[key];
     }
-    const pl = placeFor(s, g, ctx, m.table);
-    Object.assign(next, pl.where);
-    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? next : y)) })), pl.extra))
+    if (m.table) next.summon = sp.next();
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? next : y)) })), sp.extra()))
       .sfx("pick").done();
   }
-  if (!g.turn) return null;
-  const turn = pickTurn(g, ctx, g.turn);
-  if (!turn) return null;
-  const pl = placeFor(s, g, ctx, g.turn.table);
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn: { ...turn, ...pl.where } })), pl.extra)).sfx("pick").done();
+  const cur = findTurn(g, turnId);
+  if (!cur) return null;
+  const busy = busyIn(turnsOf(g).filter((x) => x.id !== cur.id));
+  const t = pickTurn(g, ctx, cur, busy);
+  if (!t) return null;
+  const nt = { ...t, ...(cur.table ? { table: cur.table, summon: sp.next() } : {}) };
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => withTurns(x, turnsOf(x).map((y) => (y.id === cur.id ? nt : y)))), sp.extra())).sfx("pick").done();
 }
-// Host sends the current draw to a particular table.
-export function miniSetTable(s, { id, table }, ctx) {
+// Host sends a matchup / player to a particular table (swapping with whoever is there).
+export function miniSetTable(s, { id, table, matchId, turnId }, ctx) {
   const g = miniById(s, id);
   const tables = minisTables(s);
   if (!g || g.status !== "active" || !tables.includes(table)) return null;
   const summon = (x) => (x.summon == null ? Math.floor(random(ctx) * SUMMONS.length) : x.summon);
+  const move = (items, target) => {
+    if (!target || target.table === table) return null;
+    return items.map((y) => (y.id === target.id ? { ...y, table, summon: summon(y) } : y.table === table ? { ...y, table: target.table || null } : y));
+  };
   if (g.type === "h2h") {
-    const m = openMatch(g);
-    if (!m || m.table === table) return null;
-    const next = { ...m, table, summon: summon(m) };
-    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? next : y)) })))).done();
+    const next = move(g.matches, findOpen(g, matchId));
+    if (!next) return null;
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: next })))).done();
   }
-  if (!g.turn || g.turn.table === table) return null;
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn: { ...x.turn, table, summon: summon(x.turn) } })))).done();
+  const next = move(turnsOf(g), findTurn(g, turnId));
+  if (!next) return null;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => withTurns(x, next)))).done();
 }
 
 // Host hand-picks who's up instead of the random draw.
-export function miniSetPlayer(s, { id, team, pid }, ctx) {
+export function miniSetPlayer(s, { id, team, pid, matchId, turnId }, ctx) {
   const g = miniById(s, id);
   const p = (ctx.players || []).find((x) => x.id === pid);
   if (!g || g.status !== "active" || !p || !TEAMS.includes(p.team)) return null;
   if (g.type === "h2h") {
-    const m = openMatch(g);
+    const m = findOpen(g, matchId);
     if (!m || p.team !== team) return null;
     const key = team === "team1" ? "p1" : "p2";
     const next = { ...m, [key]: { id: p.id, name: p.name, at: 0 } };
     return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? next : y)) })))).done();
   }
-  if (!g.turn) return null;
-  const turn = { id: rid(), pid: p.id, name: p.name, team: p.team, at: 0 };
-  if (g.turn.table) Object.assign(turn, { table: g.turn.table, summon: g.turn.summon });
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, turn })))).done();
+  const cur = findTurn(g, turnId);
+  if (!cur) return null;
+  const nt = { ...cur, id: rid(), pid: p.id, name: p.name, team: p.team, at: 0 };
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => withTurns(x, turnsOf(x).map((y) => (y.id === cur.id ? nt : y)))))).done();
 }
 
 // ---------- results ----------
-export function miniMatch(s, { id, winner }, ctx) {
+export function miniMatch(s, { id, winner, matchId }, ctx) {
   const g = miniById(s, id);
   if (!g || g.status !== "active" || g.type !== "h2h" || !["team1", "team2", "tie"].includes(winner)) return null;
-  const m = openMatch(g);
+  const m = findOpen(g, matchId);
   if (!m) return null;
   let played = g.played;
   if (m.p1) played = markPlayed(played, "team1", m.p1.id, ctx);
@@ -908,15 +969,16 @@ export function miniMatchRemove(s, { id, matchId }, ctx) {
   if (g.award === "match" && m.winner && m.winner !== "tie" && g.points) b.score(m.winner, -g.points, "mini-fix", { kind: "mini-fix", miniId: g.id });
   return b.field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.filter((y) => y.id !== matchId) })))).done();
 }
-export function miniScore(s, { id, score }, ctx) {
+export function miniScore(s, { id, score, turnId }, ctx) {
   const g = miniById(s, id);
-  if (!g || g.status !== "active" || g.type !== "best" || !g.turn) return null;
+  if (!g || g.status !== "active" || g.type !== "best") return null;
+  const t = findTurn(g, turnId);
+  if (!t) return null;
   const v = typeof score === "string" && score.trim() === "" ? NaN : Number(score);
   if (score == null || !Number.isFinite(v)) return fail("Type their score as a number first.");
-  const t = g.turn;
   const entry = { id: rid(), pid: t.pid, name: t.name, team: t.team, score: Math.round(v * 100) / 100, at: ctx.now };
   const played = markPlayed(g.played, t.team, t.pid, ctx);
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, played, turn: null, entries: [...x.entries, entry] }))))
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...withTurns(x, turnsOf(x).filter((y) => y.id !== t.id)), played, entries: [...x.entries, entry] }))))
     .sfx("buzz").done();
 }
 export function miniEntryRemove(s, { id, entryId }, ctx) {
@@ -942,7 +1004,7 @@ export function miniFinish(s, { id, winner }, ctx) {
     for (const t of TEAMS) if (got[t]) b.score(t, got[t], "mini", { kind: "mini", miniId: g.id, finish: true });
   }
   const M = minisOf(s);
-  const done = (x) => ({ ...x, status: "done", turn: null, matches: x.matches.filter((m) => m.winner), result: { winner: w, team1: got.team1, team2: got.team2 } });
+  const done = (x) => ({ ...x, status: "done", turn: null, turns: [], matches: x.matches.filter((m) => m.winner), result: { winner: w, team1: got.team1, team2: got.team2 } });
   b.field("minis", withList(s, mapMini(s, id, done), { current: s.phase === "minis" ? id : M.current }));
   return b.sfx(w === "none" ? "buzz" : "miniwin").done();
 }

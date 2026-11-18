@@ -7,7 +7,7 @@ import { renderRemote } from "./ui/remote.js";
 import { renderPlayer } from "./ui/player.js";
 import { renderJoin, renderGate, renderLoading, renderBoardPage } from "./ui/join.js";
 import { hostSteps } from "./ui/dock.js";
-import { PRESETS, pickSummon } from "./ui/minis.js";
+import { PRESETS, itemSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import { renderLibrary } from "./ui/library.js";
 import { findQ } from "./ui/stage.js";
@@ -138,19 +138,24 @@ function onState(prev, S) {
 // Mini games: when a new name is drawn, wait for the shuffle to finish, then reveal it
 // everywhere at the same moment (and buzz the phone of whoever is up).
 let lastPickKey = null;
+let lastPickItems = new Set();
 let pickPrimed = false; // don't re-announce a pick that was already on screen when this page loaded
 function miniPickEffect(S) {
   if (!S) return;
   const fresh = pickPrimed;
   pickPrimed = true;
   const pick = E.currentPick(S);
-  if (!pick) { lastPickKey = null; return; }
+  if (!pick) { lastPickKey = null; lastPickItems = new Set(); return; }
   if (pick.key === lastPickKey) return;
   lastPickKey = pick.key;
-  const summon = pickSummon(S).replace(/[^\p{L}\p{N}\s.,!?'’:;—–-]/gu, "").replace(/\s+/g, " ").trim();
-  const spoken = summon || (pick.type === "best"
-    ? (pick.names[0] ? `Up next: ${pick.names[0]}!` : "")
-    : (pick.names[0] || pick.names[1] ? `Up next: ${pick.names[0] || E.teamName(S, "team1")}, versus, ${pick.names[1] || E.teamName(S, "team2")}!` : ""));
+  // Only announce the tables that were just drawn (not the ones still playing).
+  const fresh2 = pick.items.filter((x) => !lastPickItems.has(x.key));
+  lastPickItems = new Set(pick.items.map((x) => x.key));
+  const say1 = (x) => itemSummon(x) || (pick.type === "best"
+    ? (x.names[0] ? `Up next: ${x.names[0]}!` : "")
+    : (x.names[0] || x.names[1] ? `Up next: ${x.names[0] || E.teamName(S, "team1")}, versus, ${x.names[1] || E.teamName(S, "team2")}!` : ""));
+  const spoken = fresh2.map(say1).join(" ").replace(/[^\p{L}\p{N}\s.,!?'’:;—–-]/gu, "").replace(/\s+/g, " ").trim();
+  if (!spoken && !fresh2.length) return;
   const reveal = () => {
     render();
     if (isPlayerRoute() && G.me && pick.pids.includes(G.deviceId)) vibrate([80, 60, 160]);
@@ -390,6 +395,9 @@ async function handle(a, p, el) {
     }
     case "drawer": G.ui.drawer = true; G.ui.drawerTab = p.tab || "game"; return render();
     case "drawer-close": G.ui.drawer = false; releaseFocus(); return render();
+    case "mini-row-edit":
+      G.ui.miniEdit = { ...(G.ui.miniEdit || {}), [el.dataset.id]: !(G.ui.miniEdit || {})[el.dataset.id] };
+      return render();
     case "wake-sound":
       await Sounds.wake();
       Sounds.play("buzz");
@@ -452,9 +460,9 @@ async function handle(a, p, el) {
     case "mini-reset-ask": G.ui.modal = { type: "miniReset", id: el.dataset.id }; return render();
     case "mini-finish-ask": G.ui.modal = { type: "miniFinish", id: p.id }; return render();
     case "mini-score": {
-      const input = document.getElementById("mini-score");
+      const input = document.getElementById(p.turnId ? "mini-score-" + p.turnId : "mini-score");
       if (!input || input.value.trim() === "") { if (input) input.focus(); return toast("Type their score first.", "bad"); }
-      await submitField(input, (typed) => D.act("miniScore", { id: p.id, score: typed }));
+      await submitField(input, (typed) => D.act("miniScore", { id: p.id, score: typed, turnId: p.turnId }));
       input.blur();
       return;
     }
@@ -589,7 +597,8 @@ document.addEventListener("change", async (e) => {
     else if (k === "import") await importFile(el);
     else if (k === "mini-field") await D.act("miniUpdate", { id: el.dataset.id, patch: { [el.dataset.f]: el.value } });
     else if (k === "mini-tables") await D.act("miniTables", { tables: el.value });
-    else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value });
+    else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value, matchId: el.dataset.ref || undefined, turnId: el.dataset.ref || undefined });
+    else if (k === "mini-move") await D.act("miniSetTable", { id: el.dataset.id, table: el.value, matchId: el.dataset.ref, turnId: el.dataset.ref });
   } catch (err) {
     toast(err.message || String(err), "bad");
     if (k === "mini-field" || k === "team-name" || k.startsWith("lib-")) { el.blur(); render(); } // snap the field back to the saved value
