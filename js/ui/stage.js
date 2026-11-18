@@ -231,7 +231,7 @@ function finalView(G) {
     </div>`;
   }
   if (f.stage === "clue") {
-    const total = (S.settings.finalSeconds || 30) * 1000;
+    const total = (S.settings.finalSeconds || 31) * 1000;
     return `<div class="clue final--clue" data-key="final-clue">
       <div class="clue-head"><span class="clue-cat">${esc(cat)}</span><span class="clue-val">Final Jeopardy!</span></div>
       <div class="clue-body"><div class="clue-text"><span>${esc(fq ? fq.question : "")}</span></div>

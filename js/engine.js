@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS = {
   answerSeconds: 15,      // time the buzzed-in player has to answer
   buzzWindowSeconds: 0,   // 0 = buzzers stay open until someone buzzes
   readSeconds: 0,         // 0 = host opens buzzers manually; >0 = auto-open after reading time
-  finalSeconds: 30,       // Final Jeopardy think time
+  finalSeconds: 31,       // Final Jeopardy think time (the length of the think music)
   autoRebound: true,      // after a miss, instantly reopen buzzers for the other team
   finalNeedsPositive: true, // official rule: only teams with $1+ play Final Jeopardy
   playersRename: true,    // players may rename their own team before Jeopardy starts
@@ -78,6 +78,8 @@ export function migrate(old) {
   const names = modernNames(old.teamNames || {});
   if (JSON.stringify(names) !== JSON.stringify(old.teamNames || {})) patch.teamNames = names;
   if (!old.settings || old.settings.playersRename === undefined) patch.settings = { ...DEFAULT_SETTINGS, ...(old.settings || {}) };
+  // The old 30-second default becomes the length of the Final Jeopardy song.
+  if (old.settings && old.settings.finalSeconds === 30 && !old.settings.finalSong) patch.settings = { ...(patch.settings || old.settings), finalSeconds: 31, finalSong: true };
   return Object.keys(patch).length ? { patch } : null;
 }
 function modernNames(n) {
@@ -156,7 +158,7 @@ export function startGame(s, { control } = {}, ctx) {
     .field("phase", "board").field("round", 1).field("control", ctrl).field("jStarted", true)
     .field("clue", null).field("final", freshFinal())
     .field("minis", minis)
-    .sfx("fill").done();
+    .sfx("intro").done();
 }
 
 // Step away from the Jeopardy board (back to the lobby or the mini games) without losing
@@ -188,7 +190,7 @@ export function startRound2(s, _p, ctx) {
   const ctrl = sc.team1 === sc.team2 ? s.control : sc.team1 < sc.team2 ? "team1" : "team2";
   return builder(s, ctx)
     .field("phase", "board").field("round", 2).field("control", ctrl).field("clue", null)
-    .sfx("fill").done();
+    .sfx("double").done();
 }
 
 // ---------- clues ----------
@@ -465,7 +467,7 @@ export function finalRevealClue(s, _p, ctx) {
   if (!TEAMS.some((t) => f.eligible[t])) return fail("No team is playing Final Jeopardy — mark at least one team as playing.");
   const wagers = { ...f.wagers };
   for (const t of TEAMS) if (f.eligible[t] && !wagers[t]) wagers[t] = { amount: 0, by: "(no wager)", at: ctx.now };
-  const secs = (s.settings && s.settings.finalSeconds) || 30;
+  const secs = (s.settings && s.settings.finalSeconds) || 31;
   return builder(s, ctx).field("final", { ...f, wagers, stage: "clue", deadline: ctx.now + secs * 1000 }).done();
 }
 

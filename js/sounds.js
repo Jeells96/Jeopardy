@@ -6,7 +6,9 @@ export const SLOTS = {
   correct: "correct.mp3",          // right answer
   wrong: "wrong.mp3",              // wrong answer
   timesup: "times-up.mp3",         // a timer ran out
-  final: "final-jeopardy.mp3",     // Final Jeopardy think music (loops)
+  final: "final-jeopardy.mp3",     // Final Jeopardy think music (plays once; the timer matches its length)
+  intro: "this-is-jeopardy.mp3",   // Jeopardy starts
+  double: "double-jeopardy.mp3",   // Double Jeopardy starts
   dd: "daily-double.mp3",          // Daily Double revealed
   buzz: "buzz-in.mp3",             // someone buzzed in
   fill: "board-fill.mp3",          // board appears at the start of a round
@@ -132,8 +134,13 @@ const SYNTH = {
   },
 };
 
+// Stop long cues (the theme songs) — e.g. when a question is picked.
+export function stop(...names) {
+  for (const n of names) { const a = cache[n]; if (a) { try { a.pause(); a.currentTime = 0; } catch { /* ignore */ } } }
+}
 export function play(name) {
   if (!enabled) return;
+  if (!SYNTH[name] && SYNTH.fill && (name === "intro" || name === "double")) SYNTH[name] = SYNTH.fill;
   resume();
   if (available[name]) {
     let a = cache[name];
@@ -257,7 +264,7 @@ export function setFinalMusic(on) {
   resume();
   if (available.final) {
     finalEl = new Audio(BASE + SLOTS.final);
-    finalEl.loop = true;
+    finalEl.loop = false;
     const p = finalEl.play();
     if (p && p.catch) p.catch(() => { finalEl = null; startLoop(); });
   } else {

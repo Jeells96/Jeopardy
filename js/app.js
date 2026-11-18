@@ -311,6 +311,7 @@ function soundEffects(S) {
     if (canPlay && G.now() - S.sfx.at < 6000) Sounds.play(S.sfx.sound);
   }
   Sounds.setFinalMusic(canPlay && S.phase === "final" && S.final && S.final.stage === "clue");
+  if (S.phase !== "board") Sounds.stop("intro", "double"); // a question (or anything else) cuts the theme off
 }
 
 // ---------------- typed answers ----------------
@@ -384,7 +385,7 @@ let faTimer = 0;
 function saveFinalAnswer(text, announce) {
   if (!G.me) return;
   D.act("finalAnswer", { team: G.me.team, text, by: G.me.name, done: announce ? true : undefined })
-    .then(() => { if (announce) toast("Answer saved ✓", "good"); })
+    .then(() => { if (announce) toast("Submitted for your team ✓", "good"); })
     .catch((e) => toast(e.message, "bad"));
 }
 
@@ -523,6 +524,13 @@ async function handle(a, p, el) {
     }
     case "typed-submit": return submitTyped();
     case "final-choice": return saveFinalAnswer(el.dataset.v, true);
+    case "final-undo": {
+      const f = G.S && G.S.final, cur = f && G.me && f.answers[G.me.team];
+      if (!cur) return;
+      await D.act("finalAnswer", { team: G.me.team, text: cur.text, by: G.me.name, done: false });
+      setTimeout(() => { const t = document.getElementById("fa-input"); if (t) { t.value = cur.text; t.focus(); } }, 120);
+      return toast("Unlocked — change the answer and submit again.");
+    }
     case "vote-cast":
       if (!G.me) return;
       await D.act("castVote", { voter: G.deviceId, pick: el.dataset.pid });
@@ -548,7 +556,8 @@ async function handle(a, p, el) {
     case "final-answer": {
       clearTimeout(faTimer);
       const t = document.getElementById("fa-input");
-      return saveFinalAnswer(t ? t.value : "", true);
+      if (!t || !t.value.trim()) { if (t) t.focus(); return toast("Type your team's answer first.", "bad"); }
+      return saveFinalAnswer(t.value, true);
     }
     case "gate": {
       const v = (document.getElementById("gate-code").value || "").trim();

@@ -346,6 +346,15 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await P.Rick.click('[data-action="final-answer"]');
   await until(board, () => window.__G.S.final.answers.team1 && window.__G.S.final.answers.team2);
   ok(true, "answers save from phones (typing auto-saves)");
+  await until(P.Bea, () => !!document.querySelector(".sent-note"));
+  ok((await P.Bea.textContent(".sent-note")).includes("Rick"), "one teammate submits for the whole team — the others see it");
+  await P.Bea.click('[data-action="final-undo"]');
+  await until(P.Rick, () => !!document.getElementById("fa-input"));
+  ok(true, "any teammate can undo it, and it opens for editing on every phone");
+  await P.Bea.fill("#fa-input", "Twas the Night Before Christmas");
+  await P.Bea.click('[data-action="final-answer"]');
+  await until(board, () => window.__G.S.final.answers.team2.done && window.__G.S.final.answers.team2.by === "Bea");
+  ok(true, "…and re-submit a changed answer");
   await sleep(300);
   await shot(board, "16-board-final-clue");
   await shot(P.Jo, "17-phone-final-answer");

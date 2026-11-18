@@ -75,7 +75,7 @@ function gameTab(G) {
   <section class="sect"><h4>Timers <small>(seconds)</small></h4>
     <div class="grid2">
       ${num("answerSeconds", "Answer time", st.answerSeconds, 3, 120, "After someone buzzes")}
-      ${num("finalSeconds", "Final Jeopardy", st.finalSeconds, 10, 300, "Think-music time")}
+      ${num("finalSeconds", "Final Jeopardy", st.finalSeconds, 10, 300, "Think time — 31 s is the length of the music")}
       ${num("buzzWindowSeconds", "Buzz-in window", st.buzzWindowSeconds, 0, 120, "0 = unlimited")}
       ${num("readSeconds", "Auto-open buzzers", st.readSeconds, 0, 30, "0 = I'll open them")}
     </div>

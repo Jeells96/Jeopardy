@@ -161,24 +161,30 @@ function finalBody(G) {
     </div>`;
   }
   if (f.stage === "clue") {
-    const total = (S.settings.finalSeconds || 30) * 1000;
+    const total = (S.settings.finalSeconds || 31) * 1000;
     const clue = `<div class="ph-clue ph-clue--final"><div class="ph-cat"><span>${esc(cat)}</span><span>Final</span></div><div class="ph-q">${esc(fq ? fq.question : "")}</div></div>`;
     if (!playing) return `${clue}${timer(f.deadline, total)}<div class="ph-note">Your team is sitting out — enjoy the show!</div>`;
     const cur = f.answers[me.team];
+    // One answer per team: whoever submits first submits it for everyone; anyone on the
+    // team can undo it and change it until the time is up.
+    const sent = cur && cur.done && cur.text;
+    const sentNote = sent ? `<div class="sent-note"><div>✓ <b>Submitted for your team</b> by ${esc(cur.by)}</div><div class="sent-ans">“${esc(cur.text)}”</div>
+        <button class="btn ghost" data-action="final-undo">↩ Undo &amp; change it</button></div>` : "";
     if (fq && fq.type === "mcq") {
       return `${clue}${timer(f.deadline, total)}
       <div class="ph-card">
-        <div class="lbl">Pick your team's answer</div>
-        <div class="ph-mcq">${fq.choices.map((ch, i) => `<button class="${cls("mcqbtn", cur && cur.text === ch && "picked")}" data-action="final-choice" data-v="${esc(ch)}"><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></button>`).join("")}</div>
-        ${cur && cur.text ? `<div class="locked-note">✓ Your team picked: “${esc(cur.text)}” <small>by ${esc(cur.by)} — you can change it until time runs out</small></div>` : ""}
+        <div class="lbl">${sent ? "Your team's answer" : "Pick your team's answer — one tap submits it for everyone"}</div>
+        <div class="ph-mcq">${fq.choices.map((ch, i) => `<button class="${cls("mcqbtn", cur && cur.text === ch && "picked")}" data-action="final-choice" data-v="${esc(ch)}"${sent ? " disabled" : ""}><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></button>`).join("")}</div>
+        ${sentNote}
       </div>`;
     }
+    if (sent) return `${clue}${timer(f.deadline, total)}<div class="ph-card">${sentNote}</div>`;
     return `${clue}${timer(f.deadline, total)}
       <div class="ph-card">
-        <label class="lbl" for="fa-input">Your team's answer</label>
+        <label class="lbl" for="fa-input">Your team's answer <small class="muted">— anyone on your team can submit it</small></label>
         <textarea id="fa-input" class="answer-input" rows="2" maxlength="200" placeholder="What is…?" data-input="final-answer" data-sticky>${esc(cur ? cur.text : "")}</textarea>
-        <button class="btn primary big" data-action="final-answer">Submit answer</button>
-        ${cur && cur.text ? `<div class="locked-note">✓ Saved: “${esc(cur.text)}” <small>by ${esc(cur.by)}</small></div>` : `<small class="muted">Saves automatically as you type. Whatever's saved when time runs out counts.</small>`}
+        <button class="btn primary big" data-action="final-answer">Submit for my team</button>
+        ${cur && cur.text ? `<small class="muted">Draft saved: “${esc(cur.text)}” (${esc(cur.by)}) — counts if time runs out.</small>` : `<small class="muted">Saves as you type. Whatever's saved when time runs out counts.</small>`}
       </div>`;
   }
   // reveal

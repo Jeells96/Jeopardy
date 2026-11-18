@@ -1077,3 +1077,5 @@ p.small { font-size: 13px; margin: 6px 0 0; }
 .clipbar .muted { flex: 1 1 200px; }
 .pastehere { width: 100%; margin: 6px 0; padding: 10px; border-radius: 10px; border: 2px dashed var(--gold); background: rgba(255, 207, 64, 0.12); color: var(--gold); font: 700 14px var(--ui); cursor: pointer; }
 .pastehere:hover { background: rgba(255, 207, 64, 0.22); }
+.sent-note { display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; padding: 12px; margin-top: 10px; border-radius: 14px; background: rgba(23, 164, 87, 0.18); border: 1px solid rgba(125, 255, 176, 0.5); }
+.sent-ans { font: 700 20px var(--ui); color: #fff; }
