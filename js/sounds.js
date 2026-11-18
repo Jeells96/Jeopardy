@@ -24,10 +24,12 @@ const available = {};   // slot -> true/false once probed
 const cache = {};       // slot -> HTMLAudioElement
 let probed = false;
 
-const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } } };
-export const soundPref = () => store.get("jeop_sound") === "1";
+// Sound is ON by default on every screen, and the choice isn't remembered: a refresh turns
+// it back on. (Browsers only let a page make sound after it's been tapped once — see blocked().)
 export const soundEnabled = () => enabled;
-export function initFromPref() { enabled = soundPref(); if (enabled) probe(); return enabled; }
+export function initFromPref() { enabled = true; probe(); return enabled; }
+// True while the browser is still holding sound back until someone taps the page.
+export const blocked = () => enabled && (!ctx || ctx.state !== "running");
 
 function ensureCtx() {
   if (!ctx) {
@@ -40,11 +42,16 @@ function ensureCtx() {
   }
   return ctx;
 }
+// Called from a tap: start the audio engine and wait until it's actually running.
+export async function wake() {
+  try { ensureCtx(); if (ctx && ctx.state !== "running") await ctx.resume(); } catch { /* ignore */ }
+  unlockSpeech();
+}
 export function resume() {
   try { ensureCtx(); if (ctx && ctx.state === "suspended") ctx.resume(); } catch { /* ignore */ }
 }
-export function enableSound() { enabled = true; store.set("jeop_sound", "1"); resume(); probe(); play("buzz"); unlockSpeech(); }
-export function disableSound() { enabled = false; store.set("jeop_sound", "0"); setFinalMusic(false); }
+export function enableSound() { enabled = true; resume(); probe(); play("buzz"); unlockSpeech(); }
+export function disableSound() { enabled = false; setFinalMusic(false); stop(...Object.keys(SLOTS)); }
 
 // Load every MP3 once and decode it for the Web Audio engine. Playing decoded buffers works
 // the same on every device (iPads included, where a new <audio> element started without a
@@ -220,7 +227,7 @@ export function unlockSpeech() {
   } catch { /* ignore */ }
 }
 if (typeof document !== "undefined") {
-  const first = () => { if (enabled) { resume(); unlockSpeech(); } document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
+  const first = () => { if (enabled) { wake(); } document.removeEventListener("pointerdown", first, true); document.removeEventListener("keydown", first, true); };
   document.addEventListener("pointerdown", first, true);
   document.addEventListener("keydown", first, true);
 }

@@ -1,5 +1,6 @@
 // Join screen, host code gate, loading screen and the projector page.
 import { esc, cls } from "./util.js";
+import * as Sounds from "../sounds.js";
 import * as E from "../engine.js";
 import { tn, stage } from "./stage.js";
 
@@ -57,7 +58,7 @@ export function renderBoardPage(G) {
   return `<div class="boardpage">
     ${stage(G, { pick: false })}
     <div class="board-tools">
-      <button class="${cls("hbtn sound-btn", G.soundOn && "on")}" data-action="toggle-sound" title="Sound on this screen">${G.soundOn ? "🔊 Sound on" : "🔇 Sound off"}</button>
+      <button class="${cls("hbtn sound-btn", G.soundOn && !Sounds.blocked() && "on", G.soundOn && Sounds.blocked() && "wake")}" data-action="${G.soundOn && Sounds.blocked() ? "wake-sound" : "toggle-sound"}" title="Sound on this screen">${!G.soundOn ? "🔇 Sound off" : Sounds.blocked() ? "👆 Tap to start sound" : "🔊 Sound on"}</button>
       <button class="hbtn" data-action="fullscreen" title="Fullscreen">⛶</button>
     </div>
   </div>`;

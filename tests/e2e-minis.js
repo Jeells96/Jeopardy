@@ -83,7 +83,8 @@ async function until(page, fn, arg, timeout = 8000) {
   });
   await board.goto(URL + "#/board");
   await board.waitForSelector(".stage");
-  await board.click('.board-tools [data-action="toggle-sound"]'); // the projector is the screen with the speakers
+  await board.click(".stage", { position: { x: 5, y: 5 } }); // any tap lets the browser make sound (sound is on by default)
+  await new Promise((r) => setTimeout(r, 400));
   await board.evaluate(() => { window.__said.length = 0; }); // ignore the silent "unlock" utterance
 
   const remote = await device("remote", { width: 390, height: 844 });

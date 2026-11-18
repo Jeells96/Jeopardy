@@ -16,8 +16,10 @@ laptop) with the answer key and every control. Finish with an **ugly sweater vot
 2. **You:** open the site, tap **Host login**, enter **2325**. Host and Remote are the same
    private screen: the answer to every question, who's buzzed, wagers, and all the
    buttons. Keep it to yourself and host from anywhere in the room.
-3. **Sound:** every screen with **🔊 Sound on** plays the sounds — the board, your host
-   screen, and any player's phone that turns it on (top-right of their screen).
+3. **Sound:** every screen plays every sound — the board, your host screen and all the
+   players' phones. Sound is on by default; 🔊/🔇 turns it off on one screen, and a refresh
+   turns it back on. Browsers need one tap on a page before it can make sound, so tap the
+   board once (it shows **👆 Tap to start sound** until you do).
 4. **Players** scan the QR code on the lobby screen, type their name and pick **Husbands**
    or **Wives**. (A team can rename itself from a phone.)
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):

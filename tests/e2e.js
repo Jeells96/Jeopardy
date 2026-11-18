@@ -37,7 +37,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
     const page = await ctx.newPage();
     page.on("pageerror", (e) => errors.push(`[${name}] ${e.message}`));
     // 409 = a losing transaction attempt (e.g. the 49 phones that didn't win a buzz) — expected.
-    page.on("console", (m) => { if (m.type() === "error" && !/favicon|409/.test(m.text())) errors.push(`[${name}] ${m.text()}`); });
+    // 404 on an .mp3 = an optional sound file that isn't there (its built-in sound is used).
+    page.on("console", (m) => { const url = (m.location() && m.location().url) || ""; if (m.type() === "error" && !/favicon|409/.test(m.text()) && !url.endsWith(".mp3")) errors.push(`[${name}] ${m.text()}`); });
     page.name = name;
     return page;
   }

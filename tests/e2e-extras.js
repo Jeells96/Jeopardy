@@ -105,7 +105,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   });
   await board.goto(URL + "#/board");
   await board.waitForSelector(".stage");
-  await board.click('.board-tools [data-action="toggle-sound"]');
+  ok(await board.evaluate(() => window.__G.soundOn === true), "sound is on by default");
+  await board.click(".stage", { position: { x: 5, y: 5 } }); // any tap lets the browser play sound
   const P = {};
   for (const [n, t] of [["Jen", "team1"], ["Kim", "team2"]]) {
     const p = await device(n, { width: 390, height: 844 });
@@ -116,10 +117,14 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
     await p.waitForSelector(".phone");
     P[n] = p;
   }
-  ok((await board.textContent(".sound-btn")).includes("Sound on"), "the board has a clear sound on/off button");
+  await until(board, () => document.querySelector(".sound-btn")?.textContent.includes("Sound on"));
+  ok(true, "the board has a clear sound on/off button");
+  ok(await P.Jen.evaluate(() => window.__G.soundOn === true), "phones have sound on by default too");
   await P.Jen.click(".ph-sound");
-  await until(P.Jen, () => window.__G.soundOn === true);
-  ok(true, "phones can turn game sounds on too");
+  await until(P.Jen, () => window.__G.soundOn === false);
+  await P.Jen.reload();
+  await P.Jen.waitForSelector(".phone");
+  ok(await P.Jen.evaluate(() => window.__G.soundOn === true), "turning it off isn't remembered — a refresh turns sound back on");
   await host.click('.r-tools [data-action="drawer"]');
   await host.click('.tab:has-text("Mini games")');
   await host.fill('input[data-change="mini-tables"]', "Kitchen, Living room");

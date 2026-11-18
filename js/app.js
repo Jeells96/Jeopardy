@@ -389,6 +389,10 @@ async function handle(a, p, el) {
     }
     case "drawer": G.ui.drawer = true; G.ui.drawerTab = p.tab || "game"; return render();
     case "drawer-close": G.ui.drawer = false; releaseFocus(); return render();
+    case "wake-sound":
+      await Sounds.wake();
+      Sounds.play("buzz");
+      return render();
     case "toggle-sound":
       if (Sounds.soundEnabled()) Sounds.disableSound(); else Sounds.enableSound();
       G.soundOn = Sounds.soundEnabled();
