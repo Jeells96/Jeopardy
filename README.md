@@ -55,6 +55,8 @@ and the points go straight onto the team's score and carry into Jeopardy.
 - **Finishing:** the game suggests the winner from what you tracked; you can overrule it,
   call a **tie** (points split) or give no points. You can also skip the tracking entirely
   and just declare who won.
+- **Started a game by mistake?** **↶ Undo start** in your controls puts it back to "Not played
+  yet" and takes you back to the games list (any points it gave out are taken back).
 - **Fixing mistakes:** remove a wrong result with ✕, **Undo** the last points, or **↺ Reset**
   a game to hand its points back.
 - **No phone?** Add people by hand in **Settings → Players** — they're drawn like anyone else.
@@ -79,20 +81,27 @@ Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing
    up in exactly 10 finger-friendly steps (no tiny details). Or tap
    **✍️ Draw my own** and type how many steps you'll describe. Each round uses the next picture.
    Set how many seconds each step lasts ("New step every … seconds", default 20).
-2. **Play:** draw who's up, then **▶ Start drawing** when phones are on heads. After a 3-second
+2. **Play — everyone at once:** tap **✏️ Everyone draw!** and every phone becomes a drawing pad.
+   Everyone draws at the same time, right where they're sitting (no tables, nobody is picked).
+   Tap **▶ Start drawing** when phones are on foreheads. After a 3-second
    countdown the big screen shows **Step 1 of 10: "Draw a big circle…"** with an example of what
    the drawing should look like so far (the new step in red), and moves to the next step
-   every X seconds. Drawers' phones show the step number and buzz on each new step. For a
+   every X seconds. Phones show the step number and buzz on each new step. For a
    picture you drew yourself, the screen shows "Step 2 of 4 — listen to Jaren" (no example),
    and your screen shows the picture so you can describe each step.
-3. **Pencils down:** after the last step, drawers take the phone off their head and **hold
-   Send** (nothing is sent while they draw, so nothing lags).
-4. **The website judges** the shapes — position, size, rotation and mirror image don't matter,
-   and a few stray lines are forgiven. The big screen shows **the picture, the winner and the
-   loser** side by side with a % match. **⏭ Judge now** judges straight away if someone never
-   sends (a missing drawing loses).
-- Only players with a phone are picked to draw. With tables set up, every table draws the same
-  picture at the same time.
+3. **Pencils down:** after the last step, everyone takes the phone off their head and **holds
+   Send** (nothing is sent while they draw, so nothing lags). The big screen ticks off each
+   drawing as it comes in.
+4. **The website judges** every drawing as soon as they're all in — position, size, rotation
+   and mirror image don't matter, and a few stray lines are forgiven. The big screen shows
+   **the picture, the winner and last place** side by side with a % match, then everyone's
+   drawing ranked best to worst. **The best drawing wins the round for its team.** Each phone
+   says how that player did ("You came 2nd of 9"). **⏭ Judge now** judges straight away if
+   someone never sends (no drawing = last).
+5. **Another round** uses the next picture, or **🏁 Finish game**. Points go to the team that
+   won the most rounds (or, if you choose, to the winning team every round).
+- **↶ Undo round** throws a round away as if it never started (the same picture comes up next).
+- Only players with a phone draw; anyone who joins before you tap Start draws too.
 
 ### Team names
 Teams start as **Husbands** and **Wives**. Until Jeopardy starts, anyone on a team can tap
@@ -324,7 +333,7 @@ node tests/e2e-minis.js [shots]   # Husbands vs Wives night: mini games → Jeop
 node tests/e2e-library.js [shots] # question library: paste, edit, search, lock, load into the game
 node tests/e2e-extras.js [shots]  # test game, mini-game tables, multiple-choice Final
 node tests/draw.test.mjs          # Blind Drawing: the shape judge and its rules
-node tests/e2e-draw.js [shots]    # Blind Drawing: host draws, two phones draw blind, verdict
+node tests/e2e-draw.js [shots]    # Blind Drawing: everyone draws at once, verdict, undo
 ```
 
 Firestore layout: `state/game` (the whole game, incl. the sweater vote), `state/spoken` (typed answer),

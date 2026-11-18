@@ -39,38 +39,85 @@ ok(messy > wrong && messy > scribble, `a wobbly, upside-down copy with stray lin
 eq(Dr.matchPercent(T, []), 0, "no drawing scores 0");
 eq(Dr.matchPercent(T, enc([[[500, 500]]])), 0, "a single dot scores 0");
 
-// ---------- game rules ----------
-const players = [{ id: "h1", name: "Jake", team: "team1" }, { id: "w1", name: "Emma", team: "team2" }, { id: "g1", name: "Grandpa", team: "team1", manual: true }];
+// ---------- game rules: everyone draws at once ----------
+const players = [
+  { id: "h1", name: "Jake", team: "team1" }, { id: "h2", name: "Sam", team: "team1" },
+  { id: "w1", name: "Emma", team: "team2" }, { id: "w2", name: "Lily", team: "team2" },
+  { id: "g1", name: "Grandpa", team: "team1", manual: true },
+];
 let st = E.defaultState();
-const run = (name, p, now = 1000) => { const r = E.ACTIONS[name](st, p, { now, questions: [], players, rand: rnd }); if (r && !r.error) st = { ...st, ...r.set }; return r; };
+const run = (name, p, now = 1000, who = players) => { const r = E.ACTIONS[name](st, p, { now, questions: [], players: who, rand: rnd }); if (r && !r.error) st = { ...st, ...r.set }; return r; };
+const game = () => st.minis.list[0];
 run("miniAdd", { game: { name: "Blind Drawing", type: "draw" } });
-const g0 = st.minis.list[0];
-eq([g0.type, g0.mode, g0.pics], ["h2h", "draw", []], "Blind Drawing is a head-to-head game judged from drawings");
+const g0 = game();
+eq([g0.type, g0.mode, g0.pics], ["h2h", "draw", []], "Blind Drawing is a team game judged from drawings");
 run("miniPlay", { id: g0.id });
-ok(!!run("miniNext", { id: g0.id }).error, "can't start without a picture to describe");
+ok(!!run("miniDrawRound", { id: g0.id }).error, "can't start without a picture to describe");
 run("miniUpdate", { id: g0.id, patch: { pics: ["drawpic-a", "drawpic-b"] } });
-eq(st.minis.list[0].pics, ["drawpic-a", "drawpic-b"], "pictures are kept on the game");
-for (let i = 0; i < 6; i++) {
-  run("miniNext", { id: g0.id });
-  const m = E.openMatch(st.minis.list[0]);
-  ok(m.p1.id === "h1", "only players with a phone are picked to draw");
-  run("miniMatch", { id: g0.id, matchId: m.id, winner: "tie" });
-}
-eq(st.minis.list[0].matches.map((m) => m.pic).slice(0, 3), ["drawpic-a", "drawpic-b", "drawpic-a"], "pictures are used in turn");
+eq(game().pics, ["drawpic-a", "drawpic-b"], "pictures are kept on the game");
+ok(!!E.ACTIONS.miniDrawRound(st, { id: g0.id }, { now: 1, players: [players[4]] }).error, "nobody with a phone → nobody can draw");
+run("miniDrawRound", { id: g0.id });
+let r = E.drawRound(game());
+eq(r.drawers.map((d) => d.id), ["h1", "h2", "w1", "w2"], "everyone with a phone draws at once (both teams, no tables)");
+ok(!("table" in r) && !r.p1 && !r.p2, "no tables, no one-on-one matchups");
+eq(E.currentPick(st), null, "nobody is picked — no name shuffle");
+eq(r.pic, "drawpic-a", "the first round uses the first picture");
+ok(run("miniDrawRound", { id: g0.id }) === null, "one round at a time");
+ok(run("miniNext", { id: g0.id }) === null, "the old draw-who's-next button does nothing while a round is going");
+// Undo a round set up by mistake
+run("miniDrawCancel", { id: g0.id, matchId: r.id });
+eq([E.drawRound(game()), game().matches.length], [null, 0], "↶ Undo round: as if it never happened");
 run("miniNext", { id: g0.id });
-let m = E.openMatch(st.minis.list[0]);
-run("miniDrawSubmitted", { id: g0.id, matchId: m.id, team: "team1" });
-eq(E.openMatch(st.minis.list[0]).done, { team1: true }, "a sent drawing is marked done");
-ok(!!run("miniRepick", { id: g0.id, matchId: m.id }).error, "can't re-draw players once someone has sent a drawing");
-run("miniDrawJudge", { id: g0.id, matchId: m.id, scores: { team1: 81, team2: null } });
-m = st.minis.list[0].matches.find((x) => x.id === m.id);
-eq([m.winner, m.scores], ["team1", { team1: 81, team2: null }], "the website's verdict: the closest drawing wins (a missing drawing loses)");
-ok(E.ACTIONS.miniDrawJudge(st, { id: g0.id, matchId: m.id, scores: { team1: 0, team2: 99 } }, { now: 2000, questions: [], players }) === null, "a verdict can't be changed afterwards");
-run("miniNext", { id: g0.id });
-const m2 = E.openMatch(st.minis.list[0]);
-run("miniDrawJudge", { id: g0.id, matchId: m2.id, scores: { team1: 40, team2: 40 } });
-eq(st.minis.list[0].matches.find((x) => x.id === m2.id).winner, "tie", "equal scores tie");
+r = E.drawRound(game());
+eq(r.pic, "drawpic-a", "…and the same picture is used again");
+// A latecomer who joins before the start draws too
+run("miniDrawStart", { id: g0.id }, 5000, [...players, { id: "w3", name: "Kim", team: "team2" }]);
+r = E.drawRound(game());
+eq([r.startedAt, r.drawers.length], [5000 + E.DRAW_COUNTDOWN_MS, 5], "starting begins step 1 after a countdown — and anyone who just joined draws too");
+ok(run("miniDrawStart", { id: g0.id }, 9000) === null, "starting again changes nothing");
+run("miniDrawSubmitted", { id: g0.id, matchId: r.id, pid: "h1" });
+run("miniDrawSubmitted", { id: g0.id, matchId: r.id, pid: "w1" });
+ok(run("miniDrawSubmitted", { id: g0.id, matchId: r.id, pid: "g1" }) === null, "someone who isn't drawing can't send");
+eq(E.drawRound(game()).done, { h1: true, w1: true }, "each sent drawing is ticked off");
+// Undo a started round (drawings thrown away)
+run("miniDrawCancel", { id: g0.id });
+eq(E.drawRound(game()), null, "a started round can be undone too");
+run("miniDrawRound", { id: g0.id });
+r = E.drawRound(game());
+eq(r.done, {}, "a fresh round starts with nobody done");
+for (const pid of ["h1", "h2", "w1", "w2"]) run("miniDrawSubmitted", { id: g0.id, matchId: r.id, pid });
+run("miniDrawJudge", { id: g0.id, matchId: r.id, scores: { h1: 55, h2: 31, w1: 87.4, w2: 12, g1: 99 } });
+let done = game().matches.find((x) => x.id === r.id);
+eq(done.winner, "team2", "the best drawing (Emma, 87%) wins the round for her team");
+eq(E.drawRanking(done).map((d) => [d.name, d.score]), [["Emma", 87], ["Jake", 55], ["Sam", 31], ["Lily", 12]], "everyone ranked best to worst");
+eq(E.miniStanding(game()).wins, { team1: 0, team2: 1, ties: 0 }, "the round counts as a win for the team");
+ok(E.ACTIONS.miniDrawJudge(st, { id: g0.id, matchId: r.id, scores: { h1: 100 } }, { now: 2000, questions: [], players }) === null, "a verdict can't be changed afterwards");
+run("miniDrawRound", { id: g0.id });
+r = E.drawRound(game());
+eq(r.pic, "drawpic-b", "the next round uses the next picture");
+run("miniDrawSubmitted", { id: g0.id, matchId: r.id, pid: "h2" });
+run("miniDrawSubmitted", { id: g0.id, matchId: r.id, pid: "w2" });
+run("miniDrawJudge", { id: g0.id, matchId: r.id, scores: { h2: 64, w2: 64, h1: 99 } });
+done = game().matches.find((x) => x.id === r.id);
+eq([done.winner, done.scores.h1], ["tie", null], "both teams share the best score → a tie (a drawing that wasn't sent scores nothing)");
+eq(E.drawRanking(done).slice(-2).map((d) => d.score), [null, null], "no drawing = bottom of the list");
 ok(!!E.ACTIONS.miniUpdate(st, { id: g0.id, patch: { type: "best" } }, { now: 1 }).error, "can't change the game type once it's started");
+// Points per round win
+{
+  let s3 = E.defaultState();
+  const r3 = (name, p) => { const x = E.ACTIONS[name](s3, p, { now: 1000, questions: [], players, rand: rnd }); if (x && !x.error) s3 = { ...s3, ...x.set }; return x; };
+  r3("miniAdd", { game: { name: "Blind Drawing", type: "draw", award: "match", points: 300, pics: ["builtin:tree"] } });
+  const id = s3.minis.list[0].id;
+  r3("miniPlay", { id });
+  r3("miniDrawRound", { id });
+  const rr = E.drawRound(s3.minis.list[0]);
+  r3("miniDrawSubmitted", { id, matchId: rr.id, pid: "h2" });
+  r3("miniDrawJudge", { id, matchId: rr.id, scores: { h2: 40 } });
+  eq(s3.scores.team1, 300, "points for every round win go straight to the winning team");
+  // Undo starting the whole game: back to not played yet, points handed back
+  r3("miniReset", { id });
+  eq([s3.minis.list[0].status, s3.minis.list[0].matches.length, s3.scores.team1, s3.minis.current], ["pending", 0, 0, null], "↶ Undo start: the game is back to not played yet, its points are taken back, and you're back at the games list");
+}
 
 // ---------- ready-made pictures ----------
 eq(PICTURES.length, 10, "10 ready-made pictures");
@@ -82,7 +129,7 @@ ok(PICTURES.every((p) => Dr.matchPercent(builtinStrokes("builtin:" + p.key), bui
 ok(isBuiltin("builtin:tree") && !isBuiltin("drawpic-x"), "ready-made vs hand-drawn ids");
 eq(Dr.svgSteps(PICTURES[0].steps, 1).match(/class="now"/g).length, PICTURES[0].steps[1].strokes.length, "the example highlights the current step");
 
-// ---------- steps, timing and starting a round ----------
+// ---------- steps and timing ----------
 {
   let s2 = E.defaultState();
   const r = (name, p, now = 1000) => { const x = E.ACTIONS[name](s2, p, { now, questions: [], players, rand: rnd }); if (x && !x.error) s2 = { ...s2, ...x.set }; return x; };
@@ -92,11 +139,8 @@ eq(Dr.svgSteps(PICTURES[0].steps, 1).match(/class="now"/g).length, PICTURES[0].s
   r("miniUpdate", { id: gid, patch: { stepSeconds: 2, pics: ["builtin:tree", "drawpic-mine"], picSteps: { "drawpic-mine": 4, "builtin:tree": 9 } } });
   eq([s2.minis.list[0].stepSeconds, s2.minis.list[0].picSteps], [5, { "drawpic-mine": 4 }], "at least 5 seconds a step; step counts kept only for hand-drawn pictures");
   r("miniPlay", { id: gid });
-  r("miniNext", { id: gid });
-  ok(!E.openMatch(s2.minis.list[0]).startedAt, "a round waits for the host to start it");
-  r("miniDrawStart", { id: gid }, 5000);
-  eq(E.openMatch(s2.minis.list[0]).startedAt, 5000 + E.DRAW_COUNTDOWN_MS, "starting begins step 1 after a 3-second countdown");
-  ok(E.ACTIONS.miniDrawStart(s2, { id: gid }, { now: 9000, players }) === null, "starting again changes nothing");
+  r("miniDrawRound", { id: gid });
+  ok(!E.drawRound(s2.minis.list[0]).startedAt, "a round waits for the host to start it");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

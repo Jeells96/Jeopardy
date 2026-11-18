@@ -1198,3 +1198,28 @@ svg.drawing.thumb { width: 64px; height: 64px; flex: none; }
 .stepsfield { margin-top: 8px; }
 .stepsfield input { width: 100px; }
 .drawfull.finished .df-top span { color: #7dffb0; font-size: 18px; }
+
+/* blind drawing: everyone draws at once */
+.dstatus { font: 700 clamp(14px, 2.2vh, 28px) var(--ui); margin: 0.4vh 0; text-align: center; }
+.dchips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 8px; width: min(1300px, 100%); margin: 0.6vh auto; }
+.dchip { padding: 4px 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); border-left: 4px solid transparent; font: 600 clamp(12px, 1.8vh, 22px) var(--ui); opacity: 0.75; }
+.dchip.team1 { border-left-color: var(--t1); }
+.dchip.team2 { border-left-color: var(--t2); }
+.dchip.sent { opacity: 1; background: rgba(125, 255, 176, 0.18); }
+.r-panel .dchips, .dock .dchips { justify-content: flex-start; margin: 6px 0 0; }
+.r-panel .dchip, .dock .dchip { font-size: 13px; }
+.dverdict { width: min(1500px, 100%); margin: 0 auto; display: grid; gap: 1vh; }
+.dpanels.n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); width: min(900px, 100%); margin: 0 auto; }
+.dverdict .dpanels .drawing { width: min(100%, 36vh); }
+.dverdict:has(.dall) .dpanels .drawing { width: min(100%, 21vh); }
+.dpanel.tie .dp-label { color: var(--gold); }
+.dpanel.tie .drawing { border-color: var(--gold); }
+.dp-name small { opacity: 0.75; font-weight: 600; }
+.dall { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.8vh 0.8vw; }
+.dall-item { display: flex; flex-direction: column; align-items: center; gap: 2px; width: clamp(56px, 9vh, 110px); min-width: 0; padding: 4px; border-radius: 10px; background: rgba(0, 0, 0, 0.25); border-bottom: 3px solid transparent; }
+.dall-item.team1 { border-bottom-color: var(--t1); }
+.dall-item.team2 { border-bottom-color: var(--t2); }
+.dall-item svg.drawing.thumb, .dall-item .drawing.thumb { width: 100%; height: auto; aspect-ratio: 1; }
+.dall-item b { font: 700 clamp(10px, 1.5vh, 16px) var(--ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.dall-item small { font: 600 clamp(10px, 1.4vh, 15px) var(--ui); opacity: 0.85; }
+.mgame--draw:has(.dverdict) .mg-kicker { display: none; }

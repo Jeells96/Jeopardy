@@ -104,7 +104,7 @@ async function hold(page, sel) {
   await board.goto(URL + "#/board");
   await board.waitForSelector(".stage");
   const P = {};
-  for (const [n, t] of [["Jake", "team1"], ["Emma", "team2"]]) {
+  for (const [n, t] of [["Jake", "team1"], ["Emma", "team2"], ["Kim", "team2"]]) {
     const p = await device(n, { width: 390, height: 844 });
     await p.goto(URL);
     await p.fill("#jn-name", n);
@@ -113,25 +113,40 @@ async function hold(page, sel) {
     await p.waitForSelector(".phone");
     P[n] = p;
   }
-  // a player without a phone can't draw, so they're never picked
+  // a player without a phone can't draw
   await host.evaluate(async () => { const D = await import("/js/data.js"); await D.addPlayer("Grandpa", "team1"); });
+  // tables are set up for the other games — blind drawing ignores them
+  await host.evaluate(async () => { const D = await import("/js/data.js"); await D.act("miniTables", { tables: "Kitchen, Garage" }); });
+  const btnText = () => host.evaluate(() => (document.querySelector(".r-buttons") || {}).textContent || "");
+  const clickBtn = (text) => host.locator(".r-buttons button", { hasText: text }).first().click();
 
-  console.log("Playing");
+  console.log("Playing: everyone draws at once");
   const id = await host.evaluate(() => window.__G.S.minis.list[0].id);
   await host.evaluate(async (id) => { const D = await import("/js/data.js"); await D.act("miniPlay", { id }); }, id);
-  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Who's drawing"));
+  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Everyone draw"));
+  ok(!(await host.$(".tablectl")) && !(await host.textContent(".remote")).includes("📍"), "no tables in blind drawing — everyone stays where they're sitting");
   await host.keyboard.press("Space");
   await until(host, () => window.__G.S.minis.list[0].matches.length === 1);
-  const m = await host.evaluate(() => window.__G.S.minis.list[0].matches[0]);
-  ok(m.p1.name === "Jake" && m.p2.name === "Emma", "only players with a phone are picked to draw");
-  ok(m.pic === "builtin:snowman", "the first round uses the first picture");
-  await until(P.Jake, () => !!document.querySelector(".drawfull canvas.drawpad"), null, 5000);
-  await until(P.Emma, () => !!document.querySelector(".drawfull canvas.drawpad"), null, 5000);
-  ok(true, "both drawers get a full-screen drawing pad");
+  let rd = await host.evaluate(() => window.__G.S.minis.list[0].matches[0]);
+  ok(rd.drawers.map((d) => d.name).join() === "Jake,Emma,Kim", "everyone with a phone draws at once (Grandpa has no phone)");
+  ok(!rd.table && rd.pic === "builtin:snowman", "no table; the first round uses the first picture");
+  for (const n of ["Jake", "Emma", "Kim"]) await until(P[n], () => !!document.querySelector(".drawfull canvas.drawpad"), null, 5000);
+  ok(true, "every phone becomes a full-screen drawing pad");
   ok(!(await P.Jake.$(".drawfull svg")) && !(await P.Jake.$(".describe")), "drawers never see the picture");
-  ok(!(await board.$(".tcard.result")), "the board doesn't show the picture while they draw");
-
+  ok(!(await board.$(".spin")), "no name shuffle — nobody is picked");
   ok((await board.textContent(".steppanel")).includes("Get ready"), "the board says get ready until you start");
+  ok((await board.$$eval(".dchips .dchip", (els) => els.map((e) => e.textContent.trim()))).join("|") === "✏️ Jake|✏️ Emma|✏️ Kim", "the board lists everyone who's drawing");
+  // undo a round set up by mistake
+  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Undo round"));
+  await clickBtn("Undo round");
+  await until(host, () => window.__G.S.minis.list[0].matches.length === 0);
+  await until(P.Jake, () => !document.querySelector(".drawfull"));
+  ok(true, "↶ Undo round: back to before the round (the phones close the pad)");
+  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Everyone draw"));
+  await host.keyboard.press("Space");
+  await until(host, () => window.__G.S.minis.list[0].matches.length === 1);
+  ok((await host.evaluate(() => window.__G.S.minis.list[0].matches[0].pic)) === "builtin:snowman", "…and the same picture comes up again");
+
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Start drawing"));
   await host.keyboard.press("Space");
   await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Starting in"));
@@ -139,44 +154,66 @@ async function hold(page, sel) {
   await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 1 of 10"), null, 6000);
   ok((await board.textContent(".steppanel")).includes("big circle for the bottom"), "step 1 is shown on the big screen");
   ok((await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.$$(".steppanel svg.example polyline.done")).length === 0, "with an example of what to draw (the new step in red)");
-  await until(P.Jake, () => document.querySelector(".df-top")?.textContent.includes("Step 1 of 10"));
-  ok(true, "the drawer's phone says which step it is");
+  await until(P.Kim, () => document.querySelector(".df-top")?.textContent.includes("Step 1 of 10"));
+  ok(true, "every phone says which step it is");
   await shot(board, "d02a-board-step1");
   await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 2 of 10"), null, 7000);
   ok((await board.$$(".steppanel svg.example polyline.done")).length === 1 && (await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.textContent(".steppanel")).includes("medium circle"), "after the set time it moves on: the example now shows steps 1 + 2");
   await sleep(700);
   await shot(board, "d02b-board-step2");
-  // Jake draws the snowman scene, off to the side and mirrored. Emma scribbles.
+  await shot(host, "d02c-host-drawing");
+  // Jake draws the whole snowman scene, off to the side and mirrored. Kim's parts land a bit
+  // off. Emma scribbles.
   const scene = await P.Jake.evaluate(async () => { const P = await import("/js/pictures.js"); const D = await import("/js/draw.js"); return D.decode(P.builtinStrokes("builtin:snowman")); });
-  await drawOn(P.Jake, ".drawfull canvas", scene.map((st) => st.map(([x, y]) => [0.12 + (1 - x / 1000) * 0.75, 0.05 + (y / 1000) * 0.75])));
+  const fit = (st) => st.map(([x, y]) => [0.12 + (1 - x / 1000) * 0.75, 0.05 + (y / 1000) * 0.75]);
+  await drawOn(P.Jake, ".drawfull canvas", scene.map(fit));
+  // Kim: the whole scene, but each part lands a bit off (lifting your finger with the phone on your head)
+  const off = [[0.05, -0.04], [-0.06, 0.03], [0.04, 0.06], [-0.05, -0.05], [0.07, 0.02], [-0.03, 0.07], [0.06, -0.06], [-0.07, 0.04]];
+  await drawOn(P.Kim, ".drawfull canvas", scene.map((st, i) => st.map(([x, y]) => [0.12 + (x / 1000) * 0.72 + off[i % off.length][0], 0.12 + (y / 1000) * 0.72 + off[i % off.length][1]])));
   await drawOn(P.Emma, ".drawfull canvas", [[[0.1, 0.1], [0.9, 0.3], [0.2, 0.8], [0.7, 0.9], [0.5, 0.2], [0.95, 0.6]], [[0.3, 0.5], [0.6, 0.55]]]);
   await shot(P.Jake, "d02-phone-drawing");
   await sleep(1200); // re-renders happen meanwhile — the drawing must survive them
   ok((await P.Jake.evaluate(async () => (await import("/js/draw.js")).padStrokes(document.querySelector(".drawfull canvas").dataset.pad).length)) === scene.length, "nothing is lost while the screen refreshes (nothing sent yet)");
-  ok(!(await host.evaluate(() => window.__G.S.minis.list[0].matches[0].done.team1)), "nothing is sent until the drawer holds Send");
+  const doneOf = (pid) => host.evaluate((pid) => !!(window.__G.S.minis.list[0].matches[0].done || {})[pid], pid);
+  const pidOf = (n) => P[n].evaluate(() => window.__G.deviceId);
+  const jake = await pidOf("Jake");
+  ok(!(await doneOf(jake)), "nothing is sent until you hold Send");
   await P.Jake.click('.drawfull .holdbtn');
   await sleep(300);
-  ok(!(await host.evaluate(() => window.__G.S.minis.list[0].matches[0].done.team1)), "a quick tap doesn't send it — you have to hold");
+  ok(!(await doneOf(jake)), "a quick tap doesn't send it — you have to hold");
   await hold(P.Jake, ".drawfull .holdbtn");
-  await until(host, () => window.__G.S.minis.list[0].matches[0].done.team1 === true);
+  await until(host, (pid) => (window.__G.S.minis.list[0].matches[0].done || {})[pid] === true, jake);
   await until(P.Jake, () => document.body.textContent.includes("Drawing sent"));
   ok(true, "holding Send sends it");
+  await until(board, () => (document.querySelector(".dstatus") || {}).textContent?.includes("1 of 3"));
+  ok((await board.textContent(".dchip.sent")).includes("Jake"), "the board ticks off each drawing as it comes in");
+  await hold(P.Kim, ".drawfull .holdbtn");
+  await sleep(400);
+  ok(!(await host.evaluate(() => window.__G.S.minis.list[0].matches[0].winner)), "no verdict until everyone has sent");
   await hold(P.Emma, ".drawfull .holdbtn");
-  await until(host, () => !!window.__G.S.minis.list[0].matches[0].winner, null, 10000);
+  await until(host, () => !!window.__G.S.minis.list[0].matches[0].winner, null, 15000);
   const done = await host.evaluate(() => window.__G.S.minis.list[0].matches[0]);
-  ok(done.winner === "team1", `the website picks the shape match, not the placement: Jake ${done.scores.team1}% vs Emma ${done.scores.team2}%`);
-  await until(board, () => document.querySelectorAll(".tcard.result svg.drawing polyline").length >= 3, null, 8000);
-  const labels = await board.$$eval(".tcard.result .dpanel", (els) => els.map((e) => e.querySelector(".dp-label").textContent + "|" + e.querySelector(".dp-name").textContent));
-  ok(labels[0].startsWith("The picture") && labels[1].includes("Winner") && labels[1].includes("Jake") && labels[2].includes("Loser") && labels[2].includes("Emma"), "board shows the picture, the winner and the loser side by side");
+  const ranked = await host.evaluate(async () => { const E = await import("/js/engine.js"); return E.drawRanking(window.__G.S.minis.list[0].matches[0]); });
+  ok(done.winner === "team1" && ranked[0].name === "Jake", `the best drawing wins it for their team: ${ranked.map((d) => `${d.name} ${d.score}%`).join(", ")}`);
+  ok(ranked[2].name === "Emma", "the scribble comes last");
+  await until(board, () => document.querySelectorAll(".dverdict .dpanel svg.drawing polyline").length >= 3, null, 8000);
+  const labels = await board.$$eval(".dverdict .dpanel", (els) => els.map((e) => e.querySelector(".dp-label").textContent + "|" + e.querySelector(".dp-name").textContent));
+  ok(labels.length === 3 && labels[0].startsWith("The picture") && labels[1].includes("Winner") && labels[1].includes("Jake") && labels[2].includes("Last place") && labels[2].includes("Emma"), "board shows the picture, the winner and last place side by side");
+  await until(board, () => document.querySelectorAll(".dall .dall-item svg.drawing polyline").length >= 3, null, 8000);
+  ok((await board.$$eval(".dall .dall-item b", (els) => els.map((e) => e.textContent))).join("|") === "1. Jake|2. Kim|3. Emma", "…then everyone's drawing, best first");
   await sleep(500);
   await shot(board, "d03-board-verdict");
-  await until(P.Jake, () => document.body.textContent.includes("You won"));
-  await until(P.Emma, () => document.body.textContent.includes("You lost"));
-  ok(true, "the drawers' phones say who won");
-  ok((await host.evaluate(() => window.__G.S.minis.list[0].matches[0].scores.team1)) > (await host.evaluate(() => window.__G.S.minis.list[0].matches[0].scores.team2)), "scores are shown as % match");
+  await until(P.Jake, () => document.body.textContent.includes("Your drawing won"));
+  await until(P.Kim, () => document.body.textContent.includes("You came 2nd of 3"));
+  await until(P.Emma, () => document.body.textContent.includes("You came 3rd of 3"));
+  ok(true, "every phone says how they did");
+  await shot(P.Kim, "d03b-phone-verdict");
+  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Another round"));
+  ok((await host.textContent(".r-panel")).includes("Jake"), "Jaren sees the website's verdict too");
+  await shot(host, "d03c-host-verdict");
 
   // round 2 uses your own picture: the board shows the step number, no example picture
-  await host.keyboard.press("Space");
+  await clickBtn("Another round");
   await until(host, () => window.__G.S.minis.list[0].matches.length === 2);
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Start drawing"), null, 5000);
   await until(host, () => !!document.querySelector(".describe svg.drawing.host polyline"), null, 5000);
@@ -187,6 +224,31 @@ async function hold(page, sel) {
   await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Pencils down"), null, 14000);
   await until(P.Jake, () => document.querySelector(".df-top")?.textContent.includes("Pencils down"));
   ok(true, "after the last step: pencils down, hold Send");
+  await hold(P.Jake, ".drawfull .holdbtn").catch(() => {});
+  // undo a round that's already been drawn
+  await clickBtn("Undo round");
+  await host.waitForSelector('.modal:has-text("Undo this round")');
+  await host.click('.modal .btn.bad');
+  await until(host, () => window.__G.S.minis.list[0].matches.length === 1);
+  await until(P.Jake, () => !document.querySelector(".drawfull"));
+  ok(true, "↶ Undo round works after drawing has started too (with a check first)");
+
+  console.log("Undo starting a game");
+  await clickBtn("Undo start");
+  await host.waitForSelector('.modal:has-text("Undo starting")');
+  ok((await host.textContent(".modal")).includes("Not played yet"), "a game with results asks first");
+  await host.click('.modal .btn.bad');
+  await until(host, () => { const M = window.__G.S.minis; return !M.current && M.list[0].status === "pending" && M.list[0].matches.length === 0; });
+  ok(true, "↶ Undo start: the game is back to not played yet, and you're back at the games list");
+  await until(board, () => !!document.querySelector(".mhub"));
+  ok(true, "the board goes back to the list of mini games");
+  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Play “Blind Drawing”"));
+  await host.keyboard.press("Space");
+  await until(host, () => window.__G.S.minis.current);
+  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Undo start"));
+  await clickBtn("Undo start");
+  await until(host, () => !window.__G.S.minis.current && window.__G.S.minis.list[0].status === "pending");
+  ok(!(await host.$(".modal")), "a game with nothing played yet is undone straight away");
 
   console.log(errors.length ? "\nPage errors:\n" + errors.join("\n") : "\nNo page errors.");
   console.log(`\n${passed} passed, ${failed} failed`);

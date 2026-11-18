@@ -666,7 +666,7 @@ export function miniStanding(g) {
 export function currentPick(s) {
   const M = minisOf(s);
   const g = M.current ? M.list.find((x) => x.id === M.current) : null;
-  if (!g || g.status !== "active") return null;
+  if (!g || g.status !== "active" || g.mode === "draw") return null; // blind drawing: everyone draws, nobody is picked
   let items;
   if (g.type === "h2h") {
     items = openMatches(g).map((m) => {
@@ -692,7 +692,7 @@ export function currentPick(s) {
 // Everyone on both teams has had a go in this game.
 export function miniEveryonePlayed(g, players) {
   const seen = new Set();
-  for (const m of g.matches || []) if (m.winner) { if (m.p1) seen.add(m.p1.id); if (m.p2) seen.add(m.p2.id); }
+  for (const m of g.matches || []) if (m.winner) { if (m.p1) seen.add(m.p1.id); if (m.p2) seen.add(m.p2.id); for (const d of m.drawers || []) seen.add(d.id); }
   for (const e of g.entries || []) seen.add(e.pid);
   const all = (players || []).filter((p) => TEAMS.includes(p.team));
   return all.length > 0 && all.every((p) => seen.has(p.id));
@@ -869,12 +869,7 @@ export function miniClose(s, _p, ctx) {
 export function miniNext(s, { id, table }, ctx) {
   const g = miniById(s, id);
   if (!g || g.status !== "active") return null;
-  let pic = null;
-  if (g.mode === "draw") {
-    if (!(g.pics || []).length) return fail("Draw at least one picture first: ⚙ Settings → Mini games → this game → + Draw a picture.");
-    pic = g.pics[(g.picNext || 0) % g.pics.length];
-    ctx = { ...ctx, players: (ctx.players || []).filter((p) => !p.manual) }; // drawers need a phone
-  }
+  if (g.mode === "draw") return miniDrawRound(s, { id }, ctx); // everyone draws at once
   const slots = slotsFor(s, g);
   const sp = summonPicker(s, ctx);
   const withTable = (slot) => (slot === null ? {} : { table: slot, summon: sp.next() });
@@ -892,13 +887,13 @@ export function miniNext(s, { id, table }, ctx) {
       const short = (!p1 && teamPlayers(ctx, "team1").length) || (!p2 && teamPlayers(ctx, "team2").length);
       if (added.length && (short || !anyone)) break; // not enough free players for another table
       if (short && open.length) break;
-      added.push({ id: rid(), winner: null, at: ctx.now, p1, p2, ...withTable(slot), ...(pic ? { pic, done: {} } : {}) });
+      added.push({ id: rid(), winner: null, at: ctx.now, p1, p2, ...withTable(slot) });
       if (p1) busy.push(p1.id);
       if (p2) busy.push(p2.id);
       if (!anyone) break;
     }
     if (!added.length) return fail("Everyone is already playing at a table.");
-    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, ...added], ...(pic ? { picNext: (x.picNext || 0) + 1 } : {}) })), sp.extra()))
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, ...added] })), sp.extra()))
       .sfx(added.some((m) => m.p1 || m.p2) ? "pick" : "buzz").done();
   }
   const turns = turnsOf(g);
@@ -925,13 +920,11 @@ const findOpen = (g, matchId) => (matchId ? openMatches(g).find((m) => m.id === 
 const findTurn = (g, turnId) => (turnId ? turnsOf(g).find((t) => t.id === turnId) : turnsOf(g)[0]) || null;
 export function miniRepick(s, { id, team, matchId, turnId }, ctx) {
   const g = miniById(s, id);
-  if (!g || g.status !== "active") return null;
+  if (!g || g.status !== "active" || g.mode === "draw") return null;
   const sp = summonPicker(s, ctx);
   if (g.type === "h2h") {
     const m = findOpen(g, matchId);
     if (!m) return null;
-    if (m.done && (m.done.team1 || m.done.team2)) return fail("A drawing has already been sent — use “Judge now” instead.");
-    if (g.mode === "draw") ctx = { ...ctx, players: (ctx.players || []).filter((p) => !p.manual) };
     const busy = busyIn(openMatches(g).filter((x) => x.id !== m.id));
     const next = { ...m };
     for (const t of TEAMS.includes(team) ? [team] : TEAMS) {
@@ -1004,39 +997,79 @@ export function miniMatch(s, { id, winner, matchId }, ctx) {
   return b.sfx(winner === "tie" ? "buzz" : "correct").done();
 }
 // ---------- blind drawing ----------
-// Start the round: the steps start appearing on the big screen (after a 3-second countdown)
-// for every table that's ready.
+// Everyone with a phone draws at the same time, right where they're sitting (no tables).
+// One round = one picture. The website scores every drawing; the best one wins the
+// round for its team.
 export const DRAW_COUNTDOWN_MS = 3000;
+const phoneDrawers = (ctx) => (ctx.players || []).filter((p) => TEAMS.includes(p.team) && !p.manual).map((p) => ({ id: p.id, name: p.name, team: p.team }));
+// The round being drawn right now (null between rounds), and all the rounds so far.
+export const drawRound = (g) => openMatches(g).find((m) => m.all) || null;
+export const drawRounds = (g) => (g.matches || []).filter((m) => m.all);
+// Everyone in a round, best drawing first (no drawing = last).
+export function drawRanking(m) {
+  const sc = m.scores || {};
+  return (m.drawers || []).map((d) => ({ ...d, sent: !!(m.done || {})[d.id], score: sc[d.id] == null ? null : sc[d.id] }))
+    .sort((x, y) => (y.score == null ? -1 : y.score) - (x.score == null ? -1 : x.score));
+}
+const setRound = (s, id, r, extra = {}) => withList(s, mapMini(s, id, (x) => ({ ...x, ...extra, matches: x.matches.map((m) => (m.id === r.id ? r : m)) })));
+// Set up a round: every phone is a drawing pad. (Drawing starts when the host taps Start.)
+export function miniDrawRound(s, { id }, ctx) {
+  const g = miniById(s, id);
+  if (!g || g.mode !== "draw" || g.status !== "active") return null;
+  if (drawRound(g)) return null;
+  if (!(g.pics || []).length) return fail("Add a picture first: ⚙ Settings → Mini games → this game → 🎄 Ready-made drawings.");
+  const drawers = phoneDrawers(ctx);
+  if (!drawers.length) return fail("Nobody has joined on a phone yet — everyone draws on their own phone.");
+  const pic = g.pics[(g.picNext || 0) % g.pics.length];
+  const round = { id: rid(), all: true, winner: null, at: ctx.now, pic, drawers, done: {}, startedAt: null };
+  // (Matchups left over from the old one-on-one version are dropped.)
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches.filter((m) => m.all || m.winner), round], picNext: (x.picNext || 0) + 1 })))).sfx("pick").done();
+}
+// Start drawing: the steps start appearing on the big screen after a 3-second countdown.
 export function miniDrawStart(s, { id }, ctx) {
   const g = miniById(s, id);
   if (!g || g.mode !== "draw" || g.status !== "active") return null;
-  const ready = openMatches(g).filter((m) => !m.startedAt);
-  if (!ready.length) return null;
-  const at = ctx.now + DRAW_COUNTDOWN_MS;
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((m) => (ready.some((r) => r.id === m.id) ? { ...m, startedAt: at } : m)) })))).sfx("pick").done();
+  const r = drawRound(g);
+  if (!r || r.startedAt) return null;
+  const have = new Set(r.drawers.map((d) => d.id));
+  const drawers = [...r.drawers, ...phoneDrawers(ctx).filter((d) => !have.has(d.id))]; // anyone who just joined draws too
+  return builder(s, ctx).field("minis", setRound(s, id, { ...r, drawers, startedAt: ctx.now + DRAW_COUNTDOWN_MS })).sfx("pick").done();
 }
-// A drawer's phone sent its drawing (the drawing itself is saved in its own document).
-export function miniDrawSubmitted(s, { id, matchId, team }, ctx) {
+// Undo a round that was set up or started by mistake: as if it never happened (the same
+// picture is used next time).
+export function miniDrawCancel(s, { id, matchId }, ctx) {
   const g = miniById(s, id);
-  if (!g || g.mode !== "draw" || !TEAMS.includes(team)) return null;
-  const m = findOpen(g, matchId);
-  if (!m || (m.done && m.done[team])) return null;
-  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? { ...y, done: { ...(y.done || {}), [team]: true } } : y)) })))).sfx("buzz").done();
+  if (!g || g.mode !== "draw") return null;
+  const r = drawRound(g);
+  if (!r || (matchId && r.id !== matchId)) return null;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.filter((m) => m.id !== r.id), picNext: Math.max(0, (x.picNext || 0) - 1) })))).done();
 }
-// The website's verdict: scores are 0–100 shape matches (null = no drawing). Closest wins.
+// A phone sent its drawing (the drawing itself is saved in its own document).
+export function miniDrawSubmitted(s, { id, matchId, pid }, ctx) {
+  const g = miniById(s, id);
+  if (!g || g.mode !== "draw") return null;
+  const r = drawRound(g);
+  if (!r || (matchId && r.id !== matchId) || !r.drawers.some((d) => d.id === pid) || (r.done || {})[pid]) return null;
+  return builder(s, ctx).field("minis", setRound(s, id, { ...r, done: { ...(r.done || {}), [pid]: true } })).sfx("buzz").done();
+}
+// The website's verdict: scores are 0–100 shape matches per drawer (null = no drawing).
+// The best drawing wins the round for its team (a tie if both teams share the top score).
 export function miniDrawJudge(s, { id, matchId, scores = {} }, ctx) {
   const g = miniById(s, id);
   if (!g || g.mode !== "draw") return null;
-  const m = findOpen(g, matchId);
-  if (!m) return null;
-  const num = (v) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.round(Number(v)) : null);
-  const sc = { team1: num(scores.team1), team2: num(scores.team2) };
-  const a = sc.team1 == null ? -1 : sc.team1, b = sc.team2 == null ? -1 : sc.team2;
-  const winner = a === b ? "tie" : a > b ? "team1" : "team2";
-  const res = miniMatch(s, { id, matchId: m.id, winner }, ctx);
+  const r = drawRound(g);
+  if (!r || (matchId && r.id !== matchId)) return null;
+  const num = (v) => (v !== null && v !== "" && Number.isFinite(Number(v)) ? clamp(Math.round(Number(v)), [0, 100]) : null);
+  const sc = {};
+  for (const d of r.drawers) sc[d.id] = (r.done || {})[d.id] ? num(scores[d.id]) : null;
+  const ranked = drawRanking({ ...r, scores: sc });
+  const top = ranked.length ? ranked[0].score : null;
+  const topTeams = new Set(ranked.filter((x) => top != null && x.score === top).map((x) => x.team));
+  const winner = topTeams.size === 1 ? [...topTeams][0] : "tie";
+  const res = miniMatch(s, { id, matchId: r.id, winner }, ctx);
   if (!res || res.error) return res;
   const minis = res.set.minis;
-  res.set.minis = { ...minis, list: minis.list.map((x) => (x.id === id ? { ...x, matches: x.matches.map((y) => (y.id === m.id ? { ...y, scores: sc, judged: ctx.now } : y)) } : x)) };
+  res.set.minis = { ...minis, list: minis.list.map((x) => (x.id === id ? { ...x, matches: x.matches.map((y) => (y.id === r.id ? { ...y, scores: sc, judged: ctx.now } : y)) } : x)) };
   return res;
 }
 
@@ -1168,7 +1201,7 @@ export const ACTIONS = {
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
-  miniSetTable, miniDrawStart, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
+  miniSetTable, miniDrawRound, miniDrawStart, miniDrawCancel, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
   miniTables, miniTableAdd, miniTableRemove, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

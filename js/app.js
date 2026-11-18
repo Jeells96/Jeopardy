@@ -10,7 +10,7 @@ import { hostSteps } from "./ui/dock.js";
 import { PRESETS, itemSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import * as Dr from "./draw.js";
-import { subDocId, myDrawStep } from "./ui/minis.js";
+import { subDocId, myDrawStep, miniHasResults } from "./ui/minis.js";
 import { builtinStrokes, isBuiltin } from "./pictures.js";
 import { renderLibrary } from "./ui/library.js";
 import { findQ } from "./ui/stage.js";
@@ -380,26 +380,26 @@ async function submitField(input, save) {
 const params = (el) => { try { return el.dataset.p ? JSON.parse(el.dataset.p) : {}; } catch { return {}; } };
 
 // ---------------- blind drawing ----------------
-// The website judges a matchup once both drawings are in (on the host's screens only).
+// The website scores every drawing once they're all in (on the host's screens only).
 const judging = new Set();
-async function judgeDrawMatch(gid, mid) {
-  if (judging.has(mid)) return;
-  judging.add(mid);
+async function judgeDrawMatch(gid, rid) {
+  if (judging.has(rid)) return;
+  judging.add(rid);
   try {
     const g = E.miniById(G.S, gid);
-    const m = g && g.matches.find((x) => x.id === mid);
-    if (!m || m.winner) return;
-    const ref = isBuiltin(m.pic) ? { strokes: builtinStrokes(m.pic) } : await D.loadDrawing(m.pic);
+    const r = g && g.matches.find((x) => x.id === rid);
+    if (!r || r.winner || !r.all) return;
+    const ref = isBuiltin(r.pic) ? { strokes: builtinStrokes(r.pic) } : await D.loadDrawing(r.pic);
     const scores = {};
-    for (const t of E.TEAMS) {
-      if (!(m.done && m.done[t])) { scores[t] = null; continue; }
-      const sub = await D.loadDrawing(subDocId(m.id, t), true);
-      await new Promise((r) => setTimeout(r, 0)); // keep the screen responsive
-      scores[t] = sub && ref ? Dr.matchPercent(ref.strokes, sub.strokes) : null;
+    for (const d of r.drawers) {
+      if (!(r.done && r.done[d.id])) { scores[d.id] = null; continue; }
+      const sub = await D.loadDrawing(subDocId(r.id, d.id), true);
+      await new Promise((res) => setTimeout(res, 0)); // keep the screen responsive
+      scores[d.id] = sub && ref ? Dr.matchPercent(ref.strokes, sub.strokes) : null;
     }
-    await D.act("miniDrawJudge", { id: gid, matchId: mid, scores });
+    await D.act("miniDrawJudge", { id: gid, matchId: rid, scores });
   } catch (e) { console.warn("judge", e); }
-  finally { setTimeout(() => judging.delete(mid), 3000); }
+  finally { setTimeout(() => judging.delete(rid), 3000); }
 }
 // Drawers have the phone on their head: a buzz tells them a new step is up.
 let lastDrawStep = null;
@@ -413,10 +413,8 @@ function drawAutomations(S) {
   const M = E.minisOf(S);
   const g = M.current ? E.miniById(S, M.current) : null;
   if (S.phase !== "minis" || !g || g.mode !== "draw" || g.status !== "active") return;
-  for (const m of E.openMatches(g)) {
-    const need = E.TEAMS.filter((t) => (t === "team1" ? m.p1 : m.p2));
-    if (need.length && need.every((t) => m.done && m.done[t])) judgeDrawMatch(g.id, m.id);
-  }
+  const r = E.drawRound(g);
+  if (r && r.startedAt && r.drawers.length && r.drawers.every((d) => r.done && r.done[d.id])) judgeDrawMatch(g.id, r.id);
 }
 
 async function handle(a, p, el) {
@@ -473,14 +471,22 @@ async function handle(a, p, el) {
       const strokes = Dr.padStrokes(d.pad);
       if (Dr.inkCount(strokes) < 4) return toast("Draw something first!", "bad");
       try {
-        await D.saveDrawing(subDocId(d.match, d.team), { kind: "drawsub", matchId: d.match, team: d.team, by: G.me ? G.me.name : "", strokes });
-        await D.act("miniDrawSubmitted", { id: d.id, matchId: d.match, team: d.team });
+        await D.saveDrawing(subDocId(d.match, d.pid), { kind: "drawsub", matchId: d.match, pid: d.pid, team: G.me ? G.me.team : "", by: G.me ? G.me.name : "", strokes });
+        await D.act("miniDrawSubmitted", { id: d.id, matchId: d.match, pid: d.pid });
         Dr.clearPad(d.pad);
         vibrate([40, 40, 40]);
         return toast("Drawing sent ✓", "good");
       } catch (err) { return toast("Couldn't send — try again. " + (err.message || ""), "bad"); }
     }
     case "mini-draw-judge": return judgeDrawMatch(p.id, p.matchId);
+    case "mini-unstart": {
+      const g = E.miniById(G.S, p.id);
+      if (!g) return;
+      if (miniHasResults(g)) { G.ui.modal = { type: "miniUnstart", id: g.id }; return render(); }
+      await D.act("miniReset", { id: g.id });
+      return toast(`“${g.name}” is back to not played yet`, "good");
+    }
+    case "mini-draw-cancel-ask": G.ui.modal = { type: "miniDrawCancel", id: p.id, matchId: p.matchId }; return render();
     case "mini-row-edit":
       G.ui.miniEdit = { ...(G.ui.miniEdit || {}), [el.dataset.id]: !(G.ui.miniEdit || {})[el.dataset.id] };
       return render();
