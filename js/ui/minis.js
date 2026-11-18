@@ -60,7 +60,7 @@ export const PRESETS = [
   { name: "Present Stack", type: "best", better: "high", unit: "boxes", desc: "Stack gift boxes one-handed for 30 seconds. Tallest tower still standing wins." },
   { name: "Speed Wrap", type: "best", better: "low", unit: "seconds", desc: "Wrap a box as fast as you can — every side covered. Fastest time wins." },
   { name: "Reindeer Ring Toss", type: "best", better: "high", unit: "rings", desc: "Five tosses at the antlers. Most rings landed wins." },
-  { name: "Blind Drawing", type: "draw", desc: "Everyone at once, right where you're sitting: phone on your forehead, follow the steps on the big screen and draw without looking. The closest drawing wins it for their team!" },
+  { name: "Blind Drawing", type: "draw", desc: "Everyone at once, right where you're sitting: phone on top of your head, follow the steps on the big screen and draw without looking. The closest drawing wins it for their team!" },
 ];
 
 function resultBits(G, g) {
@@ -684,9 +684,9 @@ const cd = (t) => `<span class="cd" data-deadline="${t}" data-format="s"></span>
 function stepPanel(G, g, m, size = "") {
   const ph = drawPhase(G, g, m);
   const pic = builtin(m.pic);
-  if (ph.stage === "ready") return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-ready"><div class="sp-text"><div class="sp-big">Get ready! 🎄</div><div>Everyone: phone on your forehead, eyes on this screen.</div></div></div>`;
-  if (ph.stage === "countdown") return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-cd"><div class="sp-text"><div class="sp-big">Starting in ${cd(ph.endsAt)}</div><div>Phones on heads!</div></div></div>`;
-  if (ph.stage === "done") return `<div class="steppanel ${size} done" data-key="sp-${esc(m.id)}-done"><div class="sp-text"><div class="sp-big">✋ Pencils down!</div><div>Take the phone off your head and <b>hold Send</b>.</div></div>${pic ? Dr.svgSteps(pic.steps, pic.steps.length - 1, "example") : ""}</div>`;
+  if (ph.stage === "ready") return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-ready"><div class="sp-text"><div class="sp-big">Get ready! 🎄</div><div>Everyone: phone on top of your head, eyes on this screen.</div></div></div>`;
+  if (ph.stage === "countdown") return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-cd"><div class="sp-text"><div class="sp-big">Starting in ${cd(ph.endsAt)}</div><div>Phones on top of your heads!</div></div></div>`;
+  if (ph.stage === "done") return `<div class="steppanel ${size} done" data-key="sp-${esc(m.id)}-done"><div class="sp-text"><div class="sp-big">✋ Pencils down!</div><div>Drawings are on their way to the judge…</div></div>${pic ? Dr.svgSteps(pic.steps, pic.steps.length - 1, "example") : ""}</div>`;
   const text = pic ? pic.steps[ph.i].text : "Listen to Jaren!";
   return `<div class="steppanel ${size}" data-key="sp-${esc(m.id)}-${ph.i}">
     ${pic ? Dr.svgSteps(pic.steps, ph.i, "example") : ""}
@@ -802,15 +802,16 @@ function drawPhone(G, g) {
     if ((r.done || {})[me.id]) return `<div class="youup big">✓ Drawing sent!<small>${sentCount(r)} of ${r.drawers.length} sent — the website judges as soon as everyone's in.</small></div>`;
     const key = `sub-${r.id}`;
     const ph = drawPhase(G, g, r);
-    const prompt = ph.stage === "ready" ? "Get ready — phone on your forehead, eyes on the big screen!"
-      : ph.stage === "countdown" ? `Starting in ${cd(ph.endsAt)}… phone on your forehead!`
-      : ph.stage === "step" ? `Step ${ph.i + 1} of ${ph.total} — look at the big screen! (${cd(ph.endsAt)})`
-      : "✋ Pencils down! Take it off your head and hold Send.";
-    return `<div class="${cls("drawfull", ph.stage === "done" && "finished")}" data-key="drawfull-${esc(r.id)}">
-      <div class="df-top"><b>✏️ Blind drawing · Round ${roundNo(g, r)}</b><span>${prompt}</span></div>
+    // The whole screen is the pad. Nothing to tap by mistake while it's on your head:
+    // the pad switches on when step 1 starts, and the drawing sends itself at pencils down.
+    const top = ph.stage === "step" ? `Step ${ph.i + 1} of ${ph.total} · ${cd(ph.endsAt)}`
+      : ph.stage === "done" ? "✋ Pencils down! Sending your drawing…" : `✏️ Blind drawing · Round ${roundNo(g, r)}`;
+    const wait = ph.stage === "ready" ? `<div class="df-wait"><div class="dw-big">📱 Phone on top of your head</div><div>Screen facing up. Your whole screen is the drawing pad — it switches on when the drawing starts.</div></div>`
+      : ph.stage === "countdown" ? `<div class="df-wait"><div class="dw-big">Starting in ${cd(ph.endsAt)}</div><div>Phone on top of your head!</div></div>` : "";
+    return `<div class="drawfull stage-${ph.stage}" data-key="drawfull-${esc(r.id)}">
       <div class="padbox" data-keep data-key="padbox-${esc(r.id)}"><canvas class="drawpad" data-pad="${esc(key)}"></canvas></div>
-      <div class="df-btns"><button class="btn ghost" data-action="pad-clear" data-pad="${esc(key)}">Start over</button>
-        <button class="btn primary holdbtn" data-hold="pad-submit" data-id="${esc(g.id)}" data-match="${esc(r.id)}" data-pid="${esc(me.id)}" data-pad="${esc(key)}"><span>Hold to send ✋</span></button></div>
+      <div class="df-top">${top}</div>${wait}
+      ${ph.stage === "done" ? `<div class="df-btns"><button class="btn primary holdbtn" data-hold="pad-submit"><span>Hold to send ✋</span></button></div>` : ""}
     </div>`;
   }
   const st = E.miniStanding(g);
@@ -832,13 +833,18 @@ function drawPhone(G, g) {
   return `${verdict || `<div class="ph-note">✏️ Get ready — everyone draws at once, right where you're sitting!</div>`}${tally}`;
 }
 
-// Which step this phone's drawing round is on (so the phone can buzz on each new step).
-export function myDrawStep(G) {
+// This phone's part in the round being drawn: which stage it's at and whether it's sent.
+export function myDrawState(G) {
   const M = E.minisOf(G.S);
   const g = M.current ? E.miniById(G.S, M.current) : null;
-  if (!isDraw(g)) return null;
+  if (!isDraw(g) || g.status !== "active" || G.S.phase !== "minis") return null;
   const r = E.drawRound(g);
   if (!r || !r.drawers.some((d) => d.id === G.deviceId)) return null;
   const ph = drawPhase(G, g, r);
-  return `${r.id}:${ph.stage}:${ph.i == null ? "" : ph.i}`;
+  return { gid: g.id, rid: r.id, pid: G.deviceId, pad: `sub-${r.id}`, stage: ph.stage, i: ph.i, sent: !!(r.done || {})[G.deviceId] };
+}
+// Which step this phone's drawing round is on (so the phone can buzz on each new step).
+export function myDrawStep(G) {
+  const d = myDrawState(G);
+  return d ? `${d.rid}:${d.stage}:${d.i == null ? "" : d.i}` : null;
 }

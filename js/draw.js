@@ -147,6 +147,17 @@ export function svgSteps(steps, upto, cls = "") {
 // Strokes live here, not on the page, so the screen can refresh while someone draws.
 const pads = new Map(); // key -> { strokes: [[x,y],…][] }
 export const padStrokes = (key) => (pads.get(key) || { strokes: [] }).strokes.filter((s) => s.length).map(encodeStroke);
+// A pad that's locked takes no ink (before the drawing starts, and after pencils down).
+export function lockPad(key, locked) {
+  if (!pads.has(key)) pads.set(key, { strokes: [] });
+  pads.get(key).locked = !!locked;
+}
+// Pad pixels <-> drawing units. The drawing is a 0–1000 square; a pad that isn't square
+// sits in the middle of it, so shapes keep their proportions on any screen.
+function frame(rect) {
+  const S = Math.max(1, rect.width, rect.height);
+  return { S, ox: (S - rect.width) / 2, oy: (S - rect.height) / 2 };
+}
 export function clearPad(key) {
   const p = pads.get(key);
   if (p) p.strokes = [];
@@ -162,16 +173,18 @@ function paint(canvas, key) {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = "#111";
-  ctx.lineWidth = Math.max(3, w / 110);
+  const f = frame(rect);
+  const k = (f.S * dpr) / 1000;
+  ctx.lineWidth = Math.max(3, (f.S * dpr) / 110);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  const sx = w / 1000, sy = h / 1000;
+  const X = (x) => x * k - f.ox * dpr, Y = (y) => y * k - f.oy * dpr;
   for (const s of (pads.get(key) || { strokes: [] }).strokes) {
     if (!s.length) continue;
     ctx.beginPath();
-    ctx.moveTo(s[0][0] * sx, s[0][1] * sy);
-    if (s.length === 1) ctx.lineTo(s[0][0] * sx + 0.1, s[0][1] * sy);
-    for (let i = 1; i < s.length; i++) ctx.lineTo(s[i][0] * sx, s[i][1] * sy);
+    ctx.moveTo(X(s[0][0]), Y(s[0][1]));
+    if (s.length === 1) ctx.lineTo(X(s[0][0]) + 0.1, Y(s[0][1]));
+    for (let i = 1; i < s.length; i++) ctx.lineTo(X(s[i][0]), Y(s[i][1]));
     ctx.stroke();
   }
 }
@@ -181,17 +194,20 @@ function bind(canvas) {
   const pad = pads.get(key);
   let cur = null;
   const at = (e) => {
-    const r = canvas.getBoundingClientRect();
-    return [Math.max(0, Math.min(1000, ((e.clientX - r.left) / r.width) * 1000)), Math.max(0, Math.min(1000, ((e.clientY - r.top) / r.height) * 1000))];
+    const r = canvas.getBoundingClientRect(), f = frame(r);
+    const u = (v) => Math.max(0, Math.min(1000, (v / f.S) * 1000));
+    return [u(e.clientX - r.left + f.ox), u(e.clientY - r.top + f.oy)];
   };
   canvas.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    if (pad.locked) return;
     try { canvas.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     cur = [at(e)];
     pad.strokes.push(cur);
     paint(canvas, key);
   });
   canvas.addEventListener("pointermove", (e) => {
+    if (cur && pad.locked) cur = null; // pencils down mid-line
     if (!cur) return;
     e.preventDefault();
     const p = at(e), last = cur[cur.length - 1];

@@ -10,7 +10,8 @@ import { hostSteps } from "./ui/dock.js";
 import { PRESETS, itemSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
 import * as Dr from "./draw.js";
-import { subDocId, myDrawStep, miniHasResults } from "./ui/minis.js";
+import { subDocId, myDrawStep, myDrawState, miniHasResults } from "./ui/minis.js";
+import { VERSION } from "./version.js";
 import { builtinStrokes, isBuiltin } from "./pictures.js";
 import { renderLibrary } from "./ui/library.js";
 import { findQ } from "./ui/stage.js";
@@ -73,6 +74,7 @@ function doRender() {
   }
   if (document.body.dataset.view !== view) document.body.dataset.view = view;
   morph(appEl, html);
+  padLock();
   autosizeAll();
   mountQR();
   Dr.mountPads();
@@ -401,13 +403,36 @@ async function judgeDrawMatch(gid, rid) {
   } catch (e) { console.warn("judge", e); }
   finally { setTimeout(() => judging.delete(rid), 3000); }
 }
-// Drawers have the phone on their head: a buzz tells them a new step is up.
+// Drawers have the phone on their head: a buzz tells them a new step is up. The pad only
+// takes ink while the steps run, and the drawing is sent by itself at pencils down.
 let lastDrawStep = null;
 function drawStepBuzz() {
   if (!isPlayerRoute() || !G.me || !G.S) return;
   const k = myDrawStep(G);
   if (k && lastDrawStep && k !== lastDrawStep && /:step:|:done:/.test(k)) vibrate(k.includes(":done:") ? [200, 80, 200, 80, 200] : [250]);
   if (k !== lastDrawStep) { lastDrawStep = k; render(); }
+  const d = myDrawState(G);
+  if (!d || d.sent) return;
+  Dr.lockPad(d.pad, d.stage !== "step");
+  if (d.stage === "done") sendDrawing(d, true);
+}
+const sending = new Set();
+async function sendDrawing(d, auto) {
+  if (sending.has(d.rid)) return;
+  sending.add(d.rid);
+  try {
+    const strokes = Dr.padStrokes(d.pad);
+    await D.saveDrawing(subDocId(d.rid, d.pid), { kind: "drawsub", matchId: d.rid, pid: d.pid, team: G.me ? G.me.team : "", by: G.me ? G.me.name : "", strokes });
+    await D.act("miniDrawSubmitted", { id: d.gid, matchId: d.rid, pid: d.pid });
+    Dr.clearPad(d.pad);
+    vibrate([40, 40, 40]);
+    toast("Drawing sent ✓", "good");
+  } catch (err) {
+    if (!auto) toast("Couldn't send — try again. " + (err.message || ""), "bad");
+    setTimeout(() => sending.delete(d.rid), auto ? 4000 : 0); // try again
+    return;
+  }
+  setTimeout(() => sending.delete(d.rid), 5000);
 }
 function drawAutomations(S) {
   const M = E.minisOf(S);
@@ -467,16 +492,9 @@ async function handle(a, p, el) {
       return toast("Picture saved ✓ — players will never see it", "good");
     }
     case "pad-submit": {
-      const d = el.dataset;
-      const strokes = Dr.padStrokes(d.pad);
-      if (Dr.inkCount(strokes) < 4) return toast("Draw something first!", "bad");
-      try {
-        await D.saveDrawing(subDocId(d.match, d.pid), { kind: "drawsub", matchId: d.match, pid: d.pid, team: G.me ? G.me.team : "", by: G.me ? G.me.name : "", strokes });
-        await D.act("miniDrawSubmitted", { id: d.id, matchId: d.match, pid: d.pid });
-        Dr.clearPad(d.pad);
-        vibrate([40, 40, 40]);
-        return toast("Drawing sent ✓", "good");
-      } catch (err) { return toast("Couldn't send — try again. " + (err.message || ""), "bad"); }
+      const d = myDrawState(G);
+      if (d && !d.sent) return sendDrawing(d, false);
+      return;
     }
     case "mini-draw-judge": return judgeDrawMatch(p.id, p.matchId);
     case "mini-unstart": {
@@ -751,9 +769,56 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------------- updates ----------------
+// After a deploy, screens that were already open (a phone left asleep, the TV) reload
+// themselves onto the new code — but never mid-drawing, mid-question or while typing.
+let updateTo = null;
+async function checkForUpdate() {
+  if (VERSION === "dev") return; // running locally
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    updateTo = v && v !== VERSION ? v : null;
+    applyUpdate();
+  } catch { /* offline — try again later */ }
+}
+function busyForUpdate() {
+  const a = document.activeElement;
+  if (a && ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName)) return true;
+  if (document.documentElement.classList.contains("padlock")) return true; // drawing
+  if (G.ui.modal) return true;
+  return !!G.S && ["clue", "final"].includes(G.S.phase); // wait until the question is over
+}
+function applyUpdate() {
+  if (!updateTo || busyForUpdate()) return;
+  // One try per new version every few minutes (in case the browser hands back cached files).
+  let last = {};
+  try { last = JSON.parse(sessionStorage.getItem("jeop_update") || "{}"); } catch { /* ignore */ }
+  if (last.v === updateTo && Date.now() - last.at < 4 * 60 * 1000) return;
+  try { sessionStorage.setItem("jeop_update", JSON.stringify({ v: updateTo, at: Date.now() })); } catch { /* ignore */ }
+  location.reload();
+}
+G.checkForUpdate = checkForUpdate;
+
+// ---------------- the drawing pad takes over the phone ----------------
+// While someone has a drawing pad, the page can't scroll, zoom or swipe back.
+function padLock() {
+  const on = !!document.querySelector(".drawfull");
+  const root = document.documentElement;
+  if (on === root.classList.contains("padlock")) return;
+  root.classList.toggle("padlock", on);
+  if (on && !(history.state && history.state.pad)) { try { history.pushState({ pad: 1 }, "", location.href); } catch { /* ignore */ } }
+}
+document.addEventListener("touchmove", (e) => { if (e.cancelable && document.documentElement.classList.contains("padlock")) e.preventDefault(); }, { passive: false });
+document.addEventListener("gesturestart", (e) => { if (document.documentElement.classList.contains("padlock")) e.preventDefault(); });
+// An accidental edge swipe "back" while drawing just stays put.
+window.addEventListener("popstate", () => { if (document.documentElement.classList.contains("padlock")) { try { history.pushState({ pad: 1 }, "", location.href); } catch { /* ignore */ } } });
+
 // ---------------- boot ----------------
 window.addEventListener("hashchange", () => { G.ui.drawer = false; G.ui.modal = null; render(); });
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { keepAwake(); D.syncClock(); } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { keepAwake(); D.syncClock(); checkForUpdate(); } });
+window.addEventListener("pageshow", (e) => { if (e.persisted) checkForUpdate(); });
 window.addEventListener("offline", () => toast("You're offline — reconnecting…", "bad"));
 window.addEventListener("online", () => toast("Back online ✓", "good"));
 
@@ -770,6 +835,8 @@ function boot() {
   if (G.me) D.registerSelf().then((ok) => { if (!ok) { G.me = null; G.seenSelf = false; G.ui.kicked = true; render(); } }).catch(() => {});
   setInterval(() => { tick(); automations(); drawStepBuzz(); }, 100);
   // Re-render once a second so time-based bits (e.g. the board fill animation) settle.
-  setInterval(() => { if (route() !== "questions") render(); }, 1000);
+  setInterval(() => { if (route() !== "questions") render(); applyUpdate(); }, 1000);
+  setTimeout(checkForUpdate, 3000);
+  setInterval(checkForUpdate, 90 * 1000);
 }
 boot();

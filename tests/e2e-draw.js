@@ -31,12 +31,15 @@ function star({ dx = 0, dy = 0, sc = 1, deg = 0, mirror = false } = {}) {
     return [0.5 + dx + x * Math.cos(a) - y * Math.sin(a), 0.5 + dy + x * Math.sin(a) + y * Math.cos(a)];
   });
 }
+// Points are 0–1 inside the biggest square in the middle of the pad (the full-screen pad
+// on a phone is tall, and drawings keep their proportions).
 async function drawOn(page, sel, strokes) {
   const box = await page.locator(sel).boundingBox();
+  const side = Math.min(box.width, box.height), x0 = box.x + (box.width - side) / 2, y0 = box.y + (box.height - side) / 2;
   for (const s of strokes) {
-    await page.mouse.move(box.x + s[0][0] * box.width, box.y + s[0][1] * box.height);
+    await page.mouse.move(x0 + s[0][0] * side, y0 + s[0][1] * side);
     await page.mouse.down();
-    for (const [x, y] of s.slice(1)) await page.mouse.move(box.x + x * box.width, box.y + y * box.height, { steps: 4 });
+    for (const [x, y] of s.slice(1)) await page.mouse.move(x0 + x * side, y0 + y * side, { steps: 4 });
     await page.mouse.up();
   }
 }
@@ -122,6 +125,8 @@ async function hold(page, sel) {
 
   console.log("Playing: everyone draws at once");
   const id = await host.evaluate(() => window.__G.S.minis.list[0].id);
+  // Round 1 uses your own 2-step picture (quick), round 2 the snowman.
+  await host.evaluate(async ([id, own]) => { const D = await import("/js/data.js"); await D.act("miniUpdate", { id, patch: { pics: [own, "builtin:snowman"] } }); }, [id, own]);
   await host.evaluate(async (id) => { const D = await import("/js/data.js"); await D.act("miniPlay", { id }); }, id);
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Everyone draw"));
   ok(!(await host.$(".tablectl")) && !(await host.textContent(".remote")).includes("📍"), "no tables in blind drawing — everyone stays where they're sitting");
@@ -129,72 +134,64 @@ async function hold(page, sel) {
   await until(host, () => window.__G.S.minis.list[0].matches.length === 1);
   let rd = await host.evaluate(() => window.__G.S.minis.list[0].matches[0]);
   ok(rd.drawers.map((d) => d.name).join() === "Jake,Emma,Kim", "everyone with a phone draws at once (Grandpa has no phone)");
-  ok(!rd.table && rd.pic === "builtin:snowman", "no table; the first round uses the first picture");
+  ok(!rd.table && rd.pic === own, "no table; the first round uses the first picture");
   for (const n of ["Jake", "Emma", "Kim"]) await until(P[n], () => !!document.querySelector(".drawfull canvas.drawpad"), null, 5000);
-  ok(true, "every phone becomes a full-screen drawing pad");
+  ok(true, "every phone becomes a drawing pad");
+  const pad = await P.Jake.locator(".drawfull canvas").boundingBox();
+  ok(pad.x === 0 && pad.y === 0 && pad.width === 390 && pad.height === 844, `the whole screen is the pad (${pad.width}×${pad.height})`);
+  ok(await P.Jake.evaluate(() => document.documentElement.classList.contains("padlock") && getComputedStyle(document.body).position === "fixed" && getComputedStyle(document.body).overflow === "hidden"), "the page can't scroll while the pad is up");
+  ok((await P.Jake.textContent(".drawfull")).includes("on top of your head"), "phones say: phone on top of your head");
+  await shot(P.Jake, "d01b-phone-ready");
   ok(!(await P.Jake.$(".drawfull svg")) && !(await P.Jake.$(".describe")), "drawers never see the picture");
   ok(!(await board.$(".spin")), "no name shuffle — nobody is picked");
-  ok((await board.textContent(".steppanel")).includes("Get ready"), "the board says get ready until you start");
+  ok((await board.textContent(".steppanel")).includes("on top of your head"), "the board says get ready until you start");
   ok((await board.$$eval(".dchips .dchip", (els) => els.map((e) => e.textContent.trim()))).join("|") === "✏️ Jake|✏️ Emma|✏️ Kim", "the board lists everyone who's drawing");
+  // (the app's own copy of draw.js — on a deployed build its URL carries ?v=…)
+  const ink = (n) => P[n].evaluate(async () => { const q = (document.querySelector('script[type="module"]').src.split("?")[1] || ""); return (await import("/js/draw.js" + (q ? "?" + q : ""))).padStrokes(document.querySelector(".drawfull canvas").dataset.pad).length; });
+  await drawOn(P.Jake, ".drawfull canvas", [[[0.2, 0.2], [0.8, 0.8]]]);
+  ok((await ink("Jake")) === 0, "putting the phone on your head leaves no marks — the pad is off until the drawing starts");
   // undo a round set up by mistake
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Undo round"));
   await clickBtn("Undo round");
   await until(host, () => window.__G.S.minis.list[0].matches.length === 0);
-  await until(P.Jake, () => !document.querySelector(".drawfull"));
-  ok(true, "↶ Undo round: back to before the round (the phones close the pad)");
+  await until(P.Jake, () => !document.querySelector(".drawfull") && !document.documentElement.classList.contains("padlock"));
+  ok(true, "↶ Undo round: back to before the round (the phones close the pad and can scroll again)");
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Everyone draw"));
   await host.keyboard.press("Space");
   await until(host, () => window.__G.S.minis.list[0].matches.length === 1);
-  ok((await host.evaluate(() => window.__G.S.minis.list[0].matches[0].pic)) === "builtin:snowman", "…and the same picture comes up again");
+  ok((await host.evaluate(() => window.__G.S.minis.list[0].matches[0].pic)) === own, "…and the same picture comes up again");
+  await until(host, () => !!document.querySelector(".describe svg.drawing.host polyline"), null, 5000);
+  ok(true, "for your own picture, you see it privately to describe");
 
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Start drawing"));
   await host.keyboard.press("Space");
   await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Starting in"));
   ok(true, "a short countdown before step 1");
-  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 1 of 10"), null, 6000);
-  ok((await board.textContent(".steppanel")).includes("big circle for the bottom"), "step 1 is shown on the big screen");
-  ok((await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.$$(".steppanel svg.example polyline.done")).length === 0, "with an example of what to draw (the new step in red)");
-  await until(P.Kim, () => document.querySelector(".df-top")?.textContent.includes("Step 1 of 10"));
-  ok(true, "every phone says which step it is");
-  await shot(board, "d02a-board-step1");
-  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 2 of 10"), null, 7000);
-  ok((await board.$$(".steppanel svg.example polyline.done")).length === 1 && (await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.textContent(".steppanel")).includes("medium circle"), "after the set time it moves on: the example now shows steps 1 + 2");
-  await sleep(700);
-  await shot(board, "d02b-board-step2");
-  await shot(host, "d02c-host-drawing");
-  // Jake draws the whole snowman scene, off to the side and mirrored. Kim's parts land a bit
-  // off. Emma scribbles.
-  const scene = await P.Jake.evaluate(async () => { const P = await import("/js/pictures.js"); const D = await import("/js/draw.js"); return D.decode(P.builtinStrokes("builtin:snowman")); });
-  const fit = (st) => st.map(([x, y]) => [0.12 + (1 - x / 1000) * 0.75, 0.05 + (y / 1000) * 0.75]);
-  await drawOn(P.Jake, ".drawfull canvas", scene.map(fit));
-  // Kim: the whole scene, but each part lands a bit off (lifting your finger with the phone on your head)
-  const off = [[0.05, -0.04], [-0.06, 0.03], [0.04, 0.06], [-0.05, -0.05], [0.07, 0.02], [-0.03, 0.07], [0.06, -0.06], [-0.07, 0.04]];
-  await drawOn(P.Kim, ".drawfull canvas", scene.map((st, i) => st.map(([x, y]) => [0.12 + (x / 1000) * 0.72 + off[i % off.length][0], 0.12 + (y / 1000) * 0.72 + off[i % off.length][1]])));
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 1 of 2"), null, 6000);
+  ok((await board.textContent(".steppanel")).includes("Listen to Jaren") && !(await board.$(".steppanel svg.example")), "a hand-drawn picture: step number only, no example picture");
+  await until(P.Kim, () => document.querySelector(".df-top")?.textContent.includes("Step 1 of 2"));
+  ok(!(await P.Kim.$(".drawfull button")) && !(await P.Kim.$(".df-wait")), "while drawing there's nothing on the screen to tap by mistake");
+  // Jake: a decent star, small, off to one side, upside down and mirrored. Kim: a wobbly star.
+  // Emma: scribbles.
+  await drawOn(P.Jake, ".drawfull canvas", [star({ dx: 0.18, dy: -0.15, sc: 0.55, deg: 180, mirror: true })]);
+  await drawOn(P.Kim, ".drawfull canvas", [star().map(([x, y], i) => [x + [0.05, -0.04, 0.03, -0.06, 0.06][i % 5], y + [-0.05, 0.06, 0.04, -0.03, 0.05][i % 5]])]);
   await drawOn(P.Emma, ".drawfull canvas", [[[0.1, 0.1], [0.9, 0.3], [0.2, 0.8], [0.7, 0.9], [0.5, 0.2], [0.95, 0.6]], [[0.3, 0.5], [0.6, 0.55]]]);
   await shot(P.Jake, "d02-phone-drawing");
-  await sleep(1200); // re-renders happen meanwhile — the drawing must survive them
-  ok((await P.Jake.evaluate(async () => (await import("/js/draw.js")).padStrokes(document.querySelector(".drawfull canvas").dataset.pad).length)) === scene.length, "nothing is lost while the screen refreshes (nothing sent yet)");
-  const doneOf = (pid) => host.evaluate((pid) => !!(window.__G.S.minis.list[0].matches[0].done || {})[pid], pid);
-  const pidOf = (n) => P[n].evaluate(() => window.__G.deviceId);
-  const jake = await pidOf("Jake");
-  ok(!(await doneOf(jake)), "nothing is sent until you hold Send");
-  await P.Jake.click('.drawfull .holdbtn');
-  await sleep(300);
-  ok(!(await doneOf(jake)), "a quick tap doesn't send it — you have to hold");
-  await hold(P.Jake, ".drawfull .holdbtn");
-  await until(host, (pid) => (window.__G.S.minis.list[0].matches[0].done || {})[pid] === true, jake);
-  await until(P.Jake, () => document.body.textContent.includes("Drawing sent"));
-  ok(true, "holding Send sends it");
-  await until(board, () => (document.querySelector(".dstatus") || {}).textContent?.includes("1 of 3"));
-  ok((await board.textContent(".dchip.sent")).includes("Jake"), "the board ticks off each drawing as it comes in");
-  await hold(P.Kim, ".drawfull .holdbtn");
-  await sleep(400);
-  ok(!(await host.evaluate(() => window.__G.S.minis.list[0].matches[0].winner)), "no verdict until everyone has sent");
-  await hold(P.Emma, ".drawfull .holdbtn");
+  await shot(board, "d02a-board-step1");
+  await shot(host, "d02c-host-drawing");
+  ok((await ink("Jake")) === 1, "the drawing pad takes ink once the steps start");
+  await P.Jake.mouse.wheel(0, 600);
+  ok((await P.Jake.evaluate(() => (document.scrollingElement || document.body).scrollTop)) === 0, "scrolling does nothing while drawing");
+  ok(!(await host.evaluate(() => Object.keys(window.__G.S.minis.list[0].matches[0].done || {}).length)), "nothing is sent while they draw (no lag)");
+  // pencils down: every drawing sends itself, then the website judges
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Pencils down"), null, 14000);
+  ok(true, "after the last step: pencils down");
   await until(host, () => !!window.__G.S.minis.list[0].matches[0].winner, null, 15000);
+  ok(true, "every phone sends its drawing by itself at pencils down — nobody has to press anything — and the website judges");
+  await until(P.Jake, () => !document.querySelector(".drawfull") && !document.documentElement.classList.contains("padlock"));
   const done = await host.evaluate(() => window.__G.S.minis.list[0].matches[0]);
   const ranked = await host.evaluate(async () => { const E = await import("/js/engine.js"); return E.drawRanking(window.__G.S.minis.list[0].matches[0]); });
-  ok(done.winner === "team1" && ranked[0].name === "Jake", `the best drawing wins it for their team: ${ranked.map((d) => `${d.name} ${d.score}%`).join(", ")}`);
+  ok(done.winner === "team1" && ranked[0].name === "Jake", `the best drawing wins it for their team (shape, not placement): ${ranked.map((d) => `${d.name} ${d.score}%`).join(", ")}`);
   ok(ranked[2].name === "Emma", "the scribble comes last");
   await until(board, () => document.querySelectorAll(".dverdict .dpanel svg.drawing polyline").length >= 3, null, 8000);
   const labels = await board.$$eval(".dverdict .dpanel", (els) => els.map((e) => e.querySelector(".dp-label").textContent + "|" + e.querySelector(".dp-name").textContent));
@@ -212,20 +209,24 @@ async function hold(page, sel) {
   ok((await host.textContent(".r-panel")).includes("Jake"), "Jaren sees the website's verdict too");
   await shot(host, "d03c-host-verdict");
 
-  // round 2 uses your own picture: the board shows the step number, no example picture
+  // round 2: the snowman, with an example picture for every step
   await clickBtn("Another round");
   await until(host, () => window.__G.S.minis.list[0].matches.length === 2);
+  ok((await host.evaluate(() => window.__G.S.minis.list[0].matches[1].pic)) === "builtin:snowman", "the next round uses the next picture");
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Start drawing"), null, 5000);
-  await until(host, () => !!document.querySelector(".describe svg.drawing.host polyline"), null, 5000);
-  ok(true, "for your own picture, you see it privately to describe");
   await host.keyboard.press("Space");
-  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 1 of 2"), null, 6000);
-  ok((await board.textContent(".steppanel")).includes("Listen to Jaren") && !(await board.$(".steppanel svg.example")), "a hand-drawn picture: step number only, no example picture");
-  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Pencils down"), null, 14000);
-  await until(P.Jake, () => document.querySelector(".df-top")?.textContent.includes("Pencils down"));
-  ok(true, "after the last step: pencils down, hold Send");
-  await hold(P.Jake, ".drawfull .holdbtn").catch(() => {});
-  // undo a round that's already been drawn
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 1 of 10"), null, 6000);
+  ok((await board.textContent(".steppanel")).includes("big circle for the bottom"), "step 1 is shown on the big screen");
+  ok((await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.$$(".steppanel svg.example polyline.done")).length === 0, "with an example of what to draw (the new step in red)");
+  await until(board, () => (document.querySelector(".steppanel") || {}).textContent?.includes("Step 2 of 10"), null, 7000);
+  ok((await board.$$(".steppanel svg.example polyline.done")).length === 1 && (await board.$$(".steppanel svg.example polyline.now")).length === 1 && (await board.textContent(".steppanel")).includes("medium circle"), "after the set time it moves on: the example now shows steps 1 + 2");
+  await until(P.Jake, () => document.querySelector(".df-top")?.textContent.includes("Step 2 of 10"));
+  await drawOn(P.Jake, ".drawfull canvas", [[[0.3, 0.3], [0.7, 0.7]]]);
+  await sleep(1200); // re-renders happen meanwhile — the drawing must survive them
+  ok((await ink("Jake")) === 1, "nothing is lost while the screen refreshes");
+  await sleep(400);
+  await shot(board, "d02b-board-step2");
+  // undo a round that's already being drawn
   await clickBtn("Undo round");
   await host.waitForSelector('.modal:has-text("Undo this round")');
   await host.click('.modal .btn.bad');

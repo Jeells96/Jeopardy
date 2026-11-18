@@ -26,6 +26,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      - name: Stamp the version (open screens reload onto the new code)
+        run: bash tools/stamp-version.sh "${GITHUB_SHA::12}"
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:

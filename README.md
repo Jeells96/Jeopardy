@@ -81,17 +81,20 @@ Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing
    up in exactly 10 finger-friendly steps (no tiny details). Or tap
    **✍️ Draw my own** and type how many steps you'll describe. Each round uses the next picture.
    Set how many seconds each step lasts ("New step every … seconds", default 20).
-2. **Play — everyone at once:** tap **✏️ Everyone draw!** and every phone becomes a drawing pad.
-   Everyone draws at the same time, right where they're sitting (no tables, nobody is picked).
-   Tap **▶ Start drawing** when phones are on foreheads. After a 3-second
+2. **Play — everyone at once:** tap **✏️ Everyone draw!** and every phone's **whole screen**
+   becomes a drawing pad (the page can't scroll, zoom or swipe away while it's up). Everyone
+   draws at the same time, right where they're sitting (no tables, nobody is picked). The pad
+   stays off while people put their phones on top of their heads, so that leaves no marks.
+   Tap **▶ Start drawing** when phones are on top of heads. After a 3-second
    countdown the big screen shows **Step 1 of 10: "Draw a big circle…"** with an example of what
    the drawing should look like so far (the new step in red), and moves to the next step
    every X seconds. Phones show the step number and buzz on each new step. For a
    picture you drew yourself, the screen shows "Step 2 of 4 — listen to Jaren" (no example),
    and your screen shows the picture so you can describe each step.
-3. **Pencils down:** after the last step, everyone takes the phone off their head and **holds
-   Send** (nothing is sent while they draw, so nothing lags). The big screen ticks off each
-   drawing as it comes in.
+3. **Pencils down:** after the last step the pads switch off and every drawing **sends
+   itself** — nobody has to press anything, and nobody can touch up their drawing once they
+   look at it. (Nothing is sent while they draw, so nothing lags.) The big screen ticks off
+   each drawing as it comes in.
 4. **The website judges** every drawing as soon as they're all in — position, size, rotation
    and mirror image don't matter, and a few stray lines are forgiven. The big screen shows
    **the picture, the winner and last place** side by side with a % match, then everyone's
@@ -320,6 +323,14 @@ Static site, no build step. Firebase and SheetJS load from CDNs.
 | `js/libctl.js` + `js/ui/library.js` | Question library screen |
 | `js/xlsx.js` | Spreadsheet template, import and export |
 | `tools/make_template.py` | Regenerates the sample template (`python3 tools/make_template.py`) |
+| `tools/stamp-version.sh` | Run by the deploy: stamps the version and adds `?v=` to every file URL |
+| `js/version.js` + `version.json` | The build version ("dev" locally) |
+
+**Updates reach open screens by themselves.** The deploy stamps each build with its commit
+(`tools/stamp-version.sh`). Every screen checks `version.json` every 90 seconds (and when a
+phone wakes up) and reloads onto a newer version — but never while someone is drawing, typing,
+or in the middle of a question. Because every file URL carries the version, a phone never mixes
+cached old files with new ones.
 
 **Tests**
 ```
@@ -334,6 +345,9 @@ node tests/e2e-library.js [shots] # question library: paste, edit, search, lock,
 node tests/e2e-extras.js [shots]  # test game, mini-game tables, multiple-choice Final
 node tests/draw.test.mjs          # Blind Drawing: the shape judge and its rules
 node tests/e2e-draw.js [shots]    # Blind Drawing: everyone draws at once, verdict, undo
+# Auto-update, against a copy stamped like the deploy does:
+#   cp -r . /tmp/site && (cd /tmp/site && tools/stamp-version.sh test1)
+#   PORT=8124 node /tmp/site/tests/server.js &  then  URL=http://localhost:8124/ node tests/e2e-update.js
 ```
 
 Firestore layout: `state/game` (the whole game, incl. the sweater vote), `state/spoken` (typed answer),

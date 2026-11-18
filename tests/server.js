@@ -166,9 +166,16 @@ async function handleApi(req, res, url) {
   return json(res, 404, { error: "unknown op" });
 }
 
+// Tests can pretend a newer version of the site was deployed (see tests/e2e-update.js).
+let versionOverride = null;
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname.startsWith("/__fs/")) return handleApi(req, res, url);
+  if (url.pathname === "/__version") { versionOverride = (await readBody(req)).v || null; return json(res, 200, { ok: true }); }
+  if (url.pathname === "/version.json" && versionOverride) {
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    return res.end(JSON.stringify({ v: versionOverride }));
+  }
   let p = decodeURIComponent(url.pathname);
   if (p === "/") p = "/index.html";
   const fp = path.join(ROOT, p);
