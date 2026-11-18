@@ -312,6 +312,7 @@ export function miniSteps(G, { privateView = false } = {}) {
           <button class="btn ghost sm" data-action="mini-row-edit" data-id="${esc(x.id)}" aria-expanded="${!!editing(G, x.id)}">✏️</button></span>
           ${editing(G, x.id) ? `<span class="tr-swap">${E.TEAMS.map((t) => (G.P.some((p) => p.team === t) ? playerSelect(G, g, t, ((t === "team1" ? x.p1 : x.p2) || {}).id || "", x.id) : "")).join("")}${tableMove(G, g, x)}</span>` : ""}</div>`;
       }).join("")}</div>`;
+      panel += tableControls(G, g, open);
       if (free.length) btn(`🎲 Draw for ${free.length === 1 ? free[0] : `${free.length} free tables`}`, "act", act("miniNext", { id: g.id }), "primary", "Space");
       btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, free.length ? "ghost" : "primary", free.length ? "" : "");
       btn("↩ Games list", "act", act("miniClose"));
@@ -339,7 +340,7 @@ export function miniSteps(G, { privateView = false } = {}) {
         panel = `<div class="mpanel wrap"><span class="muted">Results:</span>${g.matches.filter((x) => x.winner).map((x) =>
           `<span class="echip">${matchChip(G, x)}<button class="x" title="Remove this result" ${actAttr("miniMatchRemove", { id: g.id, matchId: x.id })}>✕</button></span>`).join("")}</div>`;
       }
-      if (!E.minisTables(G.S).length) panel += tablePicker(G, g, null);
+      panel += tableControls(G, g, []);
     }
     return { status, panel, buttons: B };
   }
@@ -362,6 +363,7 @@ export function miniSteps(G, { privateView = false } = {}) {
         <button class="btn ghost sm" data-action="mini-row-edit" data-id="${esc(x.id)}" aria-expanded="${!!editing(G, x.id)}">✏️</button></span>
         ${editing(G, x.id) ? `<span class="tr-swap">${playerSelect(G, g, null, x.pid, x.id)}${tableMove(G, g, x)}</span>` : ""}</div>`;
     }).join("")}</div>`;
+    panel += tableControls(G, g, turns);
     if (freeB.length) btn(`🎲 Draw for ${freeB.length === 1 ? freeB[0] : `${freeB.length} free tables`}`, "act", act("miniNext", { id: g.id }), "primary", "Space");
     btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, "ghost", "");
     btn("↩ Games list", "act", act("miniClose"));
@@ -386,6 +388,7 @@ export function miniSteps(G, { privateView = false } = {}) {
       panel = `<div class="mpanel wrap"><span class="muted">Scores:</span>${st.sorted.map((e) =>
         `<span class="echip"><span class="mchip ${e.team}"><b>${esc(e.name)}</b> ${scoreText(g, e.score)}</span><button class="x" title="Remove this score" ${actAttr("miniEntryRemove", { id: g.id, entryId: e.id })}>✕</button></span>`).join("")}</div>`;
     }
+    panel += tableControls(G, g, []);
   }
   return { status, panel, buttons: B };
 }
@@ -400,11 +403,19 @@ function tableMove(G, g, x) {
 // Which table to send the drawn player(s) to — right in the mini-game controls.
 function tablePicker(G, g, current) {
   const tables = E.minisTables(G.S);
-  if (!tables.length) {
-    return `<div class="mpanel"><span class="muted">📍 Playing at more than one table?</span><button class="btn ghost sm" data-action="drawer" data-p='{"tab":"minis"}'>Set up tables</button></div>`;
-  }
+  if (!tables.length) return "";
   return `<div class="mpanel wrap tablepick"><span class="muted">📍 Send them to:</span>${tables.map((t) =>
     `<button class="${cls("chipbtn", t === current && "on")}" ${actAttr("miniSetTable", { id: g.id, table: t })} aria-pressed="${t === current}">${t === current ? "✓ " : ""}${esc(t)}</button>`).join("")}</div>`;
+}
+
+// Add / remove tables, right where you draw who's up next. A table someone is
+// playing at can't be removed until it's free.
+function tableControls(G, g, items) {
+  const tables = E.minisTables(G.S);
+  const busy = new Set(items.map((x) => x.table).filter(Boolean));
+  const chips = tables.map((t) => `<span class="echip tchip" data-key="tb-${esc(t)}"><span class="mchip">📍 ${esc(t)}</span>${busy.has(t) ? "" : `<button class="x" title="Remove ${esc(t)}" aria-label="Remove ${esc(t)}" ${actAttr("miniTableRemove", { table: t })}>✕</button>`}</span>`).join("");
+  const add = tables.length < 8 ? `<button class="btn ghost sm" data-key="tb-add" ${actAttr("miniTableAdd", {})}>+ Add table</button>` : "";
+  return `<div class="mpanel wrap tablectl" data-key="tablectl"><span class="muted">${tables.length ? `Playing at ${tables.length} tables at once:` : "📍 Playing at one table."}</span>${chips}${add}</div>`;
 }
 
 function playerSelect(G, g, team, selectedId, ref = "") {
@@ -486,7 +497,6 @@ export function miniModal(G, m) {
 export function minisTab(G) {
   const M = E.minisOf(G.S);
   const [n1, n2] = [tn(G, "team1"), tn(G, "team2")];
-  const tables = E.minisTables(G.S);
   const field = (g, f) => `data-change="mini-field" data-id="${esc(g.id)}" data-f="${f}" data-key="mf-${esc(g.id)}-${f}"`;
   const cards = M.list.map((g, i) => {
     const r = resultBits(G, g);
@@ -519,11 +529,7 @@ export function minisTab(G) {
            </select>
            <input class="unit" value="${esc(g.unit)}" maxlength="16" placeholder="unit, e.g. seconds" aria-label="Unit" ${field(g, "unit")}>`}
       </div>
-      <input class="desc" value="${esc(g.desc)}" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>
-      ${tables.length ? `<div class="mini-row"><span class="muted">Played at</span><select class="grow" aria-label="Which table" ${field(g, "table")}>
-        <option value=""${tables.includes(g.table) ? "" : " selected"}>🎲 All tables at once</option>
-        ${tables.map((t) => `<option value="${esc(t)}"${g.table === t ? " selected" : ""}>📍 ${esc(t)}</option>`).join("")}
-      </select></div>` : ""}
+      <textarea class="desc auto" rows="1" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>${esc(g.desc)}</textarea>
       <div class="mini-row foot">${state}<span class="grow"></span>
         ${started ? `<button class="btn ghost sm" data-action="mini-reset-ask" data-id="${esc(g.id)}">↺ Reset</button>` : ""}
         ${g.status !== "done" ? `<button class="btn ghost sm" ${actAttr("miniPlay", { id: g.id }, { then: "drawer" })}>▶ Play</button>` : ""}
@@ -532,10 +538,6 @@ export function minisTab(G) {
     </div>`;
   }).join("");
   return `
-  <section class="sect"><h4>Tables <small>optional</small></h4>
-    <input class="newname" value="${esc(tables.join(", "))}" maxlength="240" placeholder="e.g. Kitchen table, Living room, Garage" aria-label="Table names" data-change="mini-tables" data-key="mini-tables">
-    <p class="muted small">Want to get through the mini games faster? Name your tables, separated by commas, and each game is played at <b>all of them at once</b> — one draw puts a different matchup at every table, and everyone is told which table they're summoned to (a different Christmas summons every time). Set a game to one table below if it only has one station. Leave empty to play one at a time.</p>
-  </section>
   <section class="sect"><h4>Your mini games <small>${M.list.length ? `(${M.list.length})` : ""}</small></h4>
     ${cards || `<p class="muted">None yet. Mini games are played before Jeopardy and the points count toward each team's score.</p>`}
   </section>
@@ -774,10 +776,10 @@ function drawSteps(G, g, { btn, act, B, st, n1, n2 }) {
   }).join("")}</div>` : "";
   if (open.length) {
     status = `<b>${esc(g.name)}</b> · ${open.length > 1 ? `${open.length} tables drawing` : "drawing"} · ${tally} <span class="muted">— the website judges as soon as both drawings are in</span>`;
-    panel = `${describe}<div class="trows">${rows}</div>${results}`;
+    panel = `${describe}<div class="trows">${rows}</div>${results}${E.minisTables(G.S).length ? tableControls(G, g, open) : ""}`;
   } else {
     status = `<b>${esc(g.name)}</b> · ${tally}`;
-    panel = results + (E.minisTables(G.S).length ? "" : tablePicker(G, g, null));
+    panel = results + tableControls(G, g, []);
   }
   const slots = E.miniSlots(G.S, g).filter((t) => t !== null);
   if (notStarted.length) btn(`▶ Start drawing <small>(new step every ${g.stepSeconds || 20}s)</small>`, "act", act("miniDrawStart", { id: g.id }), "primary", "Space");

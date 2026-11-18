@@ -127,22 +127,44 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(await P.Jen.evaluate(() => window.__G.soundOn === true), "turning it off isn't remembered — a refresh turns sound back on");
   await host.click('.r-tools [data-action="drawer"]');
   await host.click('.tab:has-text("Mini games")');
-  await host.fill('input[data-change="mini-tables"]', "Kitchen, Living room");
-  await host.locator('input[data-change="mini-tables"]').dispatchEvent("change");
-  await until(host, () => (window.__G.S.minis.tables || []).length === 2);
-  ok(true, "host names the tables");
+  ok(!(await host.$('[data-change="mini-tables"]')) && !(await host.$('select[data-f="table"]')), "tables aren't in the mini game settings");
   await host.fill("#mini-new-name", "Snowball Toss");
   await host.click('[data-action="mini-add"][data-type="h2h"]');
   await until(host, () => window.__G.S.minis.list.length === 1);
-  await until(host, () => !!document.querySelector('select[data-f="table"]'));
-  ok((await host.$$eval('select[data-f="table"] option', (o) => o.map((x) => x.textContent))).join("|").includes("All tables at once"), "each game plays at all tables at once (or can be fixed to one)");
-  await shot(host, "x01-host-tables");
+  // the description box grows to fit what's typed
+  const desc = host.locator(".minicard textarea.desc");
+  const h0 = await desc.evaluate((el) => el.offsetHeight);
+  await desc.fill("Each player gets three snowballs. Stand behind the line and toss them into the bucket. Most snowballs in the bucket wins the round — ties go to a toss-off.");
+  const h1 = await desc.evaluate((el) => el.offsetHeight);
+  ok(h1 > h0 + 10 && (await desc.evaluate((el) => el.scrollHeight <= el.clientHeight + 4)), `the game description box grows to fit (${h0}px → ${h1}px)`);
+  await desc.dispatchEvent("change");
+  await until(host, () => window.__G.S.minis.list[0].desc.startsWith("Each player gets three snowballs"));
+  await host.keyboard.press("Escape");
+  await until(host, () => !document.querySelector(".drawer.open"));
+  await host.click('.r-tools [data-action="drawer"]');
+  await host.click('.tab:has-text("Mini games")');
+  await until(host, () => !!document.querySelector(".minicard textarea.desc"));
+  const h2 = await host.locator(".minicard textarea.desc").evaluate((el) => el.offsetHeight);
+  ok(Math.abs(h2 - h1) < 6, "…and is still the right size when you come back to it");
   await host.keyboard.press("Escape");
   // two people per team, two tables: the same game at both tables at once
   for (const [n, t] of [["Ann", "team1"], ["Bo", "team2"]]) await host.evaluate(async ([n, t]) => { const D = await import("/js/data.js"); await D.addPlayer(n, t); }, [n, t]);
   await until(host, () => window.__G.P.length === 4);
   const id = await host.evaluate(() => window.__G.S.minis.list[0].id);
   await act(host, "miniPlay", { id });
+  // tables are added/removed right next to the "who's up first" button
+  await until(host, () => !!document.querySelector('.tablectl [data-key="tb-add"]'));
+  ok((await host.textContent(".tablectl")).includes("one table"), "the mini game controls say you're playing at one table");
+  await host.click('.tablectl [data-key="tb-add"]');
+  await until(host, () => (window.__G.S.minis.tables || []).join() === "Table 1,Table 2");
+  ok(true, "+ Add table: now Table 1 and Table 2");
+  await host.click('.tablectl [data-key="tb-add"]');
+  await until(host, () => (window.__G.S.minis.tables || []).length === 3);
+  await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Draw for all 3 tables"));
+  await host.click('.tablectl [aria-label="Remove Table 3"]');
+  await until(host, () => (window.__G.S.minis.tables || []).length === 2);
+  ok(true, "✕ removes a table");
+  await shot(host, "x01-host-tables");
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Draw for all 2 tables"));
   ok(true, "host's button draws for every table at once");
   await host.keyboard.press("Space");
@@ -150,11 +172,12 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "the host's screen shuffles the names too");
   await until(board, () => document.querySelectorAll(".tcard .tc-sum").length === 2, null, 5000);
   const cards = await board.$$eval(".tcard", (els) => els.map((e) => e.textContent));
-  ok(cards[0].includes("Kitchen") && cards[1].includes("Living room"), "the board shows a matchup at each table");
+  ok(cards[0].includes("Table 1") && cards[1].includes("Table 2"), "the board shows a matchup at each table");
+  ok(!(await host.$('.tablectl [aria-label="Remove Table 1"]')) && !(await host.$('.tablectl [aria-label="Remove Table 2"]')), "a table someone is playing at can't be removed");
   const drawn = await host.evaluate(() => window.__G.S.minis.list[0].matches.filter((m) => !m.winner).flatMap((m) => [m.p1.name, m.p2.name]));
   ok(new Set(drawn).size === 4, `four different players across the two tables (${drawn.join(", ")})`);
   await until(P.Jen, () => !!document.querySelector(".tabletag"));
-  const jenTable = (await P.Jen.textContent(".tabletag")).replace(/[^A-Za-z ]/g, "").trim();
+  const jenTable = (await P.Jen.textContent(".tabletag")).replace(/[^A-Za-z0-9 ]/g, "").trim();
   const jenCard = cards.find((c) => c.includes(jenTable));
   ok(!!jenCard && jenCard.includes("Jen"), `Jen's phone sends her to the right table (${jenTable})`);
   const summon = await P.Jen.textContent(".ph-summon");
@@ -166,7 +189,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   // swap tables from the host controls
   const jenMatch = await host.evaluate(() => window.__G.S.minis.list[0].matches.find((m) => !m.winner && (m.p1.name === "Jen" || m.p2.name === "Jen")).id);
   await host.click(`[data-action="mini-row-edit"][data-id="${jenMatch}"]`);
-  const otherTable = jenTable === "Kitchen" ? "Living room" : "Kitchen";
+  const otherTable = jenTable === "Table 1" ? "Table 2" : "Table 1";
   await host.selectOption(`select[data-change="mini-move"][data-ref="${jenMatch}"]`, otherTable);
   await until(P.Jen, (t) => document.querySelector(".tabletag")?.textContent.includes(t), otherTable);
   ok(true, "host can move a matchup to another table (the two tables swap)");

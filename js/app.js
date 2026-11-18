@@ -79,15 +79,17 @@ function doRender() {
   tick();
 }
 
-// Text boxes marked .auto grow to fit everything typed in them (question library).
+// Text boxes marked .auto grow to fit everything typed in them (question library,
+// mini-game descriptions).
 function autosize(el) {
+  if (!el.getClientRects().length) return; // hidden: it's sized when it's shown
   el.style.height = "auto";
   el.style.height = el.scrollHeight + 2 + "px";
 }
 function autosizeAll() {
   for (const el of document.querySelectorAll("textarea.auto")) autosize(el);
 }
-window.addEventListener("resize", () => { if (route() === "questions") autosizeAll(); });
+window.addEventListener("resize", autosizeAll);
 
 // ---------------- toasts ----------------
 let toastTimer = 0;
@@ -680,7 +682,6 @@ document.addEventListener("change", async (e) => {
     else if (k === "final-eligible") await D.act("finalSetEligible", { team: el.dataset.team, eligible: el.checked });
     else if (k === "import") await importFile(el);
     else if (k === "mini-field") await D.act("miniUpdate", { id: el.dataset.id, patch: { [el.dataset.f]: el.value } });
-    else if (k === "mini-tables") await D.act("miniTables", { tables: el.value });
     else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value, matchId: el.dataset.ref || undefined, turnId: el.dataset.ref || undefined });
     else if (k === "mini-move") await D.act("miniSetTable", { id: el.dataset.id, table: el.value, matchId: el.dataset.ref, turnId: el.dataset.ref });
   } catch (err) {

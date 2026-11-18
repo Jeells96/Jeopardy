@@ -622,7 +622,6 @@ function cleanMini(src) {
     better: src.better === "low" ? "low" : "high",                     // best: highest or lowest score wins
     unit: String(src.unit == null ? "" : src.unit).trim().slice(0, 16),
     desc: String(src.desc == null ? "" : src.desc).trim().slice(0, 240),
-    table: String(src.table == null ? "" : src.table).trim().slice(0, 24), // "" = all tables at once
     mode,
     // Blind drawing: the host's pictures (ids of state/drawpic-* docs), used in turn.
     pics: mode === "draw" && Array.isArray(src.pics) ? [...new Set(src.pics.filter((x) => typeof x === "string" && x))].slice(0, 40) : [],
@@ -743,13 +742,11 @@ function pickTurn(g, ctx, replacing, busy = [], lastTeam) {
   return { id: rid(), pid: p.id, name: p.name, team, at: ctx.now };
 }
 const withList = (s, list, extra = {}) => ({ ...minisOf(s), list, ...extra });
-// The tables a game runs at, all at once: every table, or the one it's fixed to.
-// No tables set up → a single spot (null).
+// The tables a game runs at, all at once. No tables set up → a single spot (null).
 export const miniSlots = (s, g) => slotsFor(s, g);
-function slotsFor(s, g) {
+function slotsFor(s) {
   const tables = minisTables(s);
-  if (!tables.length) return [null];
-  return tables.includes(g.table) ? [g.table] : tables;
+  return tables.length ? tables : [null];
 }
 // Christmas summon lines that haven't been used lately.
 function summonPicker(s, ctx) {
@@ -818,6 +815,26 @@ export function miniTables(s, { tables }, ctx) {
   }
   if (list.length > 8) return fail("Up to 8 tables.");
   return builder(s, ctx).field("minis", { ...minisOf(s), tables: list }).done();
+}
+// Add / remove a table right from the "who's up next" controls. Tables are numbered;
+// going from one spot to two tables adds Table 1 and Table 2.
+const MAX_TABLES = 8;
+export function miniTableAdd(s, _p, ctx) {
+  const tables = minisTables(s);
+  if (tables.length >= MAX_TABLES) return fail(`Up to ${MAX_TABLES} tables.`);
+  const used = new Set(tables.map((t) => t.toLowerCase()));
+  const nextName = () => { for (let n = 1; ; n++) if (!used.has(`table ${n}`)) { used.add(`table ${n}`); return `Table ${n}`; } };
+  const list = tables.length ? [...tables, nextName()] : [nextName(), nextName()];
+  return builder(s, ctx).field("minis", { ...minisOf(s), tables: list }).done();
+}
+export function miniTableRemove(s, { table }, ctx) {
+  const tables = minisTables(s);
+  if (!tables.includes(table)) return null;
+  const playing = minisOf(s).list.some((g) => g.status === "active" && [...openMatches(g), ...turnsOf(g)].some((x) => x.table === table));
+  if (playing) return fail(`Someone is still playing at ${table} — finish that first.`);
+  const left = tables.filter((t) => t !== table);
+  // Down to one table = back to playing in one spot (no table to announce).
+  return builder(s, ctx).field("minis", { ...minisOf(s), tables: left.length > 1 ? left : [] }).done();
 }
 
 // ---------- flow ----------
@@ -1152,6 +1169,6 @@ export const ACTIONS = {
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
   miniSetTable, miniDrawStart, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
-  miniTables, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
+  miniTables, miniTableAdd, miniTableRemove, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };
