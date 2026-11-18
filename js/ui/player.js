@@ -108,16 +108,14 @@ function clueBody(G) {
     const head = `<div class="dd-mini">DAILY DOUBLE!</div>`;
     const cat = `<small class="muted">${esc(q.category)}</small>`;
     if (!team) return `<div class="ph-card dd-card">${head}<p>Someone found a Daily Double!</p>${cat}</div>`;
-    // The player who earned the pick wagers (anyone on the team if nobody has yet).
-    const who = c.dd.by && G.P.some((p) => p.id === c.dd.by.deviceId) ? c.dd.by : null;
-    if (me.team !== team) return `<div class="ph-card dd-card">${head}<p>${esc(tn(G, team))} found it — ${who ? `${esc(who.name)} is` : `${verb(tn(G, team), "is", "are")}`} choosing a wager…</p>${cat}</div>`;
-    if (who && who.deviceId !== G.deviceId) return `<div class="ph-card dd-card">${head}<p>Your team found it! <b>${esc(who.name)}</b> is choosing your wager…</p>${cat}</div>`;
+    // Anyone on the team can enter the wager; the first one locked counts.
+    if (me.team !== team) return `<div class="ph-card dd-card">${head}<p>${esc(tn(G, team))} found it and ${verb(tn(G, team), "is", "are")} choosing a wager…</p>${cat}</div>`;
     const lim = E.ddLimits(S, G.Q, team);
     const half = Math.max(lim.min, Math.round(lim.max / 2 / 50) * 50);
     const quick = [[lim.min, `Min ${money(lim.min)}`], [half, money(half)], [lim.max, (S.scores[team] || 0) > 0 ? "All in!" : `Max ${money(lim.max)}`]]
       .filter((o, i, a) => a.findIndex((x) => x[0] === o[0]) === i)
       .map(([v, l]) => `<button class="chipbtn" data-action="ph-dd-quick" data-v="${v}">${l}</button>`).join("");
-    return `<div class="ph-card dd-card">${head}<p>${who ? "You found it — you choose the wager!" : "Your team found it — choose your wager!"}</p>${cat}
+    return `<div class="ph-card dd-card">${head}<p>Your team found it — choose your wager! <small>(anyone on your team can lock it in)</small></p>${cat}
       <label class="wager-box big"><span>$</span><input id="ph-dd-wager" class="wager-input" type="number" inputmode="numeric" min="${lim.min}" max="${lim.max}" placeholder="Wager" autocomplete="off" data-sticky></label>
       <div class="quick">${quick}</div>
       <div class="hint">${money(lim.min)} – ${money(lim.max)}</div>

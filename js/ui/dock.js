@@ -86,10 +86,8 @@ export function hostSteps(G, { privateView = false } = {}) {
     if (c.stage === "dd") {
       const team = G.ui.ddTeam || c.dd.team || null;
       const lim = team ? E.ddLimits(S, G.Q, team) : null;
-      const who = c.dd.team && c.dd.by && G.P.some((p) => p.id === c.dd.by.deviceId) ? c.dd.by : null;
       const phones = c.dd.team && G.P.some((p) => p.team === c.dd.team && !p.manual);
       status = !c.dd.team ? "⭐ <b>Daily Double!</b> Which team found it?"
-        : who ? `⭐ <b>Daily Double!</b> <b>${esc(who.name)}</b> is entering ${esc(tn(G, c.dd.team))}' wager on their phone… <span class="muted">(or enter it for them below)</span>`
         : phones ? `⭐ <b>Daily Double!</b> ${esc(tn(G, c.dd.team))} can enter their wager on any of their phones… <span class="muted">(or enter it for them below)</span>`
         : "⭐ <b>Daily Double!</b> Ask the team that found it for their wager.";
       panel = ddPanel(G, team, lim);

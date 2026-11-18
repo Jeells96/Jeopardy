@@ -51,7 +51,6 @@ export function defaultState(keep = {}) {
     phase: "lobby", // lobby | board | clue | final | over
     round: 1,
     control: null, // team that picks the next clue
-    controlBy: null, // who on that team earned the pick (last right answer) — they wager on a Daily Double
     teamNames: keep.teamNames || { ...DEFAULT_NAMES },
     scores: { team1: 0, team2: 0 },
     settings: { ...DEFAULT_SETTINGS, ...(keep.settings || {}) },
@@ -157,7 +156,7 @@ export function startGame(s, { control } = {}, ctx) {
   if (s.jStarted) return builder(s, ctx).field("phase", "board").field("clue", null).field("minis", minis).sfx("intro").done();
   const ctrl = control === "random" ? TEAMS[Math.floor(Math.random() * 2)] : TEAMS.includes(control) ? control : null;
   return builder(s, ctx)
-    .field("phase", "board").field("round", 1).field("control", ctrl).field("controlBy", null).field("jStarted", true)
+    .field("phase", "board").field("round", 1).field("control", ctrl).field("jStarted", true)
     .field("clue", null).field("final", freshFinal())
     .field("minis", minis)
     .sfx("intro").done();
@@ -181,12 +180,10 @@ export function leaveMinis(s, _p, ctx) {
 
 export function setControl(s, { team }, ctx) {
   if (!TEAMS.includes(team)) return null;
-  return builder(s, ctx).field("control", team).field("controlBy", null).done();
+  return builder(s, ctx).field("control", team).done();
 }
 // How long the person who buzzed in has to answer — twice as long on a Daily Double.
 export const answerMs = (c, settings) => ((settings && settings.answerSeconds) || 15) * 1000 * (c && c.dd ? 2 : 1);
-// The player on `team` who wagers on a Daily Double: whoever earned the pick.
-const ddWagerer = (s, team) => (s.controlBy && s.controlBy.team === team ? s.controlBy : null);
 
 export function startRound2(s, _p, ctx) {
   if (!r2On(s, ctx.questions)) return fail("This game doesn't have a Double Jeopardy round.");
@@ -204,7 +201,7 @@ function newClue(q, s, ctx) {
     id: q.id,
     stage: q.dailyDouble ? "dd" : "reading", // dd | reading | open | paused | answering | done
     pickedAt: ctx.now,
-    dd: q.dailyDouble ? { team: s.control || null, wager: null, by: ddWagerer(s, s.control) } : null,
+    dd: q.dailyDouble ? { team: s.control || null, wager: null, by: null } : null,
     buzzRound: 0,
     openedAt: null,
     locked: null,       // { deviceId, name, team, at }
@@ -237,17 +234,17 @@ export function unpickClue(s, _p, ctx) {
 export function setDDTeam(s, { team }, ctx) {
   const c = s.clue;
   if (!c || c.stage !== "dd" || !TEAMS.includes(team)) return null;
-  return builder(s, ctx).field("clue", { ...c, dd: { ...c.dd, team, by: ddWagerer(s, team) } }).done();
+  return builder(s, ctx).field("clue", { ...c, dd: { ...c.dd, team } }).done();
 }
 
-// by: the player entering it on their phone (Jaren can always enter it for them).
+// by: whoever on the team entered it on their phone — anyone on the team can, and the
+// first one locked counts (Jaren can always enter it for them).
 export function lockDDWager(s, { team, wager, by }, ctx) {
   const c = s.clue;
   if (!c || c.stage !== "dd") return null;
   if (!TEAMS.includes(team)) return fail("Choose which team found the Daily Double.");
   if (by) {
     if (by.team !== team || c.dd.team !== team) return fail("It's the other team's Daily Double.");
-    if (c.dd.by && c.dd.by.deviceId !== by.deviceId && (ctx.players || []).some((p) => p.id === c.dd.by.deviceId)) return fail(`${c.dd.by.name} is choosing the wager.`);
   }
   const { min, max } = ddLimits(s, ctx.questions, team);
   const w = Math.round(Number(wager));
@@ -255,7 +252,7 @@ export function lockDDWager(s, { team, wager, by }, ctx) {
   return builder(s, ctx)
     .field("control", team)
     .field("clue", {
-      ...c, stage: "answering", dd: { team, wager: w, by: by ? { deviceId: by.deviceId, name: String(by.name || "").slice(0, 20), team } : c.dd.by || null },
+      ...c, stage: "answering", dd: { team, wager: w, by: by ? { deviceId: by.deviceId, name: String(by.name || "").slice(0, 20), team } : null },
       locked: { deviceId: "dd", name: teamName(s, team), team, at: ctx.now },
     }).done();
 }
@@ -345,8 +342,6 @@ function resolve(s, outcome, ctx, extra = {}) {
   if (outcome === "correct") {
     b.score(team, value, "correct", { kind: "clue", prevControl: s.control || null, qid: c.id });
     b.field("control", team);
-    // Whoever answered earns the pick (and wagers if they find a Daily Double).
-    b.field("controlBy", c.dd ? (c.dd.by && c.dd.by.team === team ? c.dd.by : ddWagerer(s, team)) : { deviceId: c.locked.deviceId, name: c.locked.name, team });
     b.field("clue", { ...base, stage: "done", result: "correct", winner: team, revealed: true });
     return b.sfx("correct").done();
   }

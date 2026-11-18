@@ -163,9 +163,8 @@ switch off phone renaming there too.
 
 **Daily Doubles**
 - Splash screen and sound, no buzzing — the team that found it plays.
-- **The wager is entered on a phone:** by the player who earned the pick (the last one on
-  that team to answer right), or anyone on the team if nobody has yet. Their teammates and
-  the other team see who's choosing. Jaren can still enter it for them.
+- **The wager is entered on a phone:** anyone on the team that found it can type it in and
+  lock it (the first one locked counts). Jaren can still enter it for them.
 - Wager **$5 up to everything the team has**. At $0 or below, they can wager up to the
   board's top value ($500), like the show. Quick buttons for min / half / **"All in!"**.
 - **Twice the usual answer time.**

@@ -204,15 +204,12 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   const ddMax = ddScore > 0 ? ddScore : 500;
   const ddMaxTxt = "$" + ddMax.toLocaleString("en-US");
   ok((await host.textContent(".hint")).includes("Allowed $5 – " + ddMaxTxt), "DD limit is everything the team has (or the top value at $0 or less): " + ddMaxTxt);
-  // The player who earned the pick enters the wager on their phone (no need for Jaren to).
-  const ids = await Promise.all(Object.values(P).map((p) => p.evaluate(() => window.__G.deviceId)));
-  const byId = Object.fromEntries(Object.values(P).map((p, i) => [ids[i], p]));
-  const wagerer = ddS.clue.dd.by ? byId[ddS.clue.dd.by.deviceId] : Object.values(P).find((p) => p.team === ddS.clue.dd.team);
-  ok(!!ddS.clue.dd.by, `the player who earned the pick wagers (${ddS.clue.dd.by && ddS.clue.dd.by.name})`);
-  await until(wagerer, () => !!document.getElementById("ph-dd-wager"));
-  const mate = Object.values(P).find((p) => p.team === ddS.clue.dd.team && p !== wagerer);
-  if (mate) ok(!(await mate.$("#ph-dd-wager")) && (await mate.textContent(".dd-card")).includes("choosing your wager"), "their teammates see who's choosing the wager");
-  ok((await Object.values(P).find((p) => p.team !== ddS.clue.dd.team).textContent(".dd-card")).includes("choosing a wager"), "the other team sees it too");
+  // Anyone on the team can enter the wager on their phone (no need for Jaren to).
+  const team = Object.values(P).filter((p) => p.team === ddS.clue.dd.team);
+  await Promise.all(team.map((p) => until(p, () => !!document.getElementById("ph-dd-wager"))));
+  ok(true, `every phone on the team gets the wager box (${team.length} phones)`);
+  const wagerer = team[team.length - 1];
+  ok(!(await Object.values(P).find((p) => p.team !== ddS.clue.dd.team).$("#ph-dd-wager")) && (await Object.values(P).find((p) => p.team !== ddS.clue.dd.team).textContent(".dd-card")).includes("choosing a wager"), "the other team just sees that they're choosing a wager");
   await wagerer.fill("#ph-dd-wager", "9999");
   await wagerer.click('[data-action="ph-dd-lock"]');
   await until(wagerer, () => document.getElementById("toast").classList.contains("show"));
