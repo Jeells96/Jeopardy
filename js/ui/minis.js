@@ -3,9 +3,24 @@
 import { esc, money, cls, verb } from "./util.js";
 import * as E from "../engine.js";
 import { summonText } from "../summons.js";
+import * as Dr from "../draw.js";
+import { cachedDrawing, loadDrawing } from "../data.js";
 
 const tn = (G, t) => E.teamName(G.S || {}, t);
-export const TYPE_LABEL = { h2h: "Head-to-head", best: "Best overall" };
+export const TYPE_LABEL = { h2h: "Head-to-head", best: "Best overall", draw: "Blind drawing" };
+const isDraw = (g) => !!g && g.mode === "draw";
+const typeLabel = (g) => (isDraw(g) ? TYPE_LABEL.draw : TYPE_LABEL[g.type]);
+// A saved drawing as a picture; loads it (and refreshes the screen) the first time it's needed.
+function drawingSvg(G, docId, cls = "") {
+  const d = docId ? cachedDrawing(docId) : null;
+  if (d) return Dr.svg(d.strokes, cls);
+  if (docId && !(G.drawLoading || (G.drawLoading = new Set())).has(docId)) {
+    G.drawLoading.add(docId);
+    loadDrawing(docId).then(() => { G.drawLoading.delete(docId); if (G.render) G.render(); }).catch(() => G.drawLoading.delete(docId));
+  }
+  return `<div class="drawing ${cls} loading">…</div>`;
+}
+export const subDocId = (matchId, team) => `drawsub-${matchId}-${team}`;
 const J = (o) => esc(JSON.stringify(o));
 const actAttr = (name, p = {}, extra = {}) => `data-action="act" data-p="${J({ name, p, ...extra })}"`;
 const num = (v) => Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -42,6 +57,7 @@ export const PRESETS = [
   { name: "Present Stack", type: "best", better: "high", unit: "boxes", desc: "Stack gift boxes one-handed for 30 seconds. Tallest tower still standing wins." },
   { name: "Speed Wrap", type: "best", better: "low", unit: "seconds", desc: "Wrap a box as fast as you can — every side covered. Fastest time wins." },
   { name: "Reindeer Ring Toss", type: "best", better: "high", unit: "rings", desc: "Five tosses at the antlers. Most rings landed wins." },
+  { name: "Blind Drawing", type: "draw", desc: "Phone on your head! Jaren describes a picture and you draw it without looking. The website judges whose drawing is closest." },
 ];
 
 function resultBits(G, g) {
@@ -53,7 +69,7 @@ function resultBits(G, g) {
 }
 function kicker(M, g) {
   const i = M.list.findIndex((x) => x.id === g.id) + 1;
-  return `Mini game ${i} of ${M.list.length} · ${TYPE_LABEL[g.type]} · ${prize(g)}`;
+  return `Mini game ${i} of ${M.list.length} · ${typeLabel(g)} · ${prize(g)}`;
 }
 // A name that shuffles through the candidates, then lands on the pick (driven by app.js tick()).
 function spin(names, final, at, extra = "") {
@@ -80,6 +96,7 @@ export function minisStage(G, opts = {}) {
   const g = currentGame(M);
   if (!g) return hub(G, M, opts);
   if (g.status === "done") return resultView(G, g);
+  if (isDraw(g)) return drawView(G, M, g);
   return g.type === "h2h" ? h2hView(G, M, g) : bestView(G, M, g);
 }
 
@@ -103,7 +120,7 @@ function hub(G, M, opts) {
       return `<div class="${cls("mcard", g.status, r && "w-" + r.cls, opts.pick && "pick")}" data-key="mc-${esc(g.id)}"${opts.pick ? ` ${actAttr("miniPlay", { id: g.id })} role="button" tabindex="0"` : ""}>
         <div class="mc-num">${i + 1}</div>
         <div class="mc-name">${esc(g.name)}</div>
-        <div class="mc-meta">${TYPE_LABEL[g.type]} · ${money(g.points)}${g.type === "h2h" && g.award === "match" ? " a win" : ""}</div>
+        <div class="mc-meta">${typeLabel(g)} · ${money(g.points)}${g.type === "h2h" && g.award === "match" ? " a win" : ""}</div>
         ${tag}
       </div>`;
     }).join("")}</div>
@@ -242,7 +259,7 @@ export function miniSteps(G, { privateView = false } = {}) {
       btn("🎯 Add mini games", "drawer", { tab: "minis" }, "primary", "Space");
       jeopardy(false);
     } else if (next) {
-      status = `<b>${done}</b> of <b>${M.list.length}</b> played. Next up: <b>${esc(next.name)}</b> <span class="muted">${TYPE_LABEL[next.type]} · ${money(next.points)}</span>`;
+      status = `<b>${done}</b> of <b>${M.list.length}</b> played. Next up: <b>${esc(next.name)}</b> <span class="muted">${typeLabel(next)} · ${money(next.points)}</span>`;
       btn(`▶ ${next.status === "active" ? "Continue" : "Play"} “${esc(next.name)}”`, "act", act("miniPlay", { id: next.id }), "primary", "Space");
       jeopardy(false);
       btn("✏️ Edit mini games", "drawer", { tab: "minis" });
@@ -268,6 +285,9 @@ export function miniSteps(G, { privateView = false } = {}) {
   const spinning = isSpinning(G); // the host's screen shuffles the names too
   const everyone = E.miniEveryonePlayed(g, G.P);
   const [n1, n2] = [tn(G, "team1"), tn(G, "team2")];
+
+  // ---- blind drawing ----
+  if (isDraw(g)) return drawSteps(G, g, { btn, act, B, st, n1, n2 });
 
   // ---- head-to-head ----
   if (g.type === "h2h") {
@@ -405,6 +425,14 @@ export function miniModal(G, m) {
   if (!g) return "";
   const wrap = (inner) => `<div class="modal-scrim" data-action="modal-close"></div><div class="modal" role="dialog">${inner}</div>`;
   const cancel = (label = "Cancel") => `<button class="btn ghost" data-action="modal-close">${label}</button>`;
+  if (m.type === "miniDrawPic") {
+    return `<div class="modal-scrim"></div><div class="modal drawmodal" role="dialog">
+      <h3>✏️ Draw a picture for “${esc(g.name)}”</h3>
+      <p class="muted small">Players never see this. You'll describe it while they draw blind, then the website judges whose drawing is closest. Simple shapes work best (a star, a tree, a snowman…).</p>
+      <div class="padbox" data-keep data-key="padbox-ref-${esc(g.id)}"><canvas class="drawpad" data-pad="ref-${esc(g.id)}"></canvas></div>
+      <div class="btnrow end"><button class="btn ghost" data-action="pad-clear" data-pad="ref-${esc(g.id)}">Start over</button>${cancel()}<button class="btn primary" data-action="draw-pic-save" data-id="${esc(g.id)}">Save picture</button></div>
+    </div>`;
+  }
   if (m.type === "miniReset") {
     return wrap(`<h3>Reset “${esc(g.name)}”?</h3><p>Its results are cleared and any points it gave out are taken back.</p>
       <div class="btnrow end">${cancel()}<button class="btn primary" ${actAttr("miniReset", { id: g.id }, { then: "modal" })}>Reset game</button></div>`);
@@ -460,8 +488,9 @@ export function minisTab(G) {
       </div>
       <div class="mini-row">
         <select aria-label="Type of game" ${field(g, "type")}${started ? " disabled" : ""}>
-          <option value="h2h"${g.type === "h2h" ? " selected" : ""}>⚔️ Head-to-head</option>
+          <option value="h2h"${g.type === "h2h" && !isDraw(g) ? " selected" : ""}>⚔️ Head-to-head</option>
           <option value="best"${g.type === "best" ? " selected" : ""}>🏅 Best overall</option>
+          <option value="draw"${isDraw(g) ? " selected" : ""}>✏️ Blind drawing</option>
         </select>
         <label class="pts"><span>$</span><input type="number" inputmode="numeric" min="0" step="50" value="${g.points}" aria-label="Points" ${field(g, "points")}></label>
       </div>
@@ -485,6 +514,7 @@ export function minisTab(G) {
         ${started ? `<button class="btn ghost sm" data-action="mini-reset-ask" data-id="${esc(g.id)}">↺ Reset</button>` : ""}
         ${g.status !== "done" ? `<button class="btn ghost sm" ${actAttr("miniPlay", { id: g.id }, { then: "drawer" })}>▶ Play</button>` : ""}
       </div>
+      ${isDraw(g) ? picsBlock(G, g) : ""}
     </div>`;
   }).join("");
   return `
@@ -508,7 +538,7 @@ export function minisTab(G) {
     </ul>
   </section>
   <section class="sect"><h4>Need ideas? <small>tap to add</small></h4>
-    <div class="ideas">${PRESETS.map((p, i) => `<button class="chipbtn" data-action="mini-preset" data-i="${i}" title="${esc(p.desc)}">${p.type === "h2h" ? "⚔️" : "🏅"} ${esc(p.name)}</button>`).join("")}</div>
+    <div class="ideas">${PRESETS.map((p, i) => `<button class="chipbtn" data-action="mini-preset" data-i="${i}" title="${esc(p.desc)}">${p.type === "draw" ? "✏️" : p.type === "h2h" ? "⚔️" : "🏅"} ${esc(p.name)}</button>`).join("")}</div>
   </section>`;
 }
 
@@ -521,7 +551,7 @@ export function remoteMinis(G) {
   return `<div class="r-minis">${M.list.map((g, i) => {
     const r = resultBits(G, g);
     return `<button class="${cls("r-mini", g.status)}" ${actAttr("miniPlay", { id: g.id })}>
-      <b>${i + 1}. ${esc(g.name)}</b><span>${TYPE_LABEL[g.type]} · ${money(g.points)}</span>
+      <b>${i + 1}. ${esc(g.name)}</b><span>${typeLabel(g)} · ${money(g.points)}</span>
       <em>${r ? esc(r.text) : g.status === "active" ? "In progress ▶" : "Play ▶"}</em></button>`;
   }).join("")}</div>`;
 }
@@ -554,7 +584,8 @@ export function playerMinis(G, extra = "") {
       <h2>${title}</h2><p><b>${esc(g.name)}</b>${pts ? ` · ${pts}` : ""}</p></div>`;
   }
 
-  const head = `<div class="ph-mini-head"><div class="kicker">${TYPE_LABEL[g.type]} · ${prize(g)}</div><h2>${esc(g.name)}</h2>${g.desc ? `<p>${esc(g.desc)}</p>` : ""}</div>`;
+  const head = `<div class="ph-mini-head"><div class="kicker">${typeLabel(g)} · ${prize(g)}</div><h2>${esc(g.name)}</h2>${g.desc ? `<p>${esc(g.desc)}</p>` : ""}</div>`;
+  if (isDraw(g)) return head + drawPhone(G, g);
   const pick = E.currentPick(S);
   const spinning = isSpinning(G);
   const mine = !!pick && pick.pids.includes(G.deviceId);
@@ -587,4 +618,146 @@ export function playerMinis(G, extra = "") {
       ${my ? `<div class="locked-note">Your score: <b>${scoreText(g, my.score)}</b></div>` : ""}`;
   }
   return `${head}${now}${board}`;
+}
+
+// =====================================================================
+// Blind drawing
+// =====================================================================
+function picsBlock(G, g) {
+  const pics = g.pics || [];
+  return `<div class="mini-row picrow">
+    <span class="muted">Pictures (${pics.length})${pics.length ? ` — used in turn, one per round` : " — draw at least one"}</span>
+    <div class="pics">${pics.map((id, i) => `<span class="pic" data-key="pic-${esc(id)}">${drawingSvg(G, id, "thumb")}<button class="x" ${actAttr("miniUpdate", { id: g.id, patch: { pics: pics.filter((x) => x !== id) } })} title="Delete this picture">✕</button><small>${i + 1}</small></span>`).join("")}
+      <button class="btn primary sm" data-action="draw-pic-new" data-id="${esc(g.id)}">+ Draw a picture</button></div>
+  </div>`;
+}
+// The latest matchup at each table (or the only spot): playing now, or its result.
+function latestPerTable(G, g) {
+  const slots = E.miniSlots(G.S, g);
+  const out = [];
+  for (const t of slots) {
+    const ms = g.matches.filter((m) => (m.table || null) === t);
+    if (ms.length) out.push(ms[ms.length - 1]);
+    else if (t !== null) out.push({ id: "free-" + t, free: true, table: t });
+  }
+  return out;
+}
+const sideName = (G, m, team) => (team === "team1" ? (m.p1 ? m.p1.name : tn(G, "team1")) : (m.p2 ? m.p2.name : tn(G, "team2")));
+function drawCard(G, g, m) {
+  const where = m.table ? `<div class="tc-name">📍 ${esc(m.table)}</div>` : "";
+  if (m.free) return `<div class="tcard free" data-key="dc-free-${esc(m.table)}">${where}<div class="tc-free">Free — next round 🎲</div></div>`;
+  if (!m.winner) {
+    const it = pickOf(G.S, m.id);
+    const status = (team) => (m.done && m.done[team] ? `<em class="dd ok">✓ Done</em>` : `<em class="dd">✏️ Drawing…</em>`);
+    const side = (team, p) => `<span class="${team}">${p ? spin(namesOn(G, team), p.name, p.at, "tspin") : esc(tn(G, team))}${itemSpinning(G, it) ? "" : status(team)}</span>`;
+    return `<div class="tcard" data-key="dc-${esc(m.id)}">${where}<div class="tc-vs">${side("team1", m.p1)}<i>vs</i>${side("team2", m.p2)}</div>
+      ${!itemSpinning(G, it) && itemSummon(it) ? `<div class="tc-sum">${esc(itemSummon(it))}</div>` : ""}</div>`;
+  }
+  // The verdict: the picture, then the winner and the loser.
+  const sc = m.scores || {};
+  const order = m.winner === "team2" ? ["team2", "team1"] : ["team1", "team2"];
+  const panel = (team, role) => `<div class="dpanel ${role}">
+      <div class="dp-label">${role === "win" ? "🏆 Winner" : role === "lose" ? "Loser" : "🤝 Tie"}</div>
+      ${m.done && m.done[team] ? drawingSvg(G, subDocId(m.id, team)) : `<div class="drawing empty">No drawing</div>`}
+      <div class="dp-name ${team}">${esc(sideName(G, m, team))}</div>
+      <div class="dp-score">${sc[team] == null ? "—" : sc[team] + "% match"}</div></div>`;
+  const tie = m.winner === "tie";
+  return `<div class="tcard result" data-key="dr-${esc(m.id)}">${where}
+    <div class="dpanels">
+      <div class="dpanel ref"><div class="dp-label">The picture</div>${drawingSvg(G, m.pic)}<div class="dp-name">&nbsp;</div><div class="dp-score">&nbsp;</div></div>
+      ${panel(order[0], tie ? "tie" : "win")}${panel(order[1], tie ? "tie" : "lose")}
+    </div></div>`;
+}
+function drawView(G, M, g) {
+  const st = E.miniStanding(g);
+  const cards = latestPerTable(G, g);
+  const past = g.matches.filter((x) => x.winner).slice(-5).reverse();
+  return `<div class="mgame mgame--draw" data-key="mg-${esc(g.id)}">
+    ${gameHead(M, g)}
+    ${cards.length ? `<div class="tcards n${Math.min(cards.length, 4)}">${cards.map((m) => drawCard(G, g, m)).join("")}</div>` : `<div class="mg-wait">Who's drawing first? 🎲</div>`}
+    <div class="tally">
+      <span class="t team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span>
+      <span class="t-sep">–</span>
+      <span class="t team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span>
+    </div>
+    <div class="mhistory">${past.map((x) => matchChip(G, x)).join("")}</div>
+  </div>`;
+}
+function drawSteps(G, g, { btn, act, B, st, n1, n2 }) {
+  const tally = `${esc(n1)} <b>${st.wins.team1}</b> – <b>${st.wins.team2}</b> ${esc(n2)}`;
+  const open = E.openMatches(g);
+  const free = canDrawMore(G, g, open) ? E.miniSlots(G.S, g).filter((t) => !open.some((m) => (m.table || null) === t)) : [];
+  let status, panel = "";
+  if (!(g.pics || []).length) {
+    status = `<b>${esc(g.name)}</b> needs a picture to describe — draw one first.`;
+    btn("✏️ Draw a picture", "drawer", { tab: "minis" }, "primary", "Space");
+    btn("↩ Games list", "act", act("miniClose"));
+    return { status, panel, buttons: B };
+  }
+  // The picture(s) to describe, private to the host.
+  const pics = [...new Set(open.map((m) => m.pic).filter(Boolean))];
+  const describe = pics.length ? `<div class="describe">${pics.map((p) => `<div class="desc-pic"><small>Describe this picture 🤫</small>${drawingSvg(G, p, "host")}</div>`).join("")}</div>` : "";
+  const rows = open.map((m) => {
+    const it = pickOf(G.S, m.id);
+    const a = sideName(G, m, "team1"), b = sideName(G, m, "team2");
+    const where = m.table ? `<b class="tr-t">📍 ${esc(m.table)}</b>` : "";
+    if (itemSpinning(G, it)) return `<div class="trow" data-key="tr-${esc(m.id)}">${where}<span class="hspins">🎲 ${m.p1 ? spin(namesOn(G, "team1"), a, m.p1.at, "hspin") : esc(a)} <i>vs</i> ${m.p2 ? spin(namesOn(G, "team2"), b, m.p2.at, "hspin") : esc(b)}</span></div>`;
+    const mark = (team) => (m.done && m.done[team] ? "✓" : "✏️");
+    const anyDone = m.done && (m.done.team1 || m.done.team2);
+    return `<div class="trow" data-key="tr-${esc(m.id)}">${where}
+      <span class="tr-who">${mark("team1")} ${esc(a)} <i>vs</i> ${mark("team2")} ${esc(b)}</span>
+      <span class="tr-btns"><button class="btn ghost sm" data-action="mini-draw-judge" data-p="${J({ id: g.id, matchId: m.id })}" title="Judge with whatever has been sent (a missing drawing loses)">⏭ Judge now</button>
+      ${anyDone ? "" : `<button class="btn ghost sm" ${actAttr("miniRepick", { id: g.id, matchId: m.id })} title="Draw two different players">🎲</button>`}</span></div>`;
+  }).join("");
+  const last = g.matches.filter((m) => m.winner && m.scores).slice(-3).reverse();
+  const results = last.length ? `<div class="mpanel wrap"><span class="muted">Website's verdict:</span>${last.map((m) => {
+    const w = m.winner === "tie" ? null : m.winner, l = w ? E.otherTeam(w) : null;
+    return `<span class="mchip ${w || "tie"}">${m.table ? `📍${esc(m.table)} ` : ""}${w ? `🏆 <b>${esc(sideName(G, m, w))}</b> ${m.scores[w] ?? "—"}% · ${esc(sideName(G, m, l))} ${m.scores[l] ?? "—"}%` : `🤝 ${esc(sideName(G, m, "team1"))} & ${esc(sideName(G, m, "team2"))}`}</span>`;
+  }).join("")}</div>` : "";
+  if (open.length) {
+    status = `<b>${esc(g.name)}</b> · ${open.length > 1 ? `${open.length} tables drawing` : "drawing"} · ${tally} <span class="muted">— the website judges as soon as both drawings are in</span>`;
+    panel = `${describe}<div class="trows">${rows}</div>${results}`;
+  } else {
+    status = `<b>${esc(g.name)}</b> · ${tally}`;
+    panel = results + (E.minisTables(G.S).length ? "" : tablePicker(G, g, null));
+  }
+  const slots = E.miniSlots(G.S, g).filter((t) => t !== null);
+  if (free.length) btn(open.length ? `🎲 Draw for ${free.length === 1 && free[0] ? free[0] : `${free.length} free tables`}` : slots.length > 1 ? `🎲 Draw for all ${slots.length} tables` : "🎲 Who's drawing?", "act", act("miniNext", { id: g.id }), "primary", "Space");
+  btn("🏁 Finish game", "mini-finish-ask", { id: g.id }, free.length ? "ghost" : "primary", "");
+  btn("↩ Games list", "act", act("miniClose"));
+  return { status, panel, buttons: B };
+}
+// Players' phones: the drawer gets a full-screen drawing pad; nothing is sent until they
+// hold "Send". Everyone else sees who's drawing where, then the verdict.
+function drawPhone(G, g) {
+  const me = G.me;
+  const open = E.openMatches(g);
+  const mine = open.find((m) => (m.p1 && m.p1.id === G.deviceId) || (m.p2 && m.p2.id === G.deviceId));
+  if (mine) {
+    const team = mine.p1 && mine.p1.id === G.deviceId ? "team1" : "team2";
+    const it = pickOf(G.S, mine.id);
+    if (itemSpinning(G, it)) return `<div class="ph-note drawing">🎲 Drawing who's up…</div>`;
+    const rival = sideName(G, mine, E.otherTeam(team));
+    if (mine.done && mine.done[team]) return `<div class="youup big">✓ Drawing sent!<small>Waiting for ${esc(rival)}… then the website judges.</small></div>`;
+    const key = `sub-${mine.id}`;
+    return `<div class="drawfull" data-keep data-key="drawfull-${esc(mine.id)}">
+      <div class="df-top"><b>✏️ You vs ${esc(rival)}${mine.table ? ` · 📍 ${esc(mine.table)}` : ""}</b><span>Phone on your head — draw what Jaren describes!</span></div>
+      <div class="padbox"><canvas class="drawpad" data-pad="${esc(key)}"></canvas></div>
+      <div class="df-btns"><button class="btn ghost" data-action="pad-clear" data-pad="${esc(key)}">Start over</button>
+        <button class="btn primary holdbtn" data-hold="pad-submit" data-id="${esc(g.id)}" data-match="${esc(mine.id)}" data-team="${team}" data-pad="${esc(key)}"><span>Hold to send ✋</span></button></div>
+    </div>`;
+  }
+  // Not drawing: who's drawing where, then the latest verdicts.
+  const rows = open.map((m) => `<div class="ph-versus"><span class="team1">${esc(sideName(G, m, "team1"))}${m.done && m.done.team1 ? " ✓" : ""}</span><i>vs</i><span class="team2">${esc(sideName(G, m, "team2"))}${m.done && m.done.team2 ? " ✓" : ""}</span></div>${m.table ? `<span class="tabletag">📍 ${esc(m.table)}</span>` : ""}`).join("");
+  const last = g.matches.filter((m) => m.winner && m.scores).slice(-2).reverse();
+  const verdict = last.map((m) => {
+    const w = m.winner === "tie" ? null : m.winner;
+    const myResult = (m.p1 && m.p1.id === G.deviceId) || (m.p2 && m.p2.id === G.deviceId);
+    const iWon = myResult && w && ((w === "team1" && m.p1 && m.p1.id === G.deviceId) || (w === "team2" && m.p2 && m.p2.id === G.deviceId));
+    const title = !w ? "🤝 It's a tie!" : myResult ? (iWon ? "🏆 You won!" : "😬 You lost this one") : `🏆 ${esc(sideName(G, m, w))} won`;
+    return `<div class="ph-card verdict"><b>${title}</b><small>${w ? `${esc(sideName(G, m, w))} ${m.scores[w] ?? "—"}% · ${esc(sideName(G, m, E.otherTeam(w)))} ${m.scores[E.otherTeam(w)] ?? "—"}% match` : ""} — see the big screen!</small></div>`;
+  }).join("");
+  const st = E.miniStanding(g);
+  return `${rows || `<div class="ph-note">Get ready — the next drawers are about to be picked! 🎲</div>`}${verdict}
+    <div class="ph-tally"><span class="team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span><span>–</span><span class="team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span></div>`;
 }

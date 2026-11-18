@@ -70,6 +70,22 @@ and the points go straight onto the team's score and carry into Jeopardy.
 - **Mid-game bonus round:** Settings → Jump to → **Mini games** pauses Jeopardy; the gold
   button brings you back to the same board.
 
+### ✏️ Blind Drawing
+Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing" as a game's type).
+1. **Draw the pictures:** under the game, tap **+ Draw a picture**, draw it with your finger
+   and **Save picture**. Players never see these. Add a few — each round uses the next one.
+2. **Play:** the drawers' phones turn into a full-screen drawing pad. They put the phone on
+   their head and draw while you describe the picture (it's shown privately on your screen).
+   Nothing is sent while they draw, so nothing lags; when they're done they **hold Send**
+   (a quick tap won't send it by accident).
+3. **The website judges:** as soon as both drawings are in, it compares the **shapes** —
+   position, size, rotation and mirror image don't matter, so a good drawing that's off to
+   one side, tiny or upside down still wins, and a few stray lines are forgiven. The big
+   screen shows **the picture, the winner and the loser** side by side with a % match.
+   **⏭ Judge now** judges straight away if someone never sends (a missing drawing loses).
+- Only players with a phone are picked to draw. With tables set up, every table draws at
+  once (the same picture, so you only describe it once).
+
 ### Team names
 Teams start as **Husbands** and **Wives**. Until Jeopardy starts, anyone on a team can tap
 **✏️ Rename our team** on their phone. You can always rename teams in Settings → Game, and
@@ -280,6 +296,7 @@ Static site, no build step. Firebase and SheetJS load from CDNs.
 | `js/data.js` | Firestore I/O; runs engine actions inside transactions; server-clock sync |
 | `js/app.js` | Routing, live subscriptions, rendering, actions, automations, sounds, typed answers |
 | `js/summons.js` | Christmas summon lines for mini games played at several tables |
+| `js/draw.js` | Blind Drawing: drawing pad, storage format and the shape judge |
 | `js/ui/*.js` | Screens: `stage` (show display), `host`, `dock` (next-step logic), `remote`, `player`, `join`, `minis` (all mini-game screens), `team` (phone renaming) |
 | `js/bank.js` | Question library logic: paste parser, checks, search, repeats, export |
 | `js/libctl.js` + `js/ui/library.js` | Question library screen |
@@ -297,6 +314,8 @@ node tests/e2e-minis.js [shots]   # Husbands vs Wives night: mini games → Jeop
                                   # a phone-free night, and upgrading an older saved game
 node tests/e2e-library.js [shots] # question library: paste, edit, search, lock, load into the game
 node tests/e2e-extras.js [shots]  # test game, mini-game tables, multiple-choice Final
+node tests/draw.test.mjs          # Blind Drawing: the shape judge and its rules
+node tests/e2e-draw.js [shots]    # Blind Drawing: host draws, two phones draw blind, verdict
 ```
 
 Firestore layout: `state/game` (the whole game, incl. the sweater vote), `state/spoken` (typed answer),

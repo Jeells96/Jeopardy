@@ -187,6 +187,20 @@ export async function newGameFull() {
   await writeSpoken({ key: "" }).catch(() => {});
 }
 
+// ---------------- blind drawing ----------------
+// Drawings live in their own documents (state/drawpic-* = the host's pictures,
+// state/drawsub-* = what players drew), so the game document stays small and fast.
+export const saveDrawing = (docId, data) => setDoc(doc(db, "state", docId), { ...data, at: Date.now() });
+const drawCache = new Map();
+export async function loadDrawing(docId, fresh = false) {
+  if (!fresh && drawCache.has(docId)) return drawCache.get(docId);
+  const snap = await getDoc(doc(db, "state", docId));
+  const v = snap.exists() ? snap.data() : null;
+  if (v) drawCache.set(docId, v);
+  return v;
+}
+export const cachedDrawing = (docId) => drawCache.get(docId) || null;
+
 // ---------------- question library ----------------
 // Each set is one document: state/set-<id>. (The `state` collection is already allowed by
 // the Firestore rules, so the library needs no rule changes.)

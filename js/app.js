@@ -9,6 +9,8 @@ import { renderJoin, renderGate, renderLoading, renderBoardPage } from "./ui/joi
 import { hostSteps } from "./ui/dock.js";
 import { PRESETS, itemSummon } from "./ui/minis.js";
 import * as Sounds from "./sounds.js";
+import * as Dr from "./draw.js";
+import { subDocId } from "./ui/minis.js";
 import { renderLibrary } from "./ui/library.js";
 import { findQ } from "./ui/stage.js";
 import { initLibrary, libClick, libChange, libInput, splitOldDoubleJeopardy } from "./libctl.js";
@@ -72,6 +74,7 @@ function doRender() {
   morph(appEl, html);
   autosizeAll();
   mountQR();
+  Dr.mountPads();
   tick();
 }
 
@@ -266,6 +269,7 @@ function automations() {
   }
   if (S.phase === "final" && S.final.stage === "clue" && now >= S.final.deadline) fire("fl" + S.final.deadline, "finalLock", {});
   if (S.phase === "over" && S.vote && S.vote.stage === "open" && E.voteProgress(S, G.P).all) fire("vr" + S.vote.openedAt, "voteReveal", {});
+  drawAutomations(S);
 }
 
 // ---------------- sounds ----------------
@@ -372,6 +376,38 @@ async function submitField(input, save) {
 // ---------------- action dispatcher ----------------
 const params = (el) => { try { return el.dataset.p ? JSON.parse(el.dataset.p) : {}; } catch { return {}; } };
 
+// ---------------- blind drawing ----------------
+// The website judges a matchup once both drawings are in (on the host's screens only).
+const judging = new Set();
+async function judgeDrawMatch(gid, mid) {
+  if (judging.has(mid)) return;
+  judging.add(mid);
+  try {
+    const g = E.miniById(G.S, gid);
+    const m = g && g.matches.find((x) => x.id === mid);
+    if (!m || m.winner) return;
+    const ref = await D.loadDrawing(m.pic);
+    const scores = {};
+    for (const t of E.TEAMS) {
+      if (!(m.done && m.done[t])) { scores[t] = null; continue; }
+      const sub = await D.loadDrawing(subDocId(m.id, t), true);
+      await new Promise((r) => setTimeout(r, 0)); // keep the screen responsive
+      scores[t] = sub && ref ? Dr.matchPercent(ref.strokes, sub.strokes) : null;
+    }
+    await D.act("miniDrawJudge", { id: gid, matchId: mid, scores });
+  } catch (e) { console.warn("judge", e); }
+  finally { setTimeout(() => judging.delete(mid), 3000); }
+}
+function drawAutomations(S) {
+  const M = E.minisOf(S);
+  const g = M.current ? E.miniById(S, M.current) : null;
+  if (S.phase !== "minis" || !g || g.mode !== "draw" || g.status !== "active") return;
+  for (const m of E.openMatches(g)) {
+    const need = E.TEAMS.filter((t) => (t === "team1" ? m.p1 : m.p2));
+    if (need.length && need.every((t) => m.done && m.done[t])) judgeDrawMatch(g.id, m.id);
+  }
+}
+
 async function handle(a, p, el) {
   const S = G.S;
   switch (a) {
@@ -395,6 +431,34 @@ async function handle(a, p, el) {
     }
     case "drawer": G.ui.drawer = true; G.ui.drawerTab = p.tab || "game"; return render();
     case "drawer-close": G.ui.drawer = false; releaseFocus(); return render();
+    case "pad-clear": Dr.clearPad(el.dataset.pad); return;
+    case "draw-pic-new": G.ui.modal = { type: "miniDrawPic", id: el.dataset.id }; render(); return;
+    case "draw-pic-save": {
+      const g = E.miniById(G.S, el.dataset.id);
+      const key = "ref-" + el.dataset.id;
+      const strokes = Dr.padStrokes(key);
+      if (!g || Dr.inkCount(strokes) < 4) return toast("Draw the picture first.", "bad");
+      const docId = "drawpic-" + Math.random().toString(36).slice(2, 10);
+      await D.saveDrawing(docId, { kind: "drawpic", strokes });
+      await D.act("miniUpdate", { id: g.id, patch: { pics: [...(g.pics || []), docId] } });
+      Dr.clearPad(key);
+      G.ui.modal = null;
+      render();
+      return toast("Picture saved ✓ — players will never see it", "good");
+    }
+    case "pad-submit": {
+      const d = el.dataset;
+      const strokes = Dr.padStrokes(d.pad);
+      if (Dr.inkCount(strokes) < 4) return toast("Draw something first!", "bad");
+      try {
+        await D.saveDrawing(subDocId(d.match, d.team), { kind: "drawsub", matchId: d.match, team: d.team, by: G.me ? G.me.name : "", strokes });
+        await D.act("miniDrawSubmitted", { id: d.id, matchId: d.match, team: d.team });
+        Dr.clearPad(d.pad);
+        vibrate([40, 40, 40]);
+        return toast("Drawing sent ✓", "good");
+      } catch (err) { return toast("Couldn't send — try again. " + (err.message || ""), "bad"); }
+    }
+    case "mini-draw-judge": return judgeDrawMatch(p.id, p.matchId);
     case "mini-row-edit":
       G.ui.miniEdit = { ...(G.ui.miniEdit || {}), [el.dataset.id]: !(G.ui.miniEdit || {})[el.dataset.id] };
       return render();
@@ -667,6 +731,8 @@ window.addEventListener("offline", () => toast("You're offline — reconnecting�
 window.addEventListener("online", () => toast("Back online ✓", "good"));
 
 function boot() {
+  G.render = render;
+  Dr.initHoldButtons((action, el) => handle(action, {}, el).catch((err) => toast(err.message || String(err), "bad")));
   G.me = D.getLocalIdentity();
   G.soundOn = Sounds.initFromPref();
   render();

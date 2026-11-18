@@ -611,6 +611,8 @@ function blankProgress() {
 
 function cleanMini(src) {
   const type = src.type === "best" ? "best" : "h2h";
+  // Blind drawing is a head-to-head game whose winner is judged from the drawings.
+  const mode = type === "h2h" && (src.type === "draw" || src.mode === "draw") ? "draw" : "normal";
   const pts = Math.round(Number(src.points));
   return {
     name: String(src.name == null ? "" : src.name).replace(/\s+/g, " ").trim().slice(0, 40) || "Mini game",
@@ -620,7 +622,10 @@ function cleanMini(src) {
     better: src.better === "low" ? "low" : "high",                     // best: highest or lowest score wins
     unit: String(src.unit == null ? "" : src.unit).trim().slice(0, 16),
     desc: String(src.desc == null ? "" : src.desc).trim().slice(0, 240),
-    table: String(src.table == null ? "" : src.table).trim().slice(0, 24), // "" = any table (drawn each time)
+    table: String(src.table == null ? "" : src.table).trim().slice(0, 24), // "" = all tables at once
+    mode,
+    // Blind drawing: the host's pictures (ids of state/drawpic-* docs), used in turn.
+    pics: mode === "draw" && Array.isArray(src.pics) ? src.pics.filter((x) => typeof x === "string" && x).slice(0, 40) : [],
   };
 }
 
@@ -760,8 +765,8 @@ export function miniUpdate(s, { id, patch }, ctx) {
   const g = miniById(s, id);
   if (!g || !patch) return null;
   const started = g.status !== "pending" || g.matches.length > 0 || g.entries.length > 0;
-  const next = cleanMini({ ...g, ...patch });
-  if (started && (next.type !== g.type || next.award !== g.award)) return fail("That game has already started — reset it before changing how it's played.");
+  const next = cleanMini({ ...g, ...patch, ...(patch.type === "h2h" ? { mode: "normal" } : {}) });
+  if (started && (next.type !== g.type || next.award !== g.award || next.mode !== (g.mode || "normal"))) return fail("That game has already started — reset it before changing how it's played.");
   return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, ...next })))).done();
 }
 export function miniRemove(s, { id }, ctx) {
@@ -834,6 +839,12 @@ export function miniClose(s, _p, ctx) {
 export function miniNext(s, { id, table }, ctx) {
   const g = miniById(s, id);
   if (!g || g.status !== "active") return null;
+  let pic = null;
+  if (g.mode === "draw") {
+    if (!(g.pics || []).length) return fail("Draw at least one picture first: ⚙ Settings → Mini games → this game → + Draw a picture.");
+    pic = g.pics[(g.picNext || 0) % g.pics.length];
+    ctx = { ...ctx, players: (ctx.players || []).filter((p) => !p.manual) }; // drawers need a phone
+  }
   const slots = slotsFor(s, g);
   const sp = summonPicker(s, ctx);
   const withTable = (slot) => (slot === null ? {} : { table: slot, summon: sp.next() });
@@ -851,13 +862,13 @@ export function miniNext(s, { id, table }, ctx) {
       const short = (!p1 && teamPlayers(ctx, "team1").length) || (!p2 && teamPlayers(ctx, "team2").length);
       if (added.length && (short || !anyone)) break; // not enough free players for another table
       if (short && open.length) break;
-      added.push({ id: rid(), winner: null, at: ctx.now, p1, p2, ...withTable(slot) });
+      added.push({ id: rid(), winner: null, at: ctx.now, p1, p2, ...withTable(slot), ...(pic ? { pic, done: {} } : {}) });
       if (p1) busy.push(p1.id);
       if (p2) busy.push(p2.id);
       if (!anyone) break;
     }
     if (!added.length) return fail("Everyone is already playing at a table.");
-    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, ...added] })), sp.extra()))
+    return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: [...x.matches, ...added], ...(pic ? { picNext: (x.picNext || 0) + 1 } : {}) })), sp.extra()))
       .sfx(added.some((m) => m.p1 || m.p2) ? "pick" : "buzz").done();
   }
   const turns = turnsOf(g);
@@ -889,6 +900,8 @@ export function miniRepick(s, { id, team, matchId, turnId }, ctx) {
   if (g.type === "h2h") {
     const m = findOpen(g, matchId);
     if (!m) return null;
+    if (m.done && (m.done.team1 || m.done.team2)) return fail("A drawing has already been sent — use “Judge now” instead.");
+    if (g.mode === "draw") ctx = { ...ctx, players: (ctx.players || []).filter((p) => !p.manual) };
     const busy = busyIn(openMatches(g).filter((x) => x.id !== m.id));
     const next = { ...m };
     for (const t of TEAMS.includes(team) ? [team] : TEAMS) {
@@ -960,6 +973,32 @@ export function miniMatch(s, { id, winner, matchId }, ctx) {
   b.field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, played, matches: x.matches.map((y) => (y.id === m.id ? { ...y, winner } : y)) }))));
   return b.sfx(winner === "tie" ? "buzz" : "correct").done();
 }
+// ---------- blind drawing ----------
+// A drawer's phone sent its drawing (the drawing itself is saved in its own document).
+export function miniDrawSubmitted(s, { id, matchId, team }, ctx) {
+  const g = miniById(s, id);
+  if (!g || g.mode !== "draw" || !TEAMS.includes(team)) return null;
+  const m = findOpen(g, matchId);
+  if (!m || (m.done && m.done[team])) return null;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.map((y) => (y.id === m.id ? { ...y, done: { ...(y.done || {}), [team]: true } } : y)) })))).sfx("buzz").done();
+}
+// The website's verdict: scores are 0–100 shape matches (null = no drawing). Closest wins.
+export function miniDrawJudge(s, { id, matchId, scores = {} }, ctx) {
+  const g = miniById(s, id);
+  if (!g || g.mode !== "draw") return null;
+  const m = findOpen(g, matchId);
+  if (!m) return null;
+  const num = (v) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.round(Number(v)) : null);
+  const sc = { team1: num(scores.team1), team2: num(scores.team2) };
+  const a = sc.team1 == null ? -1 : sc.team1, b = sc.team2 == null ? -1 : sc.team2;
+  const winner = a === b ? "tie" : a > b ? "team1" : "team2";
+  const res = miniMatch(s, { id, matchId: m.id, winner }, ctx);
+  if (!res || res.error) return res;
+  const minis = res.set.minis;
+  res.set.minis = { ...minis, list: minis.list.map((x) => (x.id === id ? { ...x, matches: x.matches.map((y) => (y.id === m.id ? { ...y, scores: sc, judged: ctx.now } : y)) } : x)) };
+  return res;
+}
+
 export function miniMatchRemove(s, { id, matchId }, ctx) {
   const g = miniById(s, id);
   const m = g && g.matches.find((x) => x.id === matchId);
@@ -1088,7 +1127,7 @@ export const ACTIONS = {
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
-  miniSetTable, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
+  miniSetTable, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
   miniTables, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };
