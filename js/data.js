@@ -66,6 +66,11 @@ export const questionsCache = () => QCACHE;
 export function subscribeState(cb, err) {
   return onSnapshot(stateRef, (s) => cb(s.exists() ? s.data({ serverTimestamps: "estimate" }) : null), err);
 }
+// Is this screen connected to the game? (Firestore says a snapshot is "from cache" while
+// the connection is down.)
+export function subscribeConnection(cb) {
+  return onSnapshot(stateRef, { includeMetadataChanges: true }, (s) => cb(!s.metadata.fromCache), () => {});
+}
 export function subscribeSpoken(cb, err) {
   return onSnapshot(spokenRef, (s) => cb(s.exists() ? s.data() : null), err);
 }

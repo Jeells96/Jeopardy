@@ -129,8 +129,16 @@ const NAMES = ["Grandma Jo", "Uncle Bartholomew", "Aunt Marguerite-Rose", "Cousi
   await check(board, "board: someone buzzed in", true);
   await check(phone, "phone: you're up", false);
 
+  await host.evaluate(async () => { const D = await import("/js/data.js"); await D.act("judge", { result: "correct" }); await D.act("closeClue"); await D.act("endGame"); });
+
+  console.log("Final scores and the night's awards");
+  await until(board, () => document.querySelectorAll(".awards .award").length >= 2);
+  await sleep(3500); // the awards appear one after another
+  await check(board, "board: final scores with the night's awards", true);
+  await check(tv, "1080p TV: final scores with the night's awards", true);
+  await check(phone, "phone: your night + the awards", false);
   console.log("Ugly sweater vote");
-  await host.evaluate(async () => { const D = await import("/js/data.js"); await D.act("judge", { result: "correct" }); await D.act("closeClue"); await D.act("endGame"); await D.act("voteSetup"); });
+  await host.evaluate(async () => { const D = await import("/js/data.js"); await D.act("voteSetup"); });
   await until(host, () => window.__G.S.vote && window.__G.S.vote.stage === "setup");
   await sleep(300);
   await check(host, "host: tick 35 sweater wearers", false);

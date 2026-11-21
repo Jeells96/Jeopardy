@@ -10,12 +10,15 @@ export function renderJoin(G) {
   const name = (G.ui.joinName || "").trim();
   const team = G.ui.joinTeam;
   const ok = name.length > 0 && !!team;
+  // Two "Mike"s would be confusing on the board ("Mike buzzed in") — suggest an initial.
+  const taken = name ? G.P.find((p) => p.id !== G.deviceId && String(p.name || "").trim().toLowerCase() === name.toLowerCase()) : null;
   return `<div class="join">
     <div class="join-card">
       ${logo}
       ${G.ui.kicked ? `<div class="note">Your name was removed from the game — enter your name to join again.</div>` : ""}
       <label class="join-label" for="jn-name">Your name</label>
       <input id="jn-name" class="join-input" maxlength="20" autocomplete="nickname" placeholder="e.g. Grandma Jo" value="${esc(G.ui.joinName || "")}" data-input="join-name" data-sticky>
+      ${taken ? `<div class="note dupnote">🎅 Santa already has someone called <b>${esc(taken.name)}</b> on his list (${esc(tn(G, taken.team))}). Add your last initial (like “${esc(taken.name)} B.”) so the elves can tell you apart.</div>` : ""}
       <div class="join-label">Pick your team</div>
       <div class="teampick">${E.TEAMS.map((t) => {
         const n = G.P.filter((p) => p.team === t).length;

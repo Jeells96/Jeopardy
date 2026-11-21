@@ -92,7 +92,7 @@ export function query(col, ...constraints) { return new Query(col, constraints);
 // ---------------- snapshots ----------------
 function docSnap(ref, entry) {
   return {
-    id: ref.id, ref, metadata: { hasPendingWrites: false, fromCache: false },
+    id: ref.id, ref, metadata: { hasPendingWrites: false, fromCache: !connected },
     exists: () => !!entry,
     data: () => (entry ? decode(JSON.parse(JSON.stringify(entry.data))) : undefined),
     get: (f) => (entry ? f.split(".").reduce((o, k) => (o == null ? o : o[k]), decode(entry.data)) : undefined),
@@ -139,12 +139,19 @@ function querySnap(rows) {
 const cache = new Map(); // path -> {path, data, version}
 const listeners = new Set();
 let ready = false;
+let connected = false; // like Firestore: snapshots say fromCache while the connection is down
 const es = new EventSource(API + "stream");
 es.addEventListener("init", (ev) => {
   cache.clear();
   for (const e of JSON.parse(ev.data)) cache.set(e.path, e);
   ready = true;
+  connected = true;
   for (const l of listeners) fire(l);
+});
+es.addEventListener("error", () => {
+  if (!connected) return;
+  connected = false;
+  for (const l of listeners) if (l.meta) fire(l); // includeMetadataChanges listeners hear about it
 });
 es.addEventListener("change", (ev) => {
   const changes = JSON.parse(ev.data);
@@ -167,10 +174,13 @@ function fire(l) {
     else l.next(querySnap(runQuery(l.colPath, l.constraints, [...cache.values()])));
   } catch (e) { console.error(e); }
 }
-export function onSnapshot(target, next, error) {
+export function onSnapshot(target, ...args) {
+  const opts = args[0] && typeof args[0] === "object" && typeof args[0] !== "function" ? args.shift() : {};
+  const [next, error] = args;
+  const meta = !!opts.includeMetadataChanges;
   const l = target.type === "document"
-    ? { kind: "doc", ref: target, path: target.path, next, error, active: true }
-    : { kind: "query", colPath: target.type === "query" ? target._col.path : target.path, constraints: target.type === "query" ? target._constraints : [], next, error, active: true };
+    ? { kind: "doc", ref: target, path: target.path, next, error, meta, active: true }
+    : { kind: "query", colPath: target.type === "query" ? target._col.path : target.path, constraints: target.type === "query" ? target._constraints : [], next, error, meta, active: true };
   listeners.add(l);
   if (ready) queueMicrotask(() => fire(l));
   return () => { l.active = false; listeners.delete(l); };

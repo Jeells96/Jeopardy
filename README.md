@@ -22,6 +22,8 @@ laptop) with the answer key and every control. Finish with an **ugly sweater vot
    board once (it shows **👆 Tap to start sound** until you do).
 4. **Players** scan the QR code on the lobby screen, type their name, pick **Husbands**
    or **Wives** and tap **Join & turn on sound** (one tap joins and starts their phone's sound). (A team can rename itself from a phone.)
+   If someone types a name that's already playing (two Mikes), their phone says "🎅 Santa
+   already has someone called Mike on his list" and suggests adding a last initial.
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
    mini games first if you've set any up, then Jeopardy.
 
@@ -124,7 +126,11 @@ switch off phone renaming there too.
 - One Jeopardy round ($100–$500) + **Final Jeopardy**. (There's no Double Jeopardy round —
   older sets that had one keep those questions in a separate "– extra categories" set.)
 - **Board control:** the team that answered correctly picks next (shown on the board and
-  phones).
+  phones). While a team picks, **every phone shows what's left on the board** ("🎁 Still under
+  the tree — 12 questions"), so nobody has to squint at the TV to choose (Daily Doubles stay
+  hidden, of course).
+- **Scores float up** ("+$200" / "−$100") from the podiums and from every phone's score
+  chips the moment they change, in time with the sound.
 - Questions zoom in full-screen; categories, values and podium scores styled like the show.
 
 **Buzzing**
@@ -143,11 +149,17 @@ switch off phone renaming there too.
 - The buzzer locks for everyone once it's decided. Each team's phones show a
   Christmas pun — "we're counting on you" for the buzzer's team, a playful roast for the
   other team — and every member of a team sees the same one.
-- **Rebound:** after a miss the other team can buzz in right away (can be turned off).
+- **Rebound:** after a miss the other team can buzz in right away (can be turned off). Every
+  phone says what happened: "🥶 Brrr — not quite! (−$200)" on the phone that missed,
+  "🥶 Amy missed" for her teammates, and "🎁 Amy missed — your turn to steal it!" for the
+  other team.
 - Optional **buzz-in window** (nobody buzzes in time → answer revealed) and optional
   **auto-open** of buzzers after a reading delay.
 - Phones buzz on touch-down for speed, vibrate when buzzers open / when you're up, and
   stay awake during the game.
+- **Lost connection?** A screen that can't reach the game shows "❄️ Lost the signal to the
+  North Pole — reconnecting…" (phones add that buzzes won't count until they're back), and
+  "🎄 Back online" when it is, so nobody buzzes into the void without knowing.
 
 **Answering**
 - **Typed answers:** whoever wins the buzz gets a text box, already open and ready to
@@ -156,6 +168,9 @@ switch off phone renaming there too.
 - **Multiple choice:** every phone shows the options along with the question (nobody has to
   look at the TV). Whoever buzzes in taps an option and it's scored automatically. A wrong
   option is crossed off for the rebound team.
+- **The result on every phone:** "🎅 Ho ho ho — you got it! +$200 for your team" on the phone
+  that answered (with a happy buzz — or a sad one for a miss), "🎄 Amy got it for your team!"
+  for teammates, and "🥶 Amy got it — Wives +$200" for the other team, plus the answer.
 - **Answer timer** with show-style countdown lights. Out of time counts as wrong: the
   points come off automatically (just the time's-up sound), and the other team gets
   **30 seconds to steal** (Settings → Game → Steal time). If nobody buzzes in, the answer
@@ -190,6 +205,21 @@ switch off phone renaming there too.
   a removed player's phone is released and has to enter a name again to rejoin.
 - Keyboard: Space next step · C correct · W wrong · S skip · N nobody · P pause buzzers ·
   R show answer · U undo · M sound · F fullscreen · Esc close.
+
+**🌟 The North Pole Awards (on the final-scores screen)**
+- Under the winner, the board reveals the awards one after another, each on a gift tag with a
+  candy-cane stripe and a bow:
+  🧝 **Head Elf** (most right answers), 🦌 **Fastest Reindeer** (quickest winning buzz),
+  💰 **Christmas Bonus** (most money won, when that's not the Head Elf again),
+  🏆 **North Pole Champ** (most mini-game wins), 🎨 **Santa's Sketch Artist** (best Blind
+  Drawing), 🪨 **Naughty List** (a lump of coal for the most wrong or unanswered questions —
+  buzzing in and running out of time counts), and 🧶 **Ugliest Sweater** once
+  the vote is done. An award only appears if someone earned it (and not when more than three
+  people tie).
+- Every phone gets a **"📜 Your Nice List report"**: right answers, misses, money won for the
+  team, fastest buzz, mini-game wins and best drawing — then "🌟 You made the North Pole
+  Awards!" with a gold tag for each award that player won — plus the full list of awards.
+- It's all worked out from what happened, so **Undo** takes a result back out of the awards too.
 
 **🧶 Ugly sweater vote (after Jeopardy)**
 - On the final-scores screen tap **🧶 Ugly sweater vote**. You get the list of everyone —
@@ -374,6 +404,8 @@ node tests/e2e-draw.js [shots]    # Blind Drawing: everyone draws at once, verdi
 node tests/e2e-30.js [shots]      # 30 phones: fair buzzing on a slow network, sync, 30-person drawing
 node tests/e2e-crowd.js [shots]   # 34 players with long names: every screen that lists players fits
 node tests/e2e-update.js          # open screens reload onto a new deploy (not mid-typing)
+node tests/e2e-ux.js [shots]      # name-taken warning, board on phones, who missed / you got it,
+                                  # score pops, offline banner, the North Pole Awards
 # …and against a copy with versioned file URLs, the way the deploy builds it:
 #   cp -r . /tmp/site && (cd /tmp/site && tools/cache-bust.sh test1)
 #   PORT=8124 node /tmp/site/tests/server.js &  then  URL=http://localhost:8124/ node tests/e2e-update.js

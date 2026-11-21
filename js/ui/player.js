@@ -1,7 +1,7 @@
 // Player phone view.
 import { esc, money, cls, verb } from "./util.js";
 import * as E from "../engine.js";
-import { tn, findQ } from "./stage.js";
+import { tn, findQ, categories, winnerNames } from "./stage.js";
 import { playerMinis } from "./minis.js";
 import { renameBlock } from "./team.js";
 import { OWN, OPP, punText } from "../puns.js";
@@ -58,7 +58,7 @@ function body(G) {
   if (S.phase === "board") {
     const mine = S.control === me.team;
     return card(mine ? "🎁" : "👀", mine ? "Your team picks next!" : S.control ? `${esc(tn(G, S.control))} ${verb(tn(G, S.control), "picks", "pick")} next` : "Next question coming up…",
-      mine ? "Shout a category and amount to Jaren." : "Get that buzzer finger ready.");
+      mine ? "Shout a category and amount to Jaren." : "Get that buzzer finger ready.") + phoneBoard(G);
   }
   if (S.phase === "clue" && S.clue) return clueBody(G);
   if (S.phase === "final") return finalBody(G);
@@ -69,9 +69,59 @@ function body(G) {
     const won = !tie && (sc.team1 > sc.team2 ? "team1" : "team2") === me.team;
     const champ = tn(G, sc.team1 > sc.team2 ? "team1" : "team2");
     return card(tie ? "🤝" : won ? "🏆" : "🎄", tie ? "It's a tie!" : won ? "Your team wins!" : `${esc(champ)} ${verb(champ, "wins", "win")}!`,
-      won ? "Merry Christmas, champion! 🎉" : "Thanks for playing — Merry Christmas!");
+      won ? "Merry Christmas, champion! 🎉" : "Thanks for playing — Merry Christmas!") + myNight(G);
   }
   return card("⏳", "Hang tight…");
+}
+
+// What's left on the board, so the team can choose without looking at the TV.
+function phoneBoard(G) {
+  const cats = categories(G, G.S.round);
+  if (!cats.length) return "";
+  const rows = Math.max(...cats.map((c) => c.clues.length));
+  let cells = cats.map((c) => `<div class="r-cat">${esc(c.name)}</div>`).join("");
+  for (let r = 0; r < rows; r++) for (const c of cats) { const q = c.clues[r]; cells += !q || q.used ? `<div class="r-cell used"></div>` : `<div class="r-cell">${money(q.points)}</div>`; }
+  const left = E.cluesLeft(G.Q, G.S.round);
+  return `<div class="ph-board"><div class="lbl">🎁 Still under the tree — ${left} question${left === 1 ? "" : "s"}</div><div class="r-grid ph-grid" style="--cols:${cats.length}">${cells}</div></div>`;
+}
+
+// Game over: how this player did tonight, and the night's awards.
+function myNight(G) {
+  const me = E.playerStats(G.S)[G.deviceId];
+  const list = E.nightAwards(G.S);
+  const mine = list.filter((a) => a.winners.some((w) => w.pid === G.deviceId));
+  const stat = (ico, v, label) => `<div class="ns"><i>${ico}</i><b>${v}</b><small>${label}</small></div>`;
+  const stats = me ? [
+    stat("🎁", me.right, `right answer${me.right === 1 ? "" : "s"}`),
+    stat("❄️", me.wrong, me.wrong === 1 ? "miss" : "misses"),
+    me.earned > 0 ? stat("💰", "+" + money(me.earned), `for ${esc(tn(G, G.me.team))}`) : "",
+    me.fast != null ? stat("🦌", (me.fast / 1000).toFixed(2) + "s", "fastest buzz") : "",
+    me.minis > 0 ? stat("🏆", me.minis, `mini-game win${me.minis === 1 ? "" : "s"}`) : "",
+    me.drawing != null ? stat("🎨", me.drawing + "%", "best drawing") : "",
+  ].join("") : "";
+  // Awards this player won: one gold tag each (no run-on sentence).
+  const won = mine.length ? `<div class="night-won"><div class="nw-head">🌟 You made the North Pole Awards! 🌟</div>
+      ${mine.map((a) => `<div class="nw-tag aw-${a.id}"><span>${a.icon}</span><b>${esc(a.title)}</b></div>`).join("")}</div>` : "";
+  const night = `<div class="ph-card night" data-key="night">
+    <div class="lbl">📜 Your Nice List report</div>
+    ${stats ? `<div class="night-stats">${stats}</div>` : `<p class="muted">Santa didn't catch you buzzing in this year — there's always next Christmas! 🎅</p>`}
+    ${won}
+  </div>`;
+  if (!list.length) return night;
+  return night + `<div class="ph-card ph-awards" data-key="awards"><div class="lbl">🌟 The North Pole Awards</div>
+    ${list.map((a) => `<div class="${cls("pa-row", "aw-" + a.id, a.winners.some((w) => w.pid === G.deviceId) && "me")}"><span class="pa-ico">${a.icon}</span><span class="pa-txt"><small>${esc(a.title)}</small><b>${esc(winnerNames(G, a))}</b></span><span class="pa-det">${esc(a.detail)}</span></div>`).join("")}
+  </div>`;
+}
+
+// Who just missed (shown while the other team gets a go).
+function missedNote(G, c, q) {
+  const m = c.missed;
+  if (!m || !m.name) return "";
+  const lost = q && !c.dd ? ` (−${money(q.points)})` : "";
+  const out = m.why === "timeout";
+  if (m.deviceId === G.deviceId) return `<div class="ph-missed mine">${out ? "⏰ Out of time — Santa's sleigh waits for no one!" : "🥶 Brrr — not quite!"}${lost}</div>`;
+  if (m.team === G.me.team) return `<div class="ph-missed mine">${out ? `⏰ ${esc(m.name)} ran out of time` : `🥶 ${esc(m.name)} missed`}${lost}</div>`;
+  return `<div class="ph-missed theirs">🎁 ${esc(m.name)} ${out ? "ran out of time" : "missed"} — your turn to steal it!</div>`;
 }
 
 // The question (and, for multiple choice, the options — so nobody has to look at the TV).
@@ -126,15 +176,15 @@ function clueBody(G) {
     return `${clueBox(G, c, q)}<button class="buzz wait" data-action="buzz" aria-label="Buzzer not open yet"><span>WAIT</span><small>Buzzers open soon</small></button>`;
   }
   if (c.stage === "open") {
-    if (c.blocked.includes(me.team)) return `${clueBox(G, c, q)}<div class="ph-note">Your team already had a go — fingers crossed! 🤞</div>`;
+    if (c.blocked.includes(me.team)) return `${missedNote(G, c, q)}${clueBox(G, c, q)}<div class="ph-note">Your team already had a go — fingers crossed! 🤞</div>`;
     if (G.myBuzzKey === key) return `${clueBox(G, c, q)}<button class="buzz sent" disabled><span>BUZZED!</span><small>⚡ ${(G.myBuzzMs / 1000).toFixed(2)}s — checking who was fastest…</small></button>`;
     if (Date.now() < (G.earlyUntil || 0)) return `${clueBox(G, c, q)}<button class="buzz early" data-action="buzz" aria-label="Too soon"><span>TOO SOON!</span><small>Wait for it to turn green</small></button>`;
     // Not open yet (it opens at the same instant on every phone): pressing now is too soon.
     if (G.now() < c.openedAt) return `${clueBox(G, c, q)}<button class="buzz wait" data-action="buzz" aria-label="Buzzer not open yet"><span>WAIT…</span><small>Get ready</small></button>`;
     const until = E.buzzDeadline(c, S.settings);
-    return `${clueBox(G, c, q)}<button class="buzz live" data-action="buzz" aria-label="Buzz in"><span>BUZZ!</span>${c.blocked.length ? "<small>Steal it!</small>" : ""}</button>${until ? timer(until, until - c.openedAt) : ""}`;
+    return `${c.blocked.length ? missedNote(G, c, q) : ""}${clueBox(G, c, q)}<button class="buzz live" data-action="buzz" aria-label="Buzz in"><span>BUZZ!</span>${c.blocked.length ? "<small>Steal it!</small>" : ""}</button>${until ? timer(until, until - c.openedAt) : ""}`;
   }
-  if (c.stage === "paused") return `${clueBox(G, c, q)}<div class="ph-note">Buzzers paused…</div>`;
+  if (c.stage === "paused") return `${c.blocked.length ? missedNote(G, c, q) : ""}${clueBox(G, c, q)}<div class="ph-note">Buzzers paused…</div>`;
 
   if (c.stage === "answering" && c.locked) {
     const L = c.locked;
@@ -165,9 +215,20 @@ function clueBody(G) {
     let res = "";
     if (c.result === "correct") {
       const mine = c.winner === me.team;
-      res = `<div class="${cls("ph-result", mine ? "yes" : "no")}">${mine ? "🎉" : "😬"} ${esc(c.dd ? tn(G, c.winner) : c.locked ? c.locked.name : tn(G, c.winner))} got it! <b>+${money(c.dd ? c.dd.wager : q.points)}</b></div>`;
-    } else if (c.result === "nobody") res = `<div class="ph-result none">Nobody got it!</div>`;
-    else if (c.result === "wrong") res = `<div class="ph-result none">Daily Double missed!</div>`;
+      const amt = `<b>+${money(c.dd ? c.dd.wager : q.points)}</b>`;
+      const who = c.dd ? tn(G, c.winner) : c.locked ? c.locked.name : tn(G, c.winner);
+      const line = !c.dd && c.locked && c.locked.deviceId === G.deviceId ? `🎅 Ho ho ho — you got it! ${amt} for your team`
+        : c.dd && mine ? `🌟 Your team nailed the Daily Double! ${amt}`
+          : mine ? `🎄 ${esc(who)} got it for your team! ${amt}`
+            : `🥶 ${esc(who)} got it — ${esc(tn(G, c.winner))} ${amt}`;
+      res = `<div class="${cls("ph-result", mine ? "yes" : "no")}">${line}</div>`;
+    } else if (c.result === "nobody") {
+      const meMissed = c.missed && c.missed.deviceId === G.deviceId;
+      res = `<div class="ph-result none">${meMissed ? `🥶 Brrr — not quite (−${money(q.points)}). N` : "☃️ N"}obody got it!</div>`;
+    } else if (c.result === "wrong") {
+      const mine = c.dd && c.dd.team === me.team;
+      res = `<div class="ph-result none">${mine ? `🥶 Your team missed the Daily Double (−${money(c.dd.wager)})` : `☃️ ${esc(tn(G, c.dd ? c.dd.team : ""))} missed the Daily Double!`}</div>`;
+    }
     return `${res}${c.revealed ? `<div class="ph-answer"><small>Answer</small>${esc(q.answer)}</div>` : ""}${clueBox(G, c, q)}`;
   }
   return clueBox(G, c, q);

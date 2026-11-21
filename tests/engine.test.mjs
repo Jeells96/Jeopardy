@@ -387,5 +387,75 @@ console.log("engine tests");
   eq([a.state.clue.stage, a.state.clue.openedAt], ["open", pickedAt + 5000], "scheduled just before the timer ends, opening right when it hits zero");
 }
 
+// --- the night's awards: who answered, how fast, mini-game wins; Undo takes them back ---
+{
+  let st = fresh();
+  st = run(st, "startGame", { control: "team1" });
+  const play = (st, qid, me, ms, result) => {
+    st = run(st, "pickClue", { qid });
+    st = run(st, "openBuzzers");
+    st = buzz(st, me, ms);
+    st = run(st, "judge", { result });
+    return run(st, "closeClue");
+  };
+  st = run(st, "setSettings", { patch: { autoRebound: false } });
+  st = play(st, "a1", P1, 180, "correct");       // Ann +100, 0.18s
+  st = play(st, "a2", P2, 90, "wrong");          // Bob −200, 0.09s
+  let stats = E.playerStats(st.state);
+  eq([stats.p1.right, stats.p1.earned, stats.p1.fast], [1, 100, 180], "a right answer counts for the player who buzzed, with their reaction time");
+  eq([stats.p2.right, stats.p2.wrong, stats.p2.fast], [0, 1, 90], "a wrong one counts too (and the buzz still counts for speed)");
+  let aw = E.nightAwards(st.state);
+  const byId = (id) => aw.find((a) => a.id === id);
+  eq(byId("brain").winners.map((w) => w.name), ["Ann"], "Head Elf: most right answers");
+  eq([byId("fast").winners[0].name, byId("fast").detail], ["Bob", "0.09s buzz"], "Fastest Reindeer: the quickest winning buzz");
+  ok(!byId("earn"), "no Christmas Bonus when it's just the Head Elf again");
+  eq([byId("bold").icon, byId("bold").winners.map((w) => w.name), byId("bold").detail], ["🪨", ["Bob"], "1 wrong"], "Naughty List: a lump of coal for the most wrong answers");
+  ok(!byId("minis") && !byId("art"), "no mini-game awards without mini games");
+  // Undo takes the stat back with the points
+  const un = run(st, "undo");
+  eq(E.playerStats(un.state).p2, undefined, "Undo takes the player's result back with the points");
+  // a Daily Double is the team's: it doesn't count for one player
+  let d = run(st, "pickClue", { qid: "a3" });
+  d = run(d, "lockDDWager", { team: d.state.clue.dd.team, wager: 100 });
+  d = run(d, "judge", { result: "correct" });
+  eq(Object.values(E.playerStats(d.state)).reduce((n, r) => n + r.earned, 0), 100, "Daily Double winnings aren't credited to one player");
+  // missed: who just got it wrong is on the clue (for the phones)
+  let m = fresh();
+  m = run(m, "startGame", { control: "team1" });
+  m = run(m, "setSettings", { patch: { autoRebound: true } });
+  m = run(m, "pickClue", { qid: "a1" });
+  m = run(m, "openBuzzers");
+  m = buzz(m, P1);
+  m = run(m, "judge", { result: "wrong" });
+  eq([m.state.clue.stage, m.state.clue.missed && m.state.clue.missed.name, m.state.clue.missed && m.state.clue.missed.why], ["open", "Ann", "wrong"], "the rebound knows who just missed");
+  // award rules on a made-up night
+  const H = (pid, who, team, delta, ms, why) => ({ kind: "clue", pid, who, team, delta, ms, why: why || (delta > 0 ? "correct" : "wrong") });
+  const night = { history: [H("a", "Al", "team1", 100, 300), H("a", "Al", "team1", 100, 250), H("b", "Bea", "team2", 500, 210),
+    H("c", "Cat", "team2", -200, 400), H("c", "Cat", "team2", -300, 500, "time"), H("d", "Dot", "team1", -100, 900)] };
+  aw = E.nightAwards(night);
+  eq(aw.map((a) => [a.id, a.winners.map((x) => x.name).join("&"), a.detail]),
+    [["brain", "Al", "2 right answers"], ["fast", "Bea", "0.21s buzz"], ["earn", "Bea", "won $500"], ["bold", "Cat", "1 wrong · 1 unanswered"]],
+    "Head Elf, Fastest Reindeer, Christmas Bonus (someone else) and Naughty List");
+  const crowd = { history: ["a", "b", "c", "d"].map((p) => H(p, p, "team1", 100, 300)) };
+  ok(!E.nightAwards(crowd).some((a) => a.id === "brain" || a.id === "fast"), "no award when more than 3 people tie for it");
+  // mini games: head-to-head wins, best overall, drawing
+  let g = fresh();
+  g = run(g, "miniAdd", { game: { name: "Toss", type: "h2h", points: 100 } });
+  const gid = g.state.minis.list[0].id;
+  const players = [{ id: "p1", name: "Ann", team: "team1" }, { id: "p2", name: "Bob", team: "team2" }, { id: "p3", name: "Cy", team: "team1" }];
+  const run2 = (st, name, params = {}) => { const ch = E.ACTIONS[name](st.state, params, { now: (T += 50), questions: st.qs, players, rand: () => 0.1 }); return ch && !ch.error ? apply(st.state, st.qs, ch) : st; };
+  g = run2(g, "minisStart");
+  g = run2(g, "miniPlay", { id: gid });
+  g = run2(g, "miniNext", { id: gid });
+  const m1 = g.state.minis.list[0].matches[0];
+  g = run2(g, "miniMatch", { id: gid, winner: "team2" });
+  g = run2(g, "miniNext", { id: gid });
+  g = run2(g, "miniMatch", { id: gid, winner: "team2" });
+  stats = E.playerStats(g.state);
+  eq(stats.p2.minis, 2, `head-to-head wins count for the winner (${m1.p2 && m1.p2.name})`);
+  aw = E.nightAwards(g.state);
+  eq(aw.find((a) => a.id === "minis").winners.map((x) => x.name), ["Bob"], "North Pole Champ: most mini-game wins");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

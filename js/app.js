@@ -1,7 +1,7 @@
 // Christmas Jeopardy — app bootstrap, routing, rendering, actions and automations.
 import * as D from "./data.js";
 import * as E from "./engine.js";
-import { morph } from "./ui/util.js";
+import { morph, money } from "./ui/util.js";
 import { renderHost } from "./ui/host.js";
 import { renderRemote } from "./ui/remote.js";
 import { renderPlayer } from "./ui/player.js";
@@ -24,7 +24,7 @@ const G = {
   S: null, spoken: null, Q: [], P: [], B: [],
   me: null, deviceId: D.deviceId(),
   ui: { firstPick: "random", ddWager: "", ddTeam: null, drawer: false, drawerTab: "game", modal: null, joinName: "", joinTeam: null, renaming: false },
-  fsError: false, soundOn: false, myBuzzKey: null, lastPun: null, seenSelf: false, subs: {}, sentRounds: new Set(),
+  fsError: false, soundOn: false, myBuzzKey: null, lastPun: null, seenSelf: false, subs: {}, sentRounds: new Set(), online: true,
   now: () => D.serverNow(),
 };
 initLibrary(G);
@@ -149,7 +149,13 @@ function onState(prev, S) {
     if (mine && !wasMine) { vibrate([60, 40, 120]); focusAnswerBox(); }
     const ddMine = c.stage === "answering" && c.dd && c.dd.team === G.me.team && !(pc && pc.stage === "answering");
     if (ddMine) focusAnswerBox();
+    // Jaren just judged my answer: a happy buzz, or a sad one.
+    const tapped = (findQ(G, c.id) || {}).type === "mcq"; // (a multiple-choice tap already buzzed)
+    const judged = !tapped && pc && pc.id === c.id && pc.stage === "answering" && pc.locked && pc.locked.deviceId === G.deviceId && c.stage !== "answering";
+    if (judged && c.result === "correct") vibrate([50, 50, 50, 50, 140]);
+    else if (judged && c.missed && c.missed.deviceId === G.deviceId) vibrate(320);
   }
+  scorePops(S);
   miniPickEffect(S);
   if (prev && S && G.me && isPlayerRoute()) {
     const was = E.teamName(prev, G.me.team), now = E.teamName(S, G.me.team);
@@ -159,6 +165,61 @@ function onState(prev, S) {
   soundEffects(S);
 }
 
+
+// Score changes float up from the scores ("+$200"), at the same moment as the sound.
+let popScores = null, popGame = null;
+function scorePops(S) {
+  if (!S || !S.scores) return;
+  const prev = popScores;
+  popScores = { ...S.scores };
+  if (!prev || popGame !== S.gameId) { popGame = S.gameId; return; } // first look, or a new game
+  const recent = S.sfx && G.now() - S.sfx.at < 2000;
+  const due = recent ? Math.max(0, S.sfx.at + SOUND_LEAD_MS - G.now()) : 0;
+  for (const t of E.TEAMS) {
+    const d = (S.scores[t] || 0) - (prev[t] || 0);
+    if (d) setTimeout(() => popScore(t, d), due + 30);
+  }
+}
+function popScore(t, d) {
+  for (const el of document.querySelectorAll(`.podium.${t} .pscore, .phs.${t} b, .r-score.${t} b, .os.${t} b`)) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || r.bottom < 0 || r.top > innerHeight) continue;
+    const n = document.createElement("div");
+    n.className = `spop ${d > 0 ? "up" : "down"}${el.closest(".podium, .os") ? " big" : ""}`;
+    n.textContent = (d > 0 ? "+" : "−") + money(Math.abs(d));
+    n.style.left = r.left + r.width / 2 + "px";
+    n.style.top = r.top + "px";
+    document.body.appendChild(n);
+    setTimeout(() => n.remove(), 1900);
+  }
+}
+
+// Connection: a banner while this screen can't reach the game (so nobody buzzes into the void).
+let netTimer = 0, netShown = false;
+function netState() {
+  const up = navigator.onLine !== false && G.dbUp !== false;
+  if (up === G.online) return;
+  G.online = up;
+  clearTimeout(netTimer);
+  if (!up) netTimer = setTimeout(() => showNet(false), 1500); // ignore a blip
+  else { if (netShown) showNet(true); D.syncClock(); }
+}
+function showNet(back) {
+  let el = document.getElementById("netbar");
+  if (!el) { el = document.createElement("div"); el.id = "netbar"; el.setAttribute("role", "status"); document.body.appendChild(el); }
+  if (back) {
+    netShown = false;
+    el.className = "netbar back show";
+    el.textContent = "🎄 Back online — the North Pole hears you!";
+    netTimer = setTimeout(() => { el.className = "netbar back"; }, 1800);
+    return;
+  }
+  netShown = true;
+  el.className = "netbar show";
+  el.textContent = isPlayerRoute() && G.me ? "❄️ Lost the signal to the North Pole — reconnecting… (buzzes won't count until you're back)" : "❄️ Lost the signal to the North Pole — reconnecting…";
+}
+window.addEventListener("online", netState);
+window.addEventListener("offline", netState);
 
 // Mini games: when a new name is drawn, wait for the shuffle to finish, then reveal it
 // everywhere at the same moment (and buzz the phone of whoever is up).
@@ -230,6 +291,7 @@ function startSubscriptions() {
   D.subscribeSpoken((s) => { G.spoken = s; render(); }, onErr);
   D.subscribeQuestions((q) => { G.Q = q; render(); }, onErr);
   D.subscribePlayers((p) => { G.P = p; onPlayers(); render(); }, onErr);
+  D.subscribeConnection((up) => { G.dbUp = up; netState(); });
 }
 
 // ---------------- ticker: countdowns + timer lights ----------------
@@ -331,7 +393,7 @@ async function submitTyped() {
   box.value = "";
   box.blur();
   await D.writeSpoken({ key, deviceId: G.deviceId, name: G.me.name, team: G.me.team, text, at: G.now(), final: true });
-  toast("Answer sent ✓", "good");
+  toast("🎁 Answer sent ✓", "good");
 }
 function focusAnswerBox() {
   setTimeout(() => { const b = document.getElementById("typed-answer"); if (b) b.focus(); }, 120);
@@ -390,12 +452,13 @@ async function buzz() {
   }
   const key = E.lockKey(c);
   if (G.myBuzzKey === key) return;
+  if (!G.online) toast("❄️ You're offline — reconnecting… (your buzz goes out when you're back)", "bad");
   G.myBuzzKey = key;
   G.myBuzzMs = Math.round(t - c.openedAt);
   vibrate(40);
   render();
   const me = { deviceId: G.deviceId, name: G.me.name, team: G.me.team };
-  try { await D.logBuzz(key, me, t, c.buzzRound); } catch { G.myBuzzKey = null; render(); return toast("Your buzz didn't go through — tap again!", "bad"); }
+  try { await D.logBuzz(key, me, t, c.buzzRound); } catch { G.myBuzzKey = null; render(); return toast("❄️ Your buzz got lost in the snow — tap again!", "bad"); }
   // A host screen normally decides; if none is around, this phone does.
   setTimeout(() => decideBuzz(key, true), E.BUZZ_GRACE_MS + 900);
 }
@@ -426,7 +489,7 @@ let faTimer = 0;
 function saveFinalAnswer(text, announce) {
   if (!G.me) return;
   D.act("finalAnswer", { team: G.me.team, text, by: G.me.name, done: announce ? true : undefined })
-    .then(() => { if (announce) toast("Submitted for your team ✓", "good"); })
+    .then(() => { if (announce) toast("🎁 Submitted for your team ✓", "good"); })
     .catch((e) => toast(e.message, "bad"));
 }
 
@@ -497,7 +560,7 @@ async function sendDrawing(d, auto) {
     render();
     Dr.clearPad(d.pad);
     vibrate([40, 40, 40]);
-    toast("Drawing sent ✓", "good");
+    toast("🎨 Drawing sent to Santa ✓", "good");
   } catch (err) {
     if (!auto) toast("Couldn't send — try again. " + (err.message || ""), "bad");
     setTimeout(() => sending.delete(d.rid), auto ? 4000 : 0); // try again
@@ -719,7 +782,7 @@ async function handle(a, p, el) {
       const c = G.S && G.S.clue, q = c && findQ(G, c.id), i = Number(el.dataset.i);
       if (q && c.stage === "answering") {
         const right = i === q.correctIndex;
-        toast(right ? "✅ Correct!" : "❌ Wrong!", right ? "good" : "bad");
+        toast(right ? "🎄 Ho ho ho — correct!" : "🥶 Brrr — wrong!", right ? "good" : "bad");
         vibrate(right ? [40, 40, 40] : [250]);
       }
       await D.act("mcqPick", { index: i, me: { deviceId: G.deviceId, name: G.me.name, team: G.me.team } });
@@ -901,8 +964,6 @@ window.addEventListener("popstate", () => { if (document.documentElement.classLi
 window.addEventListener("hashchange", () => { G.ui.drawer = false; G.ui.modal = null; render(); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { keepAwake(); D.syncClock(); checkForUpdate(); } });
 window.addEventListener("pageshow", (e) => { if (e.persisted) checkForUpdate(); });
-window.addEventListener("offline", () => toast("You're offline — reconnecting…", "bad"));
-window.addEventListener("online", () => toast("Back online ✓", "good"));
 
 function boot() {
   G.render = render;

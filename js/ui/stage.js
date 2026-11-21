@@ -277,12 +277,25 @@ function overView(G) {
     const x = (i * 53) % 100, d = (i * 37) % 30 / 10, s = 6 + (i * 7) % 10, col = ["#ffcf40", "#d7263d", "#139a4b", "#ffffff", "#5ab0ff"][i % 5];
     return `<i style="left:${x}%;animation-delay:-${d}s;width:${s}px;height:${s * 1.6}px;background:${col}"></i>`;
   }).join("");
-  return `<div class="over" data-key="over">
+  const aw = awards(G);
+  return `<div class="${cls("over", aw && "awarded")}" data-key="over">
     <div class="confetti" data-keep>${conf}</div>
     <div class="over-kicker">${tie ? "What a finish!" : "Merry Christmas, champions!"}</div>
     <div class="over-title">${tie ? "🤝 It's a tie!" : `🏆 ${esc(tn(G, win))} ${verb(tn(G, win), "wins", "win")}!`}</div>
     <div class="over-scores">${E.TEAMS.map((t) => `<div class="os ${t}${!tie && t === win ? " win" : ""}"><span>${esc(tn(G, t))}</span><b>${money(sc[t])}</b></div>`).join("")}</div>
+    ${aw}
   </div>`;
+}
+
+// The North Pole Awards (Head Elf, Fastest Reindeer, …), revealed one after another.
+export const winnerNames = (G, a) => a.winners.map((w) => ((G.P.find((p) => p.id === w.pid) || {}).name || w.name)).join(" & ");
+export function awards(G, { cls: extra = "" } = {}) {
+  const list = E.nightAwards(G.S);
+  if (!list.length) return "";
+  return `<div class="${cls("awards-wrap", extra)}"><div class="aw-head">🌟 The North Pole Awards 🌟</div>
+    <div class="${cls("awards", list.length > 4 && "many")}">${list.map((a, i) => `<div class="award" style="animation-delay:${(0.6 + i * 0.45).toFixed(2)}s" data-key="aw-${a.id}">
+      <div class="aw-ico">${a.icon}</div><div class="aw-title">${esc(a.title)}</div>
+      <div class="${cls("aw-name", a.winners.length === 1 && a.winners[0].team)}">${esc(winnerNames(G, a))}</div><div class="aw-detail">${esc(a.detail)}</div></div>`).join("")}</div></div>`;
 }
 
 // ---------------- podiums ----------------

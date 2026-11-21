@@ -132,7 +132,11 @@ function builder(state, ctx) {
       history = history || [...(state.history || [])];
       scores[team] = (scores[team] || 0) + delta;
       history.push({ id: rid(), g: group, team, delta, why, at: ctx.now, ...meta });
-      while (history.length > 150) history.shift();
+      // Keep the last 200. Question results go last: the night's awards are worked out from them.
+      while (history.length > 200) {
+        const i = history.findIndex((h) => h.kind !== "clue");
+        history.splice(i >= 0 && i < history.length - 1 ? i : 0, 1);
+      }
       set.scores = scores;
       set.history = history;
       return api;
@@ -338,17 +342,22 @@ function resolve(s, outcome, ctx, extra = {}) {
   const value = c.dd ? c.dd.wager : (q ? Number(q.points) || 0 : 0);
   const b = builder(s, ctx);
   const base = { ...c, ...extra };
+  // Who answered (a Daily Double is the whole team's) — for the night's awards.
+  const who = !c.dd && c.locked.deviceId ? { pid: c.locked.deviceId, who: c.locked.name || "", ms: Number.isFinite(c.locked.ms) ? c.locked.ms : null } : {};
 
   if (outcome === "correct") {
-    b.score(team, value, "correct", { kind: "clue", prevControl: s.control || null, qid: c.id });
+    b.score(team, value, "correct", { kind: "clue", prevControl: s.control || null, qid: c.id, ...who });
     b.field("control", team);
     b.field("clue", { ...base, stage: "done", result: "correct", winner: team, revealed: true });
     return b.sfx("correct").done();
   }
   if (outcome === "wrong" || outcome === "timeout") {
-    b.score(team, -value, outcome === "timeout" ? "time" : "wrong", { kind: "clue", qid: c.id });
+    b.score(team, -value, outcome === "timeout" ? "time" : "wrong", { kind: "clue", qid: c.id, ...who });
     b.sfx(outcome === "timeout" ? "timesup" : "wrong");
   }
+  // Phones show who just missed (the answer box is gone by then).
+  if ((outcome === "wrong" || outcome === "timeout") && !c.dd) base.missed = { deviceId: c.locked.deviceId || null, name: c.locked.name || "", team, why: outcome };
+  if (outcome === "skip") base.missed = null;
   if (c.dd) {
     b.field("control", c.dd.team);
     b.field("clue", { ...base, stage: "done", result: outcome === "skip" ? "skipped" : "wrong", revealed: true });
@@ -1233,7 +1242,7 @@ export function voteSetup(s, _p, ctx) {
   const players = (ctx.players || []).filter((p) => TEAMS.includes(p.team));
   const names = {};
   for (const p of players) names[p.id] = p.name;
-  return builder(s, ctx).field("vote", { ...freshVote(), stage: "setup", candidates: players.map((p) => p.id), names }).done();
+  return builder(s, ctx).field("vote", { ...freshVote(), stage: "setup", candidates: players.map((p) => p.id), names, last: voteOf(s).last || null }).done();
 }
 export function voteToggle(s, { pid }, ctx) {
   const V = voteOf(s);
@@ -1272,7 +1281,84 @@ export function voteBack(s, _p, ctx) {
   const V = voteOf(s);
   if (V.stage === "off") return null;
   if (V.stage === "open") return builder(s, ctx).field("vote", { ...V, stage: "setup", votes: {}, openedAt: null }).done();
-  return builder(s, ctx).field("vote", freshVote()).done();
+  // Back to the final scores: the winner keeps their crown in the night's awards.
+  const last = V.stage === "reveal" ? voteResults(s).winners.map((w) => ({ pid: w.pid, name: w.name, votes: w.votes })) : V.last || null;
+  return builder(s, ctx).field("vote", { ...freshVote(), last }).done();
+}
+
+// =================================================================
+// The night's awards
+// =================================================================
+// What each player did tonight, keyed by player id. Question results come from the score
+// history (so Undo takes them back too); mini-game wins and drawings from the mini games.
+export function playerStats(s) {
+  const st = {};
+  const row = (pid, name, team) => {
+    if (!st[pid]) st[pid] = { pid, name: name || "?", team: team || null, right: 0, wrong: 0, unanswered: 0, earned: 0, fast: null, minis: 0, drawing: null };
+    return st[pid];
+  };
+  for (const h of (s && s.history) || []) {
+    if (h.kind !== "clue" || !h.pid) continue;
+    const r = row(h.pid, h.who, h.team);
+    if (h.delta > 0) { r.right++; r.earned += h.delta; } else { r.wrong++; if (h.why === "time") r.unanswered++; }
+    if (Number.isFinite(h.ms)) r.fast = r.fast == null ? h.ms : Math.min(r.fast, h.ms);
+  }
+  for (const g of minisOf(s).list) {
+    for (const m of g.matches || []) {
+      if (m.all) {
+        // Blind drawing: the best drawing of each round counts as a win.
+        const ranked = drawRanking(m).filter((d) => d.score != null);
+        for (const d of ranked) { const r = row(d.id, d.name, d.team); r.drawing = Math.max(r.drawing == null ? -1 : r.drawing, d.score); }
+        if (m.winner && ranked.length) for (const d of ranked.filter((x) => x.score === ranked[0].score)) row(d.id, d.name, d.team).minis++;
+        continue;
+      }
+      const p = m.winner === "team1" ? m.p1 : m.winner === "team2" ? m.p2 : null;
+      if (p && p.id) row(p.id, p.name, m.winner).minis++;
+    }
+    if (g.type === "best" && (g.entries || []).length) {
+      const top = miniStanding(g).sorted[0];
+      if (top && top.pid) row(top.pid, top.name, top.team).minis++;
+    }
+  }
+  return st;
+}
+// The awards, best first: { id, icon, title, detail, winners: [{ pid, name, team }] }.
+// (The North Pole Awards: Head Elf, Fastest Reindeer, …) Only awards somebody actually earned are listed (and not when more than 3 people tie —
+// then it isn't much of an award).
+export function nightAwards(s) {
+  const rows = Object.values(playerStats(s));
+  const out = [];
+  const add = (id, icon, title, list, detail) => {
+    if (!list.length || list.length > 3) return;
+    out.push({ id, icon, title, detail, winners: list.map((r) => ({ pid: r.pid, name: r.name, team: r.team })) });
+  };
+  const most = (key, min = 1) => {
+    const top = Math.max(0, ...rows.map((r) => r[key] || 0));
+    return top >= min ? rows.filter((r) => r[key] === top) : [];
+  };
+  const mon = (n) => "$" + Math.abs(n).toLocaleString("en-US");
+  const brain = most("right");
+  const brainBest = brain.length > 1 ? brain.filter((r) => r.earned === Math.max(...brain.map((x) => x.earned))) : brain;
+  add("brain", "🧝", "Head Elf", brainBest, brain.length ? `${brain[0].right} right answer${brain[0].right === 1 ? "" : "s"}` : "");
+  const fastest = Math.min(Infinity, ...rows.filter((r) => r.fast != null).map((r) => r.fast));
+  add("fast", "🦌", "Fastest Reindeer", Number.isFinite(fastest) ? rows.filter((r) => r.fast === fastest) : [], Number.isFinite(fastest) ? `${(fastest / 1000).toFixed(2)}s buzz` : "");
+  // (Big earner only when it isn't simply the Brainiac again.)
+  const earn = most("earned");
+  const same = (a, b) => a.length === b.length && a.every((r) => b.includes(r));
+  if (!same(earn, brainBest)) add("earn", "💰", "Christmas Bonus", earn, earn.length ? `won ${mon(earn[0].earned)}` : "");
+  const mvp = most("minis");
+  add("minis", "🏆", "North Pole Champ", mvp, mvp.length ? `${mvp[0].minis} mini-game win${mvp[0].minis === 1 ? "" : "s"}` : "");
+  const art = rows.filter((r) => r.drawing != null);
+  const bestArt = Math.max(-1, ...art.map((r) => r.drawing));
+  add("art", "🎨", "Santa's Sketch Artist", bestArt > 0 ? art.filter((r) => r.drawing === bestArt) : [], bestArt > 0 ? `${bestArt}% match drawing` : "");
+  // A lump of coal for the most wrong or unanswered questions (buzzed in, then ran out of time).
+  const coal = most("wrong");
+  const coalWhy = (r) => [r.wrong - r.unanswered ? `${r.wrong - r.unanswered} wrong` : "", r.unanswered ? `${r.unanswered} unanswered` : ""].filter(Boolean).join(" · ");
+  add("bold", "🪨", "Naughty List", coal, coal.length === 1 ? coalWhy(coal[0]) : coal.length ? `${coal[0].wrong} wrong or unanswered` : "");
+  const V = voteOf(s);
+  const crowned = V.stage === "reveal" ? voteResults(s).winners : V.last || [];
+  if (crowned.length) add("sweater", "🧶", "Ugliest Sweater", crowned.map((w) => ({ pid: w.pid, name: w.name, team: null })), `${crowned[0].votes} vote${crowned[0].votes === 1 ? "" : "s"}`);
+  return out;
 }
 
 export const ACTIONS = {

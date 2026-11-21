@@ -107,6 +107,8 @@ small { font-size: 0.82em; }
 .holly::after, .stage-main::after, .ph-mini-head::after, .ph-card.hero::after, .join-card::after, .r-status::after, .lobby-join::after { content: ""; position: absolute; top: -14px; left: -10px; width: 64px; height: 44px; pointer-events: none; z-index: 3;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='44' viewBox='0 0 64 44'%3E%3Cpath d='M30 26 C22 14 10 12 2 16 C6 18 6 22 3 25 C8 25 10 29 9 32 C14 30 18 33 19 36 C22 31 27 30 30 26 Z' fill='%231f8f4a' stroke='%230c4d25' stroke-width='1.2'/%3E%3Cpath d='M34 24 C40 12 52 8 61 11 C57 13 57 17 60 20 C55 21 54 25 55 28 C50 26 46 29 45 32 C42 27 37 27 34 24 Z' fill='%2327a557' stroke='%230c4d25' stroke-width='1.2'/%3E%3Ccircle cx='30' cy='28' r='5' fill='%23e3263c'/%3E%3Ccircle cx='37' cy='30' r='4.5' fill='%23c8162b'/%3E%3Ccircle cx='33' cy='35' r='4.5' fill='%23e8344a'/%3E%3Ccircle cx='28.5' cy='26.5' r='1.4' fill='%23fff' fill-opacity='0.7'/%3E%3C/svg%3E") 0 0 / contain no-repeat;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4)); }
+/* Smaller sprig, tucked further out, on cards whose text starts right at the corner. */
+.r-status::after, .ph-mini-head::after { top: -19px; left: -17px; width: 44px; height: 30px; }
 
 /* ---------- controls ---------- */
 .btn {
@@ -381,6 +383,30 @@ input, textarea, select { font-family: var(--ui); }
 .os span { font: 700 clamp(26px, 3vw, 52px) var(--hand); color: var(--cream); }
 .os b { font: 400 clamp(32px, 4.4vw, 80px) var(--display); text-shadow: 3px 3px 0 #000; }
 .os.win { box-shadow: 0 0 0 3px var(--gold), 0 0 50px rgba(255, 207, 64, 0.45); transform: scale(1.04); }
+/* The North Pole Awards, revealed one after another under the final scores — each one a
+   gift tag with a candy-cane stripe and a bow. */
+.awards-wrap { display: flex; flex-direction: column; align-items: center; gap: 1.4vh; max-width: 94%; position: relative; z-index: 1; }
+.aw-head { font: 700 clamp(16px, 1.7vw, 30px) var(--xmas); color: var(--gold); text-shadow: 0 0 18px rgba(255, 207, 64, 0.45); }
+.awards { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.2vw; }
+.award { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; min-width: 11vw; max-width: 19vw; padding: calc(1.2vh + 7px) 1.2vw 1.2vh;
+  border-radius: 14px; background: linear-gradient(180deg, rgba(120, 10, 28, 0.55), rgba(6, 40, 22, 0.6)); border: 1px solid rgba(255, 207, 64, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); opacity: 0; animation: award-in 0.6s ease-out forwards; }
+.award::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 7px; border-radius: 14px 14px 0 0;
+  background: repeating-linear-gradient(45deg, #e3263c 0 7px, #fff 7px 14px); }
+/* The Naughty List gets a lump of coal: the rock, blackened, with a faint ember glow. */
+[data-key="aw-bold"] .aw-ico, .pa-row.aw-bold .pa-ico, .nw-tag.aw-bold > span { filter: grayscale(1) brightness(0.32) contrast(1.3) drop-shadow(0 0 5px rgba(255, 120, 40, 0.85)); }
+.award::after { content: "🎀"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); font-size: 20px; line-height: 1; }
+@keyframes award-in { from { opacity: 0; transform: translateY(18px) scale(0.9); } to { opacity: 1; transform: none; } }
+.aw-ico { font-size: clamp(22px, 2.6vw, 48px); line-height: 1.1; }
+.aw-title { font: 700 clamp(10px, 0.9vw, 16px) var(--ui); letter-spacing: 2px; text-transform: uppercase; color: var(--gold); }
+.aw-name { font: 800 clamp(15px, 1.6vw, 30px)/1.15 var(--ui); overflow-wrap: anywhere; }
+.aw-name.team1 { color: #ff9aa6; } .aw-name.team2 { color: #8ff0b4; }
+.aw-detail { font: 500 clamp(11px, 0.95vw, 17px) var(--ui); color: var(--muted, #b9c2ff); }
+.over.awarded { gap: 1.4vh; }
+.over.awarded .over-title { font-size: clamp(36px, 5vw, 96px); }
+.over.awarded .os { padding: 1.2vh 2.4vw; }
+.over.awarded .os b { font-size: clamp(28px, 3.4vw, 64px); }
+@media (prefers-reduced-motion: reduce) { .award { animation: none; opacity: 1; } }
 .confetti { position: absolute; inset: 0; pointer-events: none; }
 .confetti i { position: absolute; top: -6%; border-radius: 2px; animation: confetti 3.2s linear infinite; opacity: 0.9; }
 @keyframes confetti { to { transform: translateY(115vh) rotate(720deg); } }
@@ -581,8 +607,39 @@ input, textarea, select { font-family: var(--ui); }
 .buzz.sent span { font-size: clamp(34px, 10vw, 50px); text-shadow: none; }
 .ph-note { text-align: center; padding: 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); font-weight: 600; }
 .ph-note.timeup { color: #ffb36b; }
-.youup { text-align: center; font: 800 20px var(--ui); color: var(--gold); padding: 10px; border-radius: 14px; background: rgba(255, 207, 64, 0.12); border: 1px solid rgba(255, 207, 64, 0.4); animation: pop 0.25s ease-out; }
-.youup.big { font-size: 26px; }
+.youup { text-align: center; font: 800 20px var(--ui); color: var(--gold); padding: 10px; border-radius: 14px; background: rgba(255, 207, 64, 0.2); border: 1px solid rgba(255, 207, 64, 0.65); box-shadow: 0 0 22px rgba(255, 207, 64, 0.25); animation: pop 0.25s ease-out; }
+.youup.big { font-size: 26px; color: #2b1700; background: linear-gradient(180deg, #ffe07a, #ffbf2e); border-color: #fff0b8;
+  box-shadow: 0 0 0 0 rgba(255, 207, 64, 0.6); animation: pop 0.25s ease-out, youup 1.4s ease-in-out 0.3s infinite; }
+@keyframes youup { 50% { box-shadow: 0 0 0 8px rgba(255, 207, 64, 0); } }
+/* Who just missed (shown while the other team gets a go). */
+.ph-missed { text-align: center; padding: 10px 12px; border-radius: 14px; font-weight: 800; animation: pop 0.25s ease-out; }
+.ph-missed.mine { background: rgba(224, 40, 63, 0.3); border: 1px solid rgba(255, 120, 140, 0.55); }
+.ph-missed.theirs { background: rgba(23, 164, 87, 0.35); border: 1px solid #7dffb0; }
+/* What's left on the board (phones, while a team picks). */
+.ph-board { padding: 12px; border-radius: 18px; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--line); }
+.ph-grid .r-cell { cursor: default; text-align: center; font-size: 14px; padding: 8px 0; }
+.ph-grid .r-cat { min-height: 34px; font-size: 8.5px; }
+/* Game over: your night and the awards. */
+.night .night-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.ns { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 14px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); }
+.ns i { font-style: normal; font-size: 18px; line-height: 1; }
+.ns b { font: 400 26px var(--display); color: var(--gold); }
+.ns small { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.night-won { margin-top: 12px; padding: 12px; border-radius: 14px; background: rgba(255, 207, 64, 0.14); border: 1px solid rgba(255, 207, 64, 0.5); display: flex; flex-direction: column; gap: 8px; }
+.nw-head { font: 700 19px var(--xmas); color: var(--gold); }
+.nw-tag { position: relative; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 10px 12px 10px 18px; border-radius: 12px; overflow: hidden;
+  background: linear-gradient(180deg, #ffe07a, #ffbf2e); color: #2b1700; font-size: 17px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); animation: pop 0.35s ease-out; }
+.nw-tag::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 7px; background: repeating-linear-gradient(45deg, #e3263c 0 6px, #fff 6px 12px); }
+.nw-tag span { font-size: 22px; line-height: 1; }
+.ph-awards { text-align: left; display: flex; flex-direction: column; gap: 6px; }
+.pa-row { position: relative; overflow: hidden; display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 8px 10px 8px 16px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); }
+.pa-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: repeating-linear-gradient(45deg, #e3263c 0 6px, #fff 6px 12px); }
+.pa-row.me { background: rgba(255, 207, 64, 0.16); box-shadow: inset 0 0 0 1px rgba(255, 207, 64, 0.55); }
+.pa-ico { font-size: 22px; text-align: center; }
+.pa-txt { display: flex; flex-direction: column; min-width: 0; }
+.pa-txt small { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
+.pa-txt b { overflow-wrap: anywhere; }
+.pa-det { font-size: 12px; color: var(--muted); text-align: right; }
 .listening { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 700; color: #7dffb0; }
 .rec { width: 14px; height: 14px; border-radius: 50%; background: #ff3b47; box-shadow: 0 0 12px #ff3b47; animation: pulse 0.8s infinite; }
 .heard-box { text-align: center; font: italic 700 22px/1.35 var(--clue); color: var(--gold); padding: 14px; border-radius: 14px; background: rgba(0, 0, 0, 0.3); min-height: 60px; }
@@ -621,6 +678,26 @@ input, textarea, select { font-family: var(--ui); }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 30px); z-index: 80; padding: 12px 18px; border-radius: 14px; max-width: min(560px, 92vw);
   background: #121b5e; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: var(--shadow); font-weight: 600; opacity: 0; pointer-events: none; transition: all 0.25s ease; text-align: center; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* "+$200" floating up from a score when it changes. */
+.spop { position: fixed; z-index: 70; pointer-events: none; transform: translate(-50%, 0); font: 400 24px var(--display); letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #000, 0 0 14px currentColor; animation: spop 1.8s ease-out forwards; white-space: nowrap; }
+.spop.big { font-size: clamp(30px, 3.4vw, 64px); }
+.spop.up { color: #6dffa8; } .spop.down { color: #ff7d8c; }
+@keyframes spop {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
+  14% { opacity: 1; transform: translate(-50%, -70%) scale(1.18); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -190%) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .spop { animation-duration: 1.2s; } }
+/* Connection lost / back online. */
+.netbar { position: fixed; left: 50%; top: 40px; z-index: 90; transform: translate(-50%, -16px); opacity: 0; pointer-events: none; width: max-content; max-width: min(560px, 92vw);
+  padding: 10px 16px; border-radius: 14px; font-weight: 800; text-align: center; color: #fff; background: #8a1424; border: 1px solid #ff8a99;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); transition: opacity 0.25s, transform 0.25s; }
+.netbar.show { opacity: 1; transform: translate(-50%, 0); animation: netpulse 1.6s ease-in-out infinite; }
+@keyframes netpulse { 50% { opacity: 0.78; } }
+.netbar.back { background: #0f6b39; border-color: #7dffb0; animation: none; }
+.dupnote { margin: 8px 0 0; text-align: left; }
 .toast.good { border-color: rgba(80, 255, 150, 0.6); }
 .toast.bad { border-color: rgba(255, 110, 130, 0.7); background: #4a0d1c; }
 body[data-view="host"] .toast { bottom: 120px; }
@@ -683,6 +760,18 @@ body[data-view="host"] .toast { bottom: 120px; }
   .over-title { font-size: clamp(32px, min(7.4cqw, 14cqh), 136px); }
   .os b { font-size: clamp(26px, min(4.4cqw, 9cqh), 84px); }
   .os span { font-size: clamp(20px, min(3cqw, 6cqh), 54px); }
+  .over.awarded { gap: 1.8cqh; }
+  .over.awarded .over-title { font-size: clamp(28px, min(5.4cqw, 10cqh), 104px); }
+  .over.awarded .os { padding: 1.4cqh 2.4cqw; }
+  .over.awarded .os b { font-size: clamp(22px, min(3.4cqw, 7cqh), 66px); }
+  .over.awarded .os span { font-size: clamp(16px, min(2.2cqw, 4.6cqh), 40px); }
+  .award { padding: calc(1.4cqh + 7px) 1.2cqw 1.4cqh; min-width: 12cqw; max-width: 20cqw; }
+  .awards-wrap { gap: 1.6cqh; }
+  .aw-head { font-size: clamp(14px, min(1.9cqw, 4cqh), 34px); }
+  .aw-ico { font-size: clamp(18px, min(3cqw, 6cqh), 54px); }
+  .aw-title { font-size: clamp(9px, min(1cqw, 2.1cqh), 18px); }
+  .aw-name { font-size: clamp(13px, min(1.8cqw, 3.8cqh), 34px); }
+  .aw-detail { font-size: clamp(10px, min(1.05cqw, 2.3cqh), 19px); }
   .lobby-title { font-size: clamp(20px, min(2.8cqw, 6cqh), 46px); }
   .qr { width: clamp(130px, 34cqh, 270px); }
 }
