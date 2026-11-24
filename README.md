@@ -171,6 +171,12 @@ switch off phone renaming there too.
   right answer plus 1–3 wrong ones), and the options are always put in a **random order** when
   the questions go on the board, so the right answer isn't always first (or anywhere in
   particular). With 3 options the third sits centred under the other two.
+- **🎁 Take away a wrong answer** (key **H**) — a 50/50 for the room. Tap it and the game
+  crosses off one **wrong** option at random, on the board and on every phone; it can't be
+  tapped any more. Tap it again for another, down to the **last two** (the right answer is
+  never taken, and the button disappears at two). It's there while the question is read,
+  with the buzzers open, on a rebound and while someone's answering — and the button says
+  how many options are left. Put the question back and it starts again with all of them.
 - **The result on every phone:** "🎅 Ho ho ho — you got it! +$200 for your team" on the phone
   that answered (with a happy buzz — or a sad one for a miss), "🎄 Amy got it for your team!"
   for teammates, and "🥶 Amy got it — Wives +$200" for the other team, plus the answer.
@@ -211,7 +217,8 @@ switch off phone renaming there too.
 - Rename or move players between teams (their phone updates instantly) or remove them —
   a removed player's phone is released and has to enter a name again to rejoin.
 - Keyboard: Space next step · C correct · W wrong · S skip · N nobody · P pause buzzers ·
-  R show answer · B put the question back · U undo · M sound · F fullscreen · Esc close.
+  R show answer · B put the question back · H take away a wrong answer · U undo · M sound ·
+  F fullscreen · Esc close.
 
 **🌟 The North Pole Awards (on the final-scores screen)**
 - Under the winner, the board reveals the awards one after another, each on a gift tag with a

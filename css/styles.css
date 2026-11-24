@@ -293,7 +293,9 @@ input, textarea, select { font-family: var(--ui); }
 .bmcq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2vh 1.2vw; width: min(1100px, 100%); }
 .bchoice { display: flex; align-items: center; gap: 12px; padding: 1.3vh 1.2vw; border-radius: 12px; background: rgba(0, 0, 0, 0.28); border: 2px solid rgba(255, 207, 64, 0.35); font: 700 clamp(14px, 1.8vw, 30px) var(--ui); text-align: left; transition: all 0.3s ease; }
 .bchoice b { font-family: var(--display); font-weight: 400; color: var(--gold); font-size: 1.15em; }
-.bchoice.elim { opacity: 0.35; text-decoration: line-through; }
+.bchoice.elim { opacity: 0.35; text-decoration: line-through; animation: elim-out 0.5s ease-out; }
+@keyframes elim-out { 0% { opacity: 1; transform: scale(1); } 40% { opacity: 1; transform: scale(1.04); background: rgba(224, 40, 63, 0.45); } 100% { opacity: 0.35; transform: scale(1); } }
+.btn.fifty small { font-weight: 700; opacity: 0.75; }
 .bmcq.n3 .bchoice:last-child, .bmcq.n5 .bchoice:last-child { grid-column: 1 / -1; justify-self: center; width: calc(50% - 0.6vw); }
 .bchoice.right { background: rgba(23, 164, 87, 0.85); border-color: #7dffb0; box-shadow: 0 0 24px rgba(23, 164, 87, 0.6); }
 .bchoice.wrong { background: rgba(159, 20, 39, 0.75); }

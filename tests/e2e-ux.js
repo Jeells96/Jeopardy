@@ -122,6 +122,36 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(P.Cy, () => !!document.querySelector(".ph-board"));
   ok(true, "phones go back to the board too");
 
+  // multiple choice: Jaren takes away a wrong answer, down to the last two
+  await act(host, "pickClue", { qid: await qid(200) });
+  await until(P.Ann, () => document.querySelectorAll(".ph-opts .ph-opt").length === 4);
+  ok(true, "a 4-option question shows all four options on every phone");
+  await until(host, () => !!document.querySelector(".r-buttons .btn.fifty"));
+  ok((await host.textContent(".r-buttons .btn.fifty")).includes("4 left"), "the host has “🎁 Take away a wrong answer (4 left)”");
+  await host.click(".r-buttons .btn.fifty");
+  await until(board, () => document.querySelectorAll(".bchoice.elim").length === 1);
+  await until(P.Ann, () => document.querySelectorAll(".ph-opts .ph-opt.out").length === 1);
+  ok(true, "one wrong option is crossed off — on the board and on every phone");
+  await shot(board, "u02c-board-5050");
+  await host.click(".r-buttons .btn.fifty");
+  await until(board, () => document.querySelectorAll(".bchoice.elim").length === 2);
+  const rightIdx = await host.evaluate((p) => window.__G.Q.find((x) => x.points === p && !x.isFinal).correctIndex, 200);
+  ok(!(await S(host)).clue.eliminated.includes(rightIdx), "the right answer is never the one taken away");
+  ok(!(await host.$(".r-buttons .btn.fifty")), "with two options left, the button is gone");
+  ok((await host.textContent(".s-mcq")).includes("crossed off"), "the host's private view lists what's been crossed off");
+  await act(host, "openBuzzers");
+  await buzzIn(P.Ann);
+  const off = await P.Ann.$$eval(".mcqbtn", (b) => b.map((x) => x.disabled));
+  ok(off.filter(Boolean).length === 2 && off.length === 4, "the answering phone can only tap the two that are left");
+  await shot(P.Ann, "u02d-phone-5050");
+  await act(host, "unpickClue");
+  await until(board, () => window.__G.S.phase === "board");
+  await act(host, "pickClue", { qid: await qid(200) });
+  await until(board, () => document.querySelectorAll(".bchoice").length === 4 && !document.querySelector(".bchoice.elim"));
+  ok(true, "picked again, all four options are back");
+  await act(host, "unpickClue");
+  await until(board, () => window.__G.S.phase === "board");
+
   // wrong → everyone knows who missed
   await act(host, "pickClue", { qid: await qid(100) });
   await act(host, "openBuzzers");

@@ -479,5 +479,56 @@ console.log("engine tests");
   ok(!run(d, "unpickClue").noop, "a Daily Double can be put back too");
 }
 
+// --- Jaren takes away a wrong multiple-choice option, down to the last two ---
+{
+  const four = { id: "m4", category: "Movies", points: 400, type: "mcq", choices: ["A", "B", "C", "D"], correctIndex: 2, round: 1 };
+  const start = () => { let st = fresh(); st.qs.push({ ...four }); st = run(st, "startGame", { control: "team1" }); return run(st, "pickClue", { qid: "m4" }); };
+  let st = start();
+  eq(E.mcqLeft(st.state.clue, four), 4, "four options to start");
+  st = run(st, "dropChoice");
+  eq([E.mcqLeft(st.state.clue, four), st.state.clue.eliminated.length], [3, 1], "one wrong option is taken away");
+  st = run(st, "dropChoice");
+  eq(E.mcqLeft(st.state.clue, four), 2, "…and again, down to two");
+  ok(!st.state.clue.eliminated.includes(four.correctIndex), "never the right answer");
+  ok(run(st, "dropChoice").noop, "it stops at two — the right answer and one wrong one");
+  // the crossed-off ones can't be picked, the two left can
+  st = run(st, "openBuzzers");
+  st = buzz(st, P1);
+  ok(run(st, "mcqPick", { index: st.state.clue.eliminated[0], me: P1 }).noop, "a crossed-off option can't be tapped");
+  const other = [0, 1, 3].find((i) => !st.state.clue.eliminated.includes(i));
+  eq(run(st, "mcqPick", { index: other, me: P1 }).state.scores.team1, -400, "the wrong one that's left still scores wrong");
+  eq(run(st, "mcqPick", { index: four.correctIndex, me: P1 }).state.scores.team1, 400, "…and the right answer still scores right");
+  // which one goes is random
+  const seen = new Set();
+  for (let i = 0; i < 300; i++) seen.add(run(start(), "dropChoice").state.clue.eliminated[0]);
+  eq([...seen].sort(), [0, 1, 3], "the one taken away is picked at random from the wrong answers");
+  // a 3-option question stops after one; 2 options can't be cut at all
+  let three = fresh();
+  three = run(three, "startGame", { control: "team1" });
+  three = run(three, "pickClue", { qid: "a2" }); // 3 choices
+  three = run(three, "dropChoice");
+  eq(E.mcqLeft(three.state.clue, three.qs.find((q) => q.id === "a2")), 2, "a 3-option question goes down to two");
+  ok(run(three, "dropChoice").noop, "…and no further");
+  let two = fresh();
+  two = run(two, "startGame", { control: "team1" });
+  two = run(two, "pickClue", { qid: "a4" }); // Daily Double, 2 choices
+  ok(run(two, "dropChoice").noop, "a 2-option question has nothing to take away");
+  // normal questions, and once the question is over
+  let sp = fresh();
+  sp = run(sp, "startGame", { control: "team1" });
+  sp = run(sp, "pickClue", { qid: "a1" });
+  ok(run(sp, "dropChoice").noop, "nothing to take away on a normal typed-answer question");
+  let dd = start();
+  dd = run(dd, "openBuzzers");
+  dd = buzz(dd, P1);
+  ok(!run(dd, "dropChoice").noop, "it works while someone is answering, too");
+  dd = run(dd, "judge", { result: "skip" });
+  ok(!run(dd, "dropChoice").noop, "…and on the rebound, for the other team");
+  dd = buzz(dd, P2);
+  dd = run(dd, "judge", { result: "correct" });
+  eq(dd.state.clue.stage, "done", "question finished");
+  ok(run(dd, "dropChoice").noop, "…but not once the question is over");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -85,6 +85,9 @@ export function hostSteps(G, { privateView = false } = {}) {
     const set = S.settings || {};
     // Hit the wrong one? Put it back on the board (until it has changed a score).
     const oops = () => { if (E.canUnpick(c)) btn("↩ Oops — wrong question, put it back", "act", act("unpickClue"), "ghost oops", "B"); };
+    // Multiple choice: take a wrong option away, down to the last two.
+    const left = E.mcqLeft(c, q);
+    const fifty = () => { if (left > 2) btn(`🎁 Take away a wrong answer <small>(${left} left)</small>`, "act", act("dropChoice"), "ghost fifty", "H"); };
     if (c.stage === "dd") {
       const team = G.ui.ddTeam || c.dd.team || null;
       const lim = team ? E.ddLimits(S, G.Q, team) : null;
@@ -104,12 +107,14 @@ export function hostSteps(G, { privateView = false } = {}) {
         ? `Read the question — buzzers open automatically in <b class="cd" data-deadline="${c.pickedAt + set.readSeconds * 1000}" data-format="s"></b>.`
         : "Read the question out loud, then open the buzzers.";
       btn("🔔 Open buzzers", "act", act("openBuzzers"), "primary", "Space");
+      fifty();
       btn("🙅 Nobody — reveal", "act", act("nobody"), "ghost", "N");
       oops();
       return { status, panel, buttons: B };
     }
     if (c.stage === "open" && G.now() < c.openedAt) {
       status = "🔔 Buzzers opening…";
+      fifty();
       btn("🙅 Nobody knows — reveal", "act", act("nobody"), "ghost", "N");
       oops();
       return { status, panel, buttons: B };
@@ -121,6 +126,7 @@ export function hostSteps(G, { privateView = false } = {}) {
         ? `🔔 Rebound! <b>${esc(tn(G, E.otherTeam(c.blocked[0])))}</b> can buzz in to steal it${cd} <span class="muted">— no buzz means the answer is shown, no points lost</span>`
         : `🔔 Buzzers are open — waiting for the first buzz…${cd}`;
       btn("⏸ Pause buzzers", "act", act("pauseBuzzers"), "ghost", "P");
+      fifty();
       btn("🙅 Nobody knows — reveal", "act", act("nobody"), "ghost", "N");
       oops();
       return { status, panel, buttons: B };
@@ -129,6 +135,7 @@ export function hostSteps(G, { privateView = false } = {}) {
       const rem = E.TEAMS.filter((t) => !c.blocked.includes(t));
       status = c.blocked.length ? `${esc(tn(G, c.blocked[0]))} missed it.` : "Buzzers paused.";
       btn(rem.length === 1 ? `🔔 Open for ${esc(tn(G, rem[0]))}` : "🔔 Reopen buzzers", "act", act("openBuzzers"), "primary", "Space");
+      fifty();
       btn("🙅 Nobody — reveal", "act", act("nobody"), "ghost", "N");
       oops();
       return { status, panel, buttons: B };
@@ -147,6 +154,7 @@ export function hostSteps(G, { privateView = false } = {}) {
       const fastest = !c.dd && c.order && c.order.length ? `<div class="muted fastest">⚡ ${c.order.slice(0, 3).map((o) => `${esc(o.name)} ${(o.ms / 1000).toFixed(2)}s`).join(" · ")}</div>` : "";
       status = `${who} ${c.dd ? verb(tn(G, L.team), "is", "are") : "is"} answering ${clock}${fastest}${isMcq ? `<div class="muted">They choose on ${c.dd ? "their team's phones" : "their phone"} — scored automatically.</div>` : ""}${heard}`;
       if (isMcq) {
+        fifty();
         btn("✗ Mark wrong", "act", act("judge", { result: "wrong" }), "bad", "W");
         btn("Skip (no penalty)", "act", act("judge", { result: "skip" }), "ghost", "S");
       } else {

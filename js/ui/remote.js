@@ -42,7 +42,12 @@ function secret(G) {
     const q = findQ(G, c.id);
     if (!q) return "";
     let extra = "";
-    if (q.type === "mcq" && q.correctIndex >= 0) extra += `<div class="s-mcq">Correct choice: <b>${"ABCDEF"[q.correctIndex]}. ${esc(q.choices[q.correctIndex])}</b></div>`;
+    if (q.type === "mcq" && q.correctIndex >= 0) {
+      const gone = (c.eliminated || []).filter((i) => q.choices[i]);
+      extra += `<div class="s-mcq">Correct choice: <b>${"ABCDEF"[q.correctIndex]}. ${esc(q.choices[q.correctIndex])}</b>`
+        + (gone.length ? ` <small class="muted">· crossed off: ${gone.map((i) => `${"ABCDEF"[i]}. ${esc(q.choices[i])}`).join(", ")}</small>` : "")
+        + `</div>`;
+    }
     const key = E.lockKey(c);
     if (c.stage === "answering" && q.type !== "mcq") {
       const sp = G.spoken && G.spoken.key === key ? G.spoken : null;

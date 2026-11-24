@@ -211,7 +211,7 @@ function newClue(q, s, ctx) {
     openedAt: null,
     locked: null,       // { deviceId, name, team, at }
     blocked: [],        // teams that already missed this clue
-    eliminated: [],     // wrong multiple-choice options already picked
+    eliminated: [],     // wrong multiple-choice options already picked, or taken away by Jaren
     mcq: null,          // { index, correct, by }
     timeUp: null,       // lockKey whose answer timer ran out (spoken answers)
     result: null,       // correct | wrong | nobody | skipped
@@ -385,6 +385,24 @@ export function judge(s, { result }, ctx) {
   if (!c || c.stage !== "answering" || !c.locked) return null;
   if (!["correct", "wrong", "skip"].includes(result)) return null;
   return resolve(s, result, ctx);
+}
+
+// Multiple choice: how many options are still standing (crossed-off ones don't count).
+export function mcqLeft(clue, q) {
+  if (!clue || !q || q.type !== "mcq" || !Array.isArray(q.choices)) return 0;
+  return q.choices.filter((ch, i) => ch && !(clue.eliminated || []).includes(i)).length;
+}
+// Jaren takes away one wrong option at random, to give everyone a better chance. Can be
+// used again and again, down to the last two options (never the right answer).
+export function dropChoice(s, _p, ctx) {
+  const c = s.clue;
+  if (!c || c.stage === "done" || c.stage === "dd") return null;
+  const q = findQ(ctx, c.id);
+  if (!q || q.type !== "mcq" || mcqLeft(c, q) <= 2) return null;
+  const wrong = q.choices.map((_, i) => i).filter((i) => q.choices[i] && i !== q.correctIndex && !c.eliminated.includes(i));
+  if (!wrong.length) return null;
+  const gone = wrong[Math.floor(random(ctx) * wrong.length)];
+  return builder(s, ctx).field("clue", { ...c, eliminated: [...c.eliminated, gone] }).done();
 }
 
 export function mcqPick(s, { index, me }, ctx) {
@@ -1367,7 +1385,7 @@ export function nightAwards(s) {
 
 export const ACTIONS = {
   startGame, setControl, startRound2, pickClue, unpickClue, setDDTeam, lockDDWager, openBuzzers,
-  autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, answerSubmitted, answerTimeout, buzzWindowTimeout, nobody,
+  autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, dropChoice, answerSubmitted, answerTimeout, buzzWindowTimeout, nobody,
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
