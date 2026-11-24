@@ -144,10 +144,18 @@ export function checkSet(set) {
 }
 
 // ---------- to / from the live game ----------
-function shuffle(arr) {
+function shuffle(arr, rand = Math.random) {
   const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
+}
+// Multiple choice: put the options in a random order (2, 3, 4 or more of them), so the right
+// one isn't always in the same place. Works on a game question row.
+export function shuffleChoices(row, rand = Math.random) {
+  if (!row || row.type !== "mcq" || !Array.isArray(row.choices) || !(row.correctIndex >= 0)) return row;
+  const idx = shuffle(row.choices.map((_, i) => i).filter((i) => row.choices[i]), rand);
+  if (!idx.includes(row.correctIndex)) return row;
+  return { ...row, choices: idx.map((i) => row.choices[i]), correctIndex: idx.indexOf(row.correctIndex) };
 }
 // Rows for the game's `questions` collection. Unfinished questions are skipped.
 export function toGameRows(set) {
@@ -258,6 +266,16 @@ export const OPS = {
     if (!set.clues.some((c) => c.slot === "r2")) return null;
     return touch(set, set.clues.filter((c) => c.slot !== "r2"));
   },
+  // Give Jeopardy-round questions new categories / values, in a new order (the shuffle and
+  // the random Christmas names; undo puts the old ones back). moves: { id: { category, points } }
+  recategorize(set, { moves = {}, order = [] }) {
+    if (!set.clues.some((c) => c.slot === "r1" && moves[c.id])) return null;
+    const pos = new Map(order.map((id, i) => [id, i]));
+    const changed = set.clues.map((c) => (c.slot === "r1" && moves[c.id] ? cleanClue({ ...c, category: moves[c.id].category, points: moves[c.id].points }) : c));
+    const planned = changed.filter((c) => pos.has(c.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
+    let k = 0;
+    return touch(set, changed.map((c) => (pos.has(c.id) ? planned[k++] : c)));
+  },
   removeCategory(set, { slot, name }) {
     const keep = set.clues.filter((c) => !(c.slot === slot && c.category && lc(c.category) === lc(name)));
     if (keep.length === set.clues.length) return null;
@@ -288,6 +306,102 @@ export function applyOp(set, op, params) {
   if (!fn) return fail("Unknown edit: " + op);
   if (set.locked && op !== "dropRound2" && !(op === "meta" && params && params.patch && "locked" in params.patch)) return fail("This set is locked — unlock it to make changes.");
   return fn(set, params || {});
+}
+
+// ---------- shuffle: random categories, random Christmas names ----------
+export const XMAS_CATEGORIES = [
+  "Jingle Jumble", "Mistletoe Mixer", "Sleigh What?", "Elf Help", "Snow Problem", "Yule Be Sorry", "Fa La La Facts",
+  "Holly Jolly Hodgepodge", "Reindeer Games", "Sugarplum Surprise", "Nutcracker Nuggets", "Tinsel Trivia",
+  "Chestnuts Roasting", "Stocking Stuffers", "Candy Cane Lane", "Frosty's Freezer", "Gingerbread Grab Bag",
+  "North Pole Potpourri", "Deck the Brains", "Ho Ho Hodgepodge", "Naughty or Nice?", "Silent Night Owls",
+  "Merry Mix-Up", "Tis the Season", "Eggnog Nonsense", "Cocoa & Clues", "Sleigh Bells Ring", "Bah Humbug!",
+  "Ugly Sweater Smarts", "Frostbitten Facts", "Winter Wonderland", "Rudolph's Riddles", "Santa's Sack",
+  "Twelve Days of Trivia", "Let It Snow", "Jingle All the Way", "Blitzen Blitz", "Mrs. Claus's Kitchen",
+  "Peppermint Potluck", "Snowball Fight", "Icicle Inquiries", "Garland Grab Bag", "Ornament Odds & Ends",
+  "Fruitcake Fun", "Yuletide Yarns", "Sugar Cookie Scramble", "Snowman Stumpers", "Present Tense",
+  "Under the Mistletoe", "All Wrapped Up", "Bows & Ribbons", "Workshop Wonders", "Toy Shop Trivia",
+  "Chimney Challenge", "Hot Cocoa Hotline", "Merry & Bright", "Up on the Housetop", "Dashing Through the Snow",
+  "Holiday Hijinks", "Festive Free-for-All", "Jolly Old Saint Nick", "Elfin' Around", "Sleigh All Day",
+  "Yule Log Lore", "Candlelight Clues", "Cranberry Chaos", "Snow Globe Shake-Up", "Tree Trimming",
+  "Advent-ures", "Season's Greetings", "Gift Wrap Gamble", "Jingle Bell Rock", "Kris Kringle's Quiz",
+  "Nog Brainers", "Fleece Navidad", "Mittens & Mysteries", "Cozy Fireside", "Peace on Earth", "Comfort & Joy",
+  "Merry Melee", "Polar Bear Puzzlers", "Penguin Party", "Sledding Hill", "Snowflake Scramble",
+  "Gumdrop Grab Bag", "Wreath Riddles", "Bell Ringers", "Carolers' Corner", "Figgy Pudding", "Whoville Wonders",
+  "The Grinch's Grab Bag", "Scrooge's Stumpers", "Tiny Tim Teasers", "Jack Frost Nipping", "Christmas Crackers",
+  "Holly & Ivy", "Silver Bells", "Good Tidings", "Elves' Night Out", "Sleigh Ride Shuffle", "Merry Mayhem",
+  "Snowed In", "Eight Tiny Reindeer", "Visions of Sugarplums", "Tangled Lights", "Check It Twice",
+  "Better Not Pout", "Frosty Mornings", "Midnight Clear", "Rockin' Around", "Feliz Trivia-dad",
+  "Stockings Were Hung", "Roof Landing", "Cookie Crumbs", "Marshmallow Madness", "Wrapping Paper Wreckage",
+  "Elf on the Shelf", "Gift Exchange", "Mistle-toes", "Snow Angels", "The Polar Express",
+];
+// n different Christmas category names, none the same as a name in `avoid`.
+export function randomCategoryNames(n, avoid = [], rand = Math.random) {
+  const bad = new Set(avoid.map(lc));
+  const out = shuffle(XMAS_CATEGORIES.filter((x) => !bad.has(lc(x))), rand).slice(0, n);
+  for (let k = 2; out.length < n; k++) out.push(`${XMAS_CATEGORIES[out.length % XMAS_CATEGORIES.length]} ${k}`);
+  return out;
+}
+// The Jeopardy round, mixed up: every question moves to a different category at random and
+// keeps its own value — and its answer, options, Daily Double and note go with it. Each
+// category keeps the same set of values ($100–$500). With rename, the categories get new
+// random Christmas names (with shuffle off, only the names change).
+// Returns { moves, order, names } for the "recategorize" edit, or null.
+export function shufflePlan(set, { rand = Math.random, shuffle: mix = true, rename = true } = {}) {
+  const cats = groupSet(set).rounds.r1;
+  if (!cats.length) return null;
+  const names = rename ? randomCategoryNames(cats.length, cats.map((c) => c.name), rand) : cats.map((c) => c.name);
+  const placed = cats.map(() => []);
+  if (mix && cats.length > 1) {
+    const byValue = new Map();
+    cats.forEach((cat, k) => cat.clues.forEach((c) => {
+      if (!byValue.has(c.pts)) byValue.set(c.pts, []);
+      byValue.get(c.pts).push({ c, k });
+    }));
+    // Deal each value's questions back out to the categories that have that value: none stays
+    // in the category it came from, and (when possible) each new category gets at most one
+    // question from any old category — a real mix.
+    const from = cats.map(() => new Set());
+    for (const pts of [...byValue.keys()].sort((a, b) => a - b)) {
+      const items = byValue.get(pts);
+      const slots = items.map((x) => x.k);
+      const d = deal(items, slots, (x, k) => x.k !== k && !from[k].has(x.k), rand)
+        || deal(items, slots, (x, k) => x.k !== k, rand) || shuffle(items, rand);
+      d.forEach((x, i) => { placed[slots[i]].push({ c: x.c, pts }); from[slots[i]].add(x.k); });
+    }
+  } else {
+    cats.forEach((cat, k) => cat.clues.forEach((c) => placed[k].push({ c, pts: c.pts })));
+  }
+  const moves = {};
+  const order = [];
+  placed.forEach((list, k) => list.sort((a, b) => a.pts - b.pts).forEach(({ c, pts }) => {
+    moves[c.id] = { category: names[k], points: mix ? pts : c.points };
+    order.push(c.id);
+  }));
+  return { moves, order, names };
+}
+// One item per slot, at random, so that ok(item, slot) holds for all (null if it can't be done).
+function deal(items, slots, ok, rand) {
+  const used = new Array(items.length).fill(false);
+  const out = [];
+  let steps = 0;
+  const go = (i) => {
+    if (i === slots.length) return true;
+    for (const j of shuffle(items.map((_, n) => n), rand)) {
+      if (used[j] || !ok(items[j], slots[i]) || ++steps > 20000) continue;
+      used[j] = true; out[i] = items[j];
+      if (go(i + 1)) return true;
+      used[j] = false;
+    }
+    return false;
+  };
+  return go(0) ? out : null;
+}
+// How the Jeopardy round is now (to undo a shuffle with "recategorize").
+export function categoryPlan(set) {
+  const r1 = ((set && set.clues) || []).filter((c) => c.slot === "r1" && c.category);
+  const moves = {};
+  for (const c of r1) moves[c.id] = { category: c.category, points: c.points };
+  return { moves, order: r1.map((c) => c.id) };
 }
 
 // ---------- search + "have we asked this before?" ----------

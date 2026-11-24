@@ -138,7 +138,7 @@ function clueCard(G) {
 }
 
 function mcqBoard(c, q) {
-  return `<div class="bmcq">${q.choices.map((ch, i) => {
+  return `<div class="bmcq n${q.choices.filter(Boolean).length}">${q.choices.map((ch, i) => {
     if (!ch) return "";
     const elim = c.eliminated.includes(i);
     const right = c.revealed && i === q.correctIndex;
@@ -237,7 +237,7 @@ function finalView(G) {
     return `<div class="clue final--clue" data-key="final-clue">
       <div class="clue-head"><span class="clue-cat">${esc(cat)}</span><span class="clue-val">Final Jeopardy!</span></div>
       <div class="clue-body"><div class="clue-text"><span>${esc(fq ? fq.question : "")}</span></div>
-        ${fq && fq.type === "mcq" ? `<div class="bmcq">${fq.choices.map((ch, i) => `<div class="bchoice"><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></div>`).join("")}</div>` : ""}</div>
+        ${fq && fq.type === "mcq" ? `<div class="bmcq n${fq.choices.filter(Boolean).length}">${fq.choices.map((ch, i) => `<div class="bchoice"><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></div>`).join("")}</div>` : ""}</div>
       <div class="clue-foot">
         <div class="final-clock"><span class="cd" data-deadline="${f.deadline}" data-format="s"></span></div>
         ${timerLights(f.deadline, total)}

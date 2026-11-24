@@ -217,7 +217,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(P.Jen, () => !!document.querySelector(".buzz.live"));
   await P.Jen.dispatchEvent('[data-action="buzz"]', "pointerdown");
   await until(P.Jen, () => !!document.getElementById("typed-answer"));
-  const lateKey = await host.evaluate(() => `${window.__G.S.clue.id}:${window.__G.S.clue.buzzRound}`);
+  const lateKey = await host.evaluate(async () => (await import("/js/engine.js")).lockKey(window.__G.S.clue));
   const t1Before = await host.evaluate(() => window.__G.S.scores.team1);
   const t2Before = await host.evaluate(() => window.__G.S.scores.team2);
   await until(host, () => window.__G.S.clue && window.__G.S.clue.stage === "open" && window.__G.S.clue.blocked.length === 1, null, 8000);

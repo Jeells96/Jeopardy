@@ -346,5 +346,80 @@ const mk = (clues, extra = {}) => ({ ...B.newSet({ name: "Test", year: 2026, clu
   ok(!B.SLOTS.includes("r2"), "Double Jeopardy isn't a round you can pick any more");
 }
 
+// ---------- shuffle into random categories (same values), random Christmas names ----------
+{
+  const cats = ["Movies", "Songs", "Food", "Santa", "World", "Books"];
+  const clues = [];
+  cats.forEach((cat, k) => [100, 200, 300, 400, 500].forEach((p, j) => clues.push({
+    slot: "r1", category: cat, points: k === 5 ? null : p, // one category has blank (automatic) values
+    question: `${cat} q${p}`, answer: `${cat} a${p}`, wrong: j === 1 ? ["w1"] : j === 2 ? ["w1", "w2"] : [], dd: cat === "Food" && p === 400, note: `note ${cat}${p}`,
+  })));
+  clues.push({ slot: "final", category: "Poems", question: "fq", answer: "fa" }, { slot: "r1", category: "", question: "loose q", answer: "x" });
+  const set = B.newSet({ name: "2026", clues });
+  const byQ = (s) => Object.fromEntries(s.clues.map((c) => [c.question, c]));
+  const was = byQ(set);
+  let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const plan = B.shufflePlan(set, { rand });
+  const out = B.applyOp(set, "recategorize", plan);
+  const now = byQ(out);
+  const g = B.groupSet(out);
+  eq(g.rounds.r1.length, 6, "still 6 categories after the shuffle");
+  ok(g.rounds.r1.every((c) => JSON.stringify(c.clues.map((x) => x.pts)) === "[100,200,300,400,500]"), "every category still has $100–$500");
+  const r1 = set.clues.filter((c) => c.slot === "r1" && c.category);
+  ok(r1.every((c) => now[c.question].points === (c.points || [100, 200, 300, 400, 500][Number(c.question.slice(-3)) / 100 - 1])), "every question keeps its own value");
+  ok(r1.every((c) => { const n = now[c.question]; return n.answer === c.answer && JSON.stringify(n.wrong) === JSON.stringify(c.wrong) && n.dd === c.dd && n.note === c.note && n.id === c.id; }), "…and its answer, options, Daily Double and note go with it");
+  const oldCat = (q) => cats.indexOf(was[q].category);
+  const newIdx = (q) => g.rounds.r1.findIndex((c) => c.name === now[q].category);
+  ok(r1.every((c) => newIdx(c.question) !== oldCat(c.question)), "every question moved to a different category");
+  ok(g.rounds.r1.every((c) => new Set(c.clues.map((x) => was[x.question].category)).size === 5), "each new category is a real mix: one question from each of 5 different old categories");
+  // …every time, not just with one lucky seed
+  let mixed = true, moved = true;
+  for (let i = 0; i < 200; i++) {
+    const o = B.applyOp(set, "recategorize", B.shufflePlan(set));
+    const gg = B.groupSet(o);
+    mixed = mixed && gg.rounds.r1.every((c) => new Set(c.clues.map((x) => was[x.question].category)).size === c.clues.length);
+    moved = moved && gg.rounds.r1.every((c, k) => c.clues.every((x) => o.clues.find((y) => y.id === x.id).category !== was[x.question].category));
+  }
+  ok(mixed && moved, "200 shuffles: every question always moves, and every category is always a full mix");
+  // uneven categories (a missing value, a doubled value) still shuffle without losing anything
+  const odd = B.newSet({ clues: [
+    { category: "A", points: 100, question: "a1", answer: "x" }, { category: "A", points: 200, question: "a2", answer: "x" }, { category: "A", points: 200, question: "a2b", answer: "x" },
+    { category: "B", points: 100, question: "b1", answer: "x" }, { category: "B", points: 300, question: "b3", answer: "x" },
+    { category: "C", points: 100, question: "c1", answer: "x" } ] });
+  const oo = B.applyOp(odd, "recategorize", B.shufflePlan(odd));
+  eq(oo.clues.map((c) => [c.question, c.points]).sort(), odd.clues.map((c) => [c.question, c.points]).sort(), "uneven categories: every question kept, each with its value");
+  eq(B.groupSet(oo).rounds.r1.map((c) => c.clues.map((x) => x.pts).join(",")).sort(), ["100,200,200", "100,300", "100"].sort(), "…and each category keeps its own set of values");
+  ok(g.rounds.r1.every((c) => B.XMAS_CATEGORIES.includes(c.name)) && new Set(g.rounds.r1.map((c) => c.name)).size === 6, "categories get 6 different random Christmas names");
+  ok(!g.rounds.r1.some((c) => cats.includes(c.name)), "none of the old names are kept");
+  eq([now.fq.category, now.fq.slot, now["loose q"].category], ["Poems", "final", ""], "Final Jeopardy and unsorted ideas aren't touched");
+  // undo
+  const back = B.applyOp(out, "recategorize", B.categoryPlan(set));
+  eq(back.clues.map((c) => [c.question, c.category, c.points]), set.clues.map((c) => [c.question, c.category, c.points]), "undo puts every question back where it was (blank values blank again)");
+  // names only
+  const named = B.applyOp(set, "recategorize", B.shufflePlan(set, { shuffle: false, rand }));
+  const ng = B.groupSet(named);
+  ok(ng.rounds.r1.every((c, k) => c.clues.every((x) => was[x.question].category === cats[k])) && ng.rounds.r1.every((c) => B.XMAS_CATEGORIES.includes(c.name)), "“New names” renames each group and leaves its questions together");
+  ok(named.clues.find((c) => c.question === "Books q100").points === null, "…without touching the values");
+  ok(!!B.applyOp({ ...set, locked: true }, "recategorize", plan).error, "a locked set can't be shuffled");
+  eq(B.randomCategoryNames(200).length, 200, "asking for more names than the list has still gives that many");
+  ok(B.shufflePlan(B.newSet({ clues: [{ slot: "final", question: "q", answer: "a" }] })) === null, "nothing to shuffle without categories");
+}
+
+// ---------- multiple-choice options in random order (2, 3 or 4 of them) ----------
+{
+  for (const n of [2, 3, 4]) {
+    const row = { type: "mcq", choices: ["RIGHT", ...["w1", "w2", "w3"].slice(0, n - 1)], correctIndex: 0 };
+    const hits = Array(n).fill(0);
+    let fine = true;
+    for (let i = 0; i < 4000; i++) { const r = B.shuffleChoices(row); hits[r.correctIndex]++; fine = fine && r.choices[r.correctIndex] === "RIGHT" && r.choices.length === n; }
+    ok(fine, `${n} options: the right answer is still marked right after shuffling`);
+    ok(hits.every((h) => Math.abs(h - 4000 / n) < 4000 / n * 0.15), `${n} options: the right answer lands in every position about equally (${hits.join("/")})`);
+  }
+  const spoken = { type: "spoken", choices: [], correctIndex: -1 };
+  eq(B.shuffleChoices(spoken), spoken, "normal questions are left alone");
+  const fromSet = B.toGameRows(B.newSet({ clues: [{ slot: "r1", category: "A", points: 100, question: "q", answer: "Yes", wrong: ["No"] }] })).rows[0];
+  eq([fromSet.choices.length, fromSet.choices[fromSet.correctIndex]], [2, "Yes"], "a 2-option question from the library");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -106,6 +106,22 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
     await until(host, (n) => window.__G.S.clue && window.__G.S.clue.stage === "answering" && window.__G.S.clue.locked.name === n, page.name);
   };
 
+  // picked the wrong question: back out (even after the buzzers opened and someone buzzed)
+  await act(host, "pickClue", { qid: await qid(100) });
+  await act(host, "openBuzzers");
+  await until(host, () => !!document.querySelector('.r-buttons .btn.oops'));
+  ok((await host.textContent(".r-buttons .btn.oops")).includes("put it back"), "with the buzzers open, the host still has “↩ Oops — wrong question, put it back”");
+  await until(P.Cy, () => !!document.querySelector(".buzz.live"));
+  await P.Cy.dispatchEvent('[data-action="buzz"]', "pointerdown");
+  await until(P.Cy, () => !!document.querySelector(".buzz.sent") || (window.__G.S.clue && window.__G.S.clue.stage === "answering"));
+  await shot(host, "u02b-host-oops");
+  await host.click(".r-buttons .btn.oops");
+  await until(board, () => window.__G.S.phase === "board" && !window.__G.S.clue);
+  ok(!(await host.evaluate((p) => window.__G.Q.find((q) => q.points === p && !q.isFinal).used, 100)), "…the question goes back on the board, unplayed");
+  ok((await S(host)).scores.team1 === 0 && (await S(host)).scores.team2 === 0, "…and nobody's score changed");
+  await until(P.Cy, () => !!document.querySelector(".ph-board"));
+  ok(true, "phones go back to the board too");
+
   // wrong → everyone knows who missed
   await act(host, "pickClue", { qid: await qid(100) });
   await act(host, "openBuzzers");

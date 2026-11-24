@@ -99,7 +99,8 @@ export const r2On = () => false;
 export const roundMaxValue = (questions, round) =>
   boardClues(questions, round).reduce((m, q) => Math.max(m, Number(q.points) || 0), 0);
 export const cluesLeft = (questions, round) => boardClues(questions, round).filter((q) => !q.used).length;
-export const lockKey = (clue) => (clue ? `${clue.id}:${clue.buzzRound}` : "");
+// (pickedAt is in it so a question that was put back and picked again starts fresh.)
+export const lockKey = (clue) => (clue ? `${clue.id}:${clue.pickedAt || 0}:${clue.buzzRound}` : "");
 
 export function ddLimits(state, questions, team) {
   const score = (state.scores && state.scores[team]) || 0;
@@ -229,9 +230,12 @@ export function pickClue(s, { qid }, ctx) {
   return b.done();
 }
 
+// Picked the wrong one: put it back on the board — any time before it has changed a score
+// (while it's read, on the Daily Double screen, with the buzzers open, even mid-answer).
+export const canUnpick = (c) => !!c && c.stage !== "done" && !(c.blocked || []).length;
 export function unpickClue(s, _p, ctx) {
   const c = s.clue;
-  if (!c || c.buzzRound > 0 || !["reading", "dd"].includes(c.stage)) return null;
+  if (!canUnpick(c)) return null;
   return builder(s, ctx).field("phase", "board").field("clue", null).q(c.id, { used: false }).done();
 }
 

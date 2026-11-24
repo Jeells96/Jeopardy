@@ -136,7 +136,7 @@ const dump = async () => (await fetch(URL + "__fs/dump", { method: "POST" })).js
   await until(host, () => window.__G.S.clue.stage === "answering", null, 8000);
   const decidedIn = Date.now() - before;
   c = (await state(host)).clue;
-  const docs = Object.entries(await dump()).filter(([k, v]) => k.startsWith("buzzes/") && v.key === `${c.id}:${c.buzzRound}`).map(([, v]) => v);
+  const docs = Object.entries(await dump()).filter(([k, v]) => k.startsWith("buzzes/") && v.key === `${c.id}:${c.pickedAt}:${c.buzzRound}`).map(([, v]) => v);
   const fastest = docs.slice().sort((a, b) => a.t - b.t)[0];
   ok(docs.length === N, `all ${N} presses were recorded (each in its own document — no clashing)`);
   ok(c.locked.deviceId === fastest.deviceId, `exactly one winner: the fastest press (${c.locked.name}, ${c.locked.ms} ms)`);

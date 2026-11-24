@@ -83,6 +83,8 @@ export function hostSteps(G, { privateView = false } = {}) {
     const q = findQ(G, c.id);
     const value = c.dd ? c.dd.wager : q ? q.points : 0;
     const set = S.settings || {};
+    // Hit the wrong one? Put it back on the board (until it has changed a score).
+    const oops = () => { if (E.canUnpick(c)) btn("↩ Oops — wrong question, put it back", "act", act("unpickClue"), "ghost oops", "B"); };
     if (c.stage === "dd") {
       const team = G.ui.ddTeam || c.dd.team || null;
       const lim = team ? E.ddLimits(S, G.Q, team) : null;
@@ -94,7 +96,7 @@ export function hostSteps(G, { privateView = false } = {}) {
       const w = Number(G.ui.ddWager);
       const valid = lim && Number.isFinite(w) && G.ui.ddWager !== "" && w >= lim.min && w <= lim.max;
       btn(valid ? `🔒 Lock ${money(w)} & show question` : "🔒 Lock wager & show question", "dd-lock", {}, valid || !phones ? "primary" : "ghost", "Space");
-      btn("↩ Put question back", "act", act("unpickClue"), "ghost", "");
+      oops();
       return { status, panel, buttons: B };
     }
     if (c.stage === "reading") {
@@ -102,13 +104,14 @@ export function hostSteps(G, { privateView = false } = {}) {
         ? `Read the question — buzzers open automatically in <b class="cd" data-deadline="${c.pickedAt + set.readSeconds * 1000}" data-format="s"></b>.`
         : "Read the question out loud, then open the buzzers.";
       btn("🔔 Open buzzers", "act", act("openBuzzers"), "primary", "Space");
-      if (c.buzzRound === 0) btn("↩ Put question back", "act", act("unpickClue"), "ghost", "");
       btn("🙅 Nobody — reveal", "act", act("nobody"), "ghost", "N");
+      oops();
       return { status, panel, buttons: B };
     }
     if (c.stage === "open" && G.now() < c.openedAt) {
       status = "🔔 Buzzers opening…";
       btn("🙅 Nobody knows — reveal", "act", act("nobody"), "ghost", "N");
+      oops();
       return { status, panel, buttons: B };
     }
     if (c.stage === "open") {
@@ -119,6 +122,7 @@ export function hostSteps(G, { privateView = false } = {}) {
         : `🔔 Buzzers are open — waiting for the first buzz…${cd}`;
       btn("⏸ Pause buzzers", "act", act("pauseBuzzers"), "ghost", "P");
       btn("🙅 Nobody knows — reveal", "act", act("nobody"), "ghost", "N");
+      oops();
       return { status, panel, buttons: B };
     }
     if (c.stage === "paused") {
@@ -126,6 +130,7 @@ export function hostSteps(G, { privateView = false } = {}) {
       status = c.blocked.length ? `${esc(tn(G, c.blocked[0]))} missed it.` : "Buzzers paused.";
       btn(rem.length === 1 ? `🔔 Open for ${esc(tn(G, rem[0]))}` : "🔔 Reopen buzzers", "act", act("openBuzzers"), "primary", "Space");
       btn("🙅 Nobody — reveal", "act", act("nobody"), "ghost", "N");
+      oops();
       return { status, panel, buttons: B };
     }
     if (c.stage === "answering" && c.locked) {
@@ -149,6 +154,7 @@ export function hostSteps(G, { privateView = false } = {}) {
         btn(`✗ Wrong −${money(value)}`, "act", act("judge", { result: "wrong" }), "bad", "W");
         btn("Skip (no penalty)", "act", act("judge", { result: "skip" }), "ghost", "S");
       }
+      oops();
       return { status, panel, buttons: B };
     }
     if (c.stage === "done") {

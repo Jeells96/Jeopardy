@@ -90,6 +90,11 @@ function setView(G, set) {
     if (todo && !list.length) return "";
     return `<section class="lib-round" data-key="round-${slot}">
       <h3>${B.SLOT_LABEL[slot]} round <small>${g.rounds[slot].length ? `${plural(g.rounds[slot].length, "category", "categories")} · ${plural(count, "question")} · values $100–$500` : "no categories yet"}</small></h3>
+      ${slot === "r1" && g.rounds.r1.length && !set.locked && !todo ? `<div class="mixbar">
+        <button class="btn mix" data-action="lib-shuffle"${g.rounds.r1.length < 2 ? " disabled" : ""}>🎲 Shuffle into random categories</button>
+        <button class="btn ghost" data-action="lib-rename-random">🎄 New random Christmas names</button>
+        <small class="muted">Shuffle moves every question to a different category at random. It keeps its value, answer, options, Daily Double and note, and the categories get random Christmas names.</small>
+      </div>` : ""}
       ${list.map((cat, i) => catBlock(G, set, cat, i, g.rounds[slot].length, show)).join("")}
       ${set.locked || todo ? "" : `<div class="newcat">
         <input id="new-cat-${slot}" maxlength="60" placeholder="New category name" aria-label="New ${B.SLOT_LABEL[slot]} category" data-sticky>
@@ -127,6 +132,9 @@ function setView(G, set) {
     ${L.showChecks && checks.length ? `<ul class="checks">${checks.map((c) => `<li class="${c.level}">${esc(c.text)}</li>`).join("")}</ul>` : ""}
   </div>
   ${L.undo && L.undo.setId === set.id ? `<div class="undobar">Deleted ${esc(L.undo.label)} <button class="btn ghost sm" data-action="lib-undo-del">↩ Undo</button></div>` : ""}
+  ${L.mixed && L.mixed.setId === set.id ? `<div class="undobar mixed">${L.mixed.shuffled ? "🎲 Shuffled into random categories" : "🎄 New Christmas category names"}${inGame ? " — tap <b>▶ Use in the game</b> to put it on the board" : ""}
+    <button class="btn ghost sm" data-action="${L.mixed.shuffled ? "lib-shuffle" : "lib-rename-random"}">${L.mixed.shuffled ? "🎲 Shuffle again" : "🎄 Other names"}</button>
+    <button class="btn ghost sm" data-action="lib-mix-undo">↩ Undo</button></div>` : ""}
   ${clipBar(G, set)}
   <div class="set-filter">
     <div class="seg">
@@ -180,7 +188,7 @@ function clueCard(G, set, c, where) {
   if (issues.includes("question")) flags.push(`<span class="flag todo">Needs a question</span>`);
   if (issues.includes("answer")) flags.push(`<span class="flag todo">Needs an answer</span>`);
   if (where === "loose" && c.question && c.answer) flags.push(`<span class="flag todo">Needs a category</span>`);
-  if (B.isMC(c)) flags.push(`<span class="flag mc">Multiple choice: ${esc(c.wrong.join(" · "))}</span>`);
+  if (B.isMC(c)) flags.push(`<span class="flag mc">Multiple choice (${c.wrong.length + 1} options, in random order on the board): ${esc(c.wrong.join(" · "))}</span>`);
   else if (c.wrong.length) flags.push(`<span class="flag">Multiple choice off (options kept)</span>`);
   if (c.dd) flags.push(`<span class="flag dd">⭐ Daily Double</span>`);
   if (c.note) flags.push(`<span class="flag note">📝 ${esc(c.note)}</span>`);

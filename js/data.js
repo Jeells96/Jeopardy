@@ -171,10 +171,12 @@ async function commitInChunks(ops) {
     await b.commit();
   }
 }
+// (Every way of loading questions comes through here: the library, the spreadsheet and the
+// test game. Multiple-choice options are put in a random order on the way in.)
 export async function replaceAllQuestions(rows) {
   const existing = await getDocs(questionsCol);
   await commitInChunks(existing.docs.map((d) => (b) => b.delete(d.ref)));
-  await commitInChunks(rows.map((r) => (b) => b.set(doc(questionsCol), r)));
+  await commitInChunks(rows.map((r) => (b) => b.set(doc(questionsCol), B.shuffleChoices(r))));
 }
 export async function resetUsed() {
   const snap = await getDocs(questionsCol);

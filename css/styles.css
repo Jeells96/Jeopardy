@@ -294,6 +294,7 @@ input, textarea, select { font-family: var(--ui); }
 .bchoice { display: flex; align-items: center; gap: 12px; padding: 1.3vh 1.2vw; border-radius: 12px; background: rgba(0, 0, 0, 0.28); border: 2px solid rgba(255, 207, 64, 0.35); font: 700 clamp(14px, 1.8vw, 30px) var(--ui); text-align: left; transition: all 0.3s ease; }
 .bchoice b { font-family: var(--display); font-weight: 400; color: var(--gold); font-size: 1.15em; }
 .bchoice.elim { opacity: 0.35; text-decoration: line-through; }
+.bmcq.n3 .bchoice:last-child, .bmcq.n5 .bchoice:last-child { grid-column: 1 / -1; justify-self: center; width: calc(50% - 0.6vw); }
 .bchoice.right { background: rgba(23, 164, 87, 0.85); border-color: #7dffb0; box-shadow: 0 0 24px rgba(23, 164, 87, 0.6); }
 .bchoice.wrong { background: rgba(159, 20, 39, 0.75); }
 .clue-foot { display: flex; flex-direction: column; align-items: center; gap: 1.1vh; min-height: 7vh; justify-content: flex-end; }
@@ -1103,6 +1104,14 @@ select option { color: #10142e; background: #fff; }
 .lib .copyto { width: auto; flex: 1; min-width: 160px; }
 .addclue { width: 100%; padding: 9px; border-radius: 10px; border: 1px dashed rgba(255, 255, 255, 0.3); background: none; color: var(--muted); font: 600 14px var(--ui); cursor: pointer; }
 .addclue:hover { color: #fff; border-color: var(--gold); }
+/* Shuffle the Jeopardy round / random Christmas names */
+.mixbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 12px; padding: 12px; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(160, 20, 40, 0.28), rgba(10, 90, 45, 0.28)); border: 1px dashed rgba(255, 207, 64, 0.45); }
+.mixbar small { flex: 1 1 260px; line-height: 1.4; }
+.btn.mix { --bg: linear-gradient(180deg, #e3263c, #a5122a); color: #fff; border-color: #ff8a99; box-shadow: 0 6px 18px rgba(227, 38, 60, 0.35); }
+.undobar.mixed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Host: back out of a question picked by mistake */
+.btn.oops { border-style: dashed; border-color: rgba(255, 207, 64, 0.6); color: var(--gold); }
 .newcat { display: flex; gap: 8px; }
 .newcat .btn { white-space: nowrap; }
 .pad { padding: 8px 4px; }

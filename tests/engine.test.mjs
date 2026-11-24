@@ -457,5 +457,27 @@ console.log("engine tests");
   eq(aw.find((a) => a.id === "minis").winners.map((x) => x.name), ["Bob"], "North Pole Champ: most mini-game wins");
 }
 
+// --- backing out of a question picked by mistake ---
+{
+  let st = fresh();
+  st = run(st, "startGame", { control: "team1" });
+  st = run(st, "pickClue", { qid: "a1" });
+  const k1 = E.lockKey(st.state.clue);
+  st = run(st, "openBuzzers");
+  ok(E.canUnpick(st.state.clue), "can back out after the buzzers are open");
+  let b = run(st, "unpickClue");
+  eq([b.state.phase, b.state.clue, b.qs.find((q) => q.id === "a1").used], ["board", null, false], "…the question goes back on the board");
+  b = run(b, "pickClue", { qid: "a1" });
+  ok(E.lockKey(b.state.clue) !== k1, "picked again, it starts fresh (old buzzes don't count)");
+  let a = buzz(st, P1);
+  ok(!run(a, "unpickClue").noop, "can back out while someone is answering (no points changed yet)");
+  a = run(a, "setSettings", { patch: { autoRebound: true } });
+  a = run(a, "judge", { result: "wrong" });
+  ok(run(a, "unpickClue").noop, "…but not once it has changed a score");
+  let d = run(fresh(), "startGame", { control: "team1" });
+  d = run(d, "pickClue", { qid: "a3" });
+  ok(!run(d, "unpickClue").noop, "a Daily Double can be put back too");
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

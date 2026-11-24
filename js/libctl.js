@@ -8,7 +8,7 @@ export function initLibrary(G) {
   G.sets = [];
   G.setsReady = false;
   G.ui.lib = {
-    setId: null, search: "", filter: "all", open: {}, showChecks: false, newFrom: "empty", undo: null,
+    setId: null, search: "", filter: "all", open: {}, showChecks: false, newFrom: "empty", undo: null, mixed: null,
     clip: { mode: "move", items: [] }, // questions picked to copy or move: [{ setId, id, slot, category }]
     paste: { text: "", slot: "r1", category: "" },
     prompt: { categories: 6, perCategory: 5, slot: "r1", topics: "", avoid: true },
@@ -72,7 +72,27 @@ export async function libClick(a, el, ctx) {
   const close = () => { G.ui.modal = null; };
 
   switch (a) {
-    case "lib-select": L.setId = d.id; L.filter = "all"; L.undo = null; clearSearch(L); render(); window.scrollTo(0, 0); return;
+    case "lib-select": L.setId = d.id; L.filter = "all"; L.undo = null; L.mixed = null; clearSearch(L); render(); window.scrollTo(0, 0); return;
+    // Mix up the Jeopardy round (or just give the categories new Christmas names). Undo puts
+    // back how it was before the first shuffle in a row.
+    case "lib-shuffle":
+    case "lib-rename-random": {
+      if (!cur) return;
+      const shuffled = a === "lib-shuffle";
+      const plan = B.shufflePlan(cur, { shuffle: shuffled });
+      if (!plan) return toast("Add some categories to the Jeopardy round first.", "bad");
+      const before = L.mixed && L.mixed.setId === cur.id ? L.mixed.before : B.categoryPlan(cur);
+      await D.setOp(cur.id, "recategorize", plan);
+      L.mixed = { setId: cur.id, before, shuffled: shuffled || !!(L.mixed && L.mixed.setId === cur.id && L.mixed.shuffled) };
+      render();
+      return toast(shuffled ? "🎲 Shuffled! Every question has a new category (same value)." : `🎄 New names: ${plan.names.slice(0, 3).join(", ")}…`, "good");
+    }
+    case "lib-mix-undo": {
+      const m = L.mixed;
+      L.mixed = null;
+      if (m && cur && m.setId === cur.id) { await D.setOp(cur.id, "recategorize", m.before); toast("↩ Back the way it was", "good"); }
+      return render();
+    }
     case "lib-search-clear": clearSearch(L); return render();
     case "lib-add-test": {
       const set = B.newSet({ name: "Test game (not Christmas)", year: new Date().getFullYear(), clues: await sampleClues("test-game") });

@@ -40,7 +40,8 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("console", (m) => { if (m.type() === "error" && !/favicon|409/.test(m.text())) errors.push(m.text()); });
+  // (404 on an .mp3 = an optional sound file that isn't there — its built-in sound is used)
+  page.on("console", (m) => { const url = (m.location() && m.location().url) || ""; if (m.type() === "error" && !/favicon|409/.test(m.text()) && !url.endsWith(".mp3")) errors.push(m.text()); });
   const sets = () => page.evaluate(() => JSON.parse(JSON.stringify(window.__G.sets)));
   const toast = async (t) => { await until(page, (x) => { const e = document.getElementById("toast"); return e.classList.contains("show") && e.textContent.includes(x); }, t); return true; };
 
@@ -153,8 +154,34 @@ This 1823 poem begins 'Twas the night before Christmas | A Visit from St. Nichol
   await shot(page, "l06-ai-prompt");
   await page.keyboard.press("Escape");
 
-  // lock a past year
+  // shuffle into random categories (same values), random Christmas names, undo
   await page.click('[data-action="lib-select"]:has-text("Christmas 2025")');
+  await page.waitForSelector('[data-action="lib-shuffle"]');
+  const snap = () => page.evaluate(() => { const s = window.__G.sets.find((x) => x.year === 2025); return s.clues.filter((c) => c.slot === "r1").map((c) => ({ id: c.id, q: c.question, cat: c.category, pts: c.points, ans: c.answer, wrong: c.wrong.join(";"), dd: c.dd })); });
+  const before = await snap();
+  const oldCats = [...new Set(before.map((c) => c.cat))];
+  await page.click('[data-action="lib-shuffle"]');
+  await until(page, (old) => { const s = window.__G.sets.find((x) => x.year === 2025); return s.clues.filter((c) => c.slot === "r1").every((c) => !old.includes(c.category)); }, oldCats);
+  const after = await snap();
+  const was = Object.fromEntries(before.map((c) => [c.id, c]));
+  const autoPts = (c) => c.pts; // the sample game has every value written in
+  ok(after.every((c) => was[c.id].pts === autoPts(c) && was[c.id].ans === c.ans && was[c.id].wrong === c.wrong && was[c.id].dd === c.dd), "🎲 Shuffle: every question keeps its value, answer, options and Daily Double");
+  ok(after.every((c) => oldCats.indexOf(was[c.id].cat) !== -1 && c.cat !== was[c.id].cat), "…and lands in a different category");
+  const newCats = [...new Set(after.map((c) => c.cat))];
+  const pool = await page.evaluate(async () => (await import("/js/bank.js")).XMAS_CATEGORIES);
+  ok(newCats.length === oldCats.length && newCats.every((n) => pool.includes(n)), `…and the categories get random Christmas names (${newCats.join(", ")})`);
+  ok(await page.evaluate((cats) => cats.every((n) => [...document.querySelectorAll(".cat-name")].some((i) => i.value === n)), newCats), "the library shows the new categories");
+  await until(page, () => !!document.querySelector(".undobar.mixed"));
+  await shot(page, "l04b-shuffled");
+  await page.click('[data-action="lib-rename-random"]');
+  await until(page, (cats) => { const s = window.__G.sets.find((x) => x.year === 2025); return s.clues.filter((c) => c.slot === "r1").every((c) => !cats.includes(c.category)); }, newCats);
+  const renamed = await snap();
+  ok(renamed.every((c, i) => c.id === after[i].id && c.pts === after[i].pts), "🎄 New names: renames the categories and leaves the questions where they are");
+  await page.click('[data-action="lib-mix-undo"]');
+  await until(page, (b) => JSON.stringify(window.__G.sets.find((x) => x.year === 2025).clues.filter((c) => c.slot === "r1").map((c) => [c.id, c.category, c.points])) === JSON.stringify(b.map((c) => [c.id, c.cat, c.pts])), before);
+  ok(true, "↩ Undo puts the whole round back the way it was");
+
+  // lock a past year
   await page.click('[data-action="lib-more"]');
   await page.click('.morelist [data-action="lib-lock"]');
   await until(page, () => window.__G.sets.find((x) => x.year === 2025).locked);

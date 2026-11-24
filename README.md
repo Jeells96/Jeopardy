@@ -167,7 +167,10 @@ switch off phone renaming there too.
   Correct / Wrong / Skip.
 - **Multiple choice:** every phone shows the options along with the question (nobody has to
   look at the TV). Whoever buzzes in taps an option and it's scored automatically. A wrong
-  option is crossed off for the rebound team.
+  option is crossed off for the rebound team. Questions can have **2, 3 or 4 options** (one
+  right answer plus 1–3 wrong ones), and the options are always put in a **random order** when
+  the questions go on the board, so the right answer isn't always first (or anywhere in
+  particular). With 3 options the third sits centred under the other two.
 - **The result on every phone:** "🎅 Ho ho ho — you got it! +$200 for your team" on the phone
   that answered (with a happy buzz — or a sad one for a miss), "🎄 Amy got it for your team!"
   for teammates, and "🥶 Amy got it — Wives +$200" for the other team, plus the answer.
@@ -199,12 +202,16 @@ switch off phone renaming there too.
   screen with confetti.
 
 **Host tools**
-- **Undo** the last score change (U), adjust any score from its podium, "put a question back"
-  if you misclick, switch who picks, jump to Final, new game.
+- **Picked the wrong question?** **↩ Oops — wrong question, put it back** (key **B**) puts it
+  straight back on the board, unplayed — while it's being read, on the Daily Double screen,
+  with the buzzers open, even while someone's answering. It's there right up until the
+  question changes a score; anyone who buzzed can buzz again when it comes back up.
+- **Undo** the last score change (U), adjust any score from its podium, switch who picks,
+  jump to Final, new game.
 - Rename or move players between teams (their phone updates instantly) or remove them —
   a removed player's phone is released and has to enter a name again to rejoin.
 - Keyboard: Space next step · C correct · W wrong · S skip · N nobody · P pause buzzers ·
-  R show answer · U undo · M sound · F fullscreen · Esc close.
+  R show answer · B put the question back · U undo · M sound · F fullscreen · Esc close.
 
 **🌟 The North Pole Awards (on the final-scores screen)**
 - Under the winner, the board reveals the awards one after another, each on a gift tag with a
@@ -274,6 +281,14 @@ past years, search them, and reuse a good question.
   category, Final or Unsorted — or type a name and **Paste into a new category**. Works
   between sets too (e.g. copy last year's favourites into this year).
 - **🗑 Delete a whole category** from its header (with Undo).
+- **🎲 Shuffle into random categories** (above the Jeopardy round's categories): every
+  question moves to a different category at random, and each new category gets one question
+  from each old one. Every question **keeps its value** and everything else that goes with it
+  (answer, options, Daily Double, note), and each category still runs $100–$500. The
+  categories get **random Christmas names** ("Mistletoe Mixer", "Nog Brainers", "Sleigh
+  What?", …) from a list of 120. **🎄 New random Christmas names** renames your groups without
+  moving any questions. Both can be done again as often as you like, and **↩ Undo** puts the
+  round back exactly how it was. Then tap **▶ Use in the game** to put it on the board.
 - **♻ Also asked in Christmas 2025** — repeats from past years are flagged automatically.
 - **🔎 Search every year** — questions, answers, categories and notes across all sets;
   copy any result into this year's set.
