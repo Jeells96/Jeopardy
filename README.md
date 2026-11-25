@@ -56,7 +56,9 @@ points go straight onto the team's score and carry into Jeopardy.
 - **Fair rotation:** a player leaves the "still to play" pool the moment they're picked (a
   re-draw puts them back), so nobody is drawn twice until everyone on their team has had a
   go, and the shuffle only shows names still in the pool. Across the night, people who
-  haven't played any mini game yet are picked first. Uneven teams are fine.
+  haven't played any mini game yet are picked first. Uneven teams are fine. With an odd
+  number of couples at two tables, the **spare table waits** rather than calling someone up
+  twice — tap **🎲 Draw for [table]** if you'd rather start the next round there anyway.
 - **Don't like the draw?** Tap 🎲 to re-draw one side, or choose a person from the list.
 - **⏱ Played against the clock?** Tick **⏱ Timer** on the game in Settings → Mini games and
   type the seconds (it shows you the time, e.g. `0:45`). **You** start it: your controls get
@@ -222,7 +224,8 @@ switch off phone renaming there too.
   lock it (the first one locked counts). Jaren can still enter it for them.
 - Wager **$5 up to everything the team has**. At $0 or below, they can wager up to the
   board's top value ($500), like the show. Quick buttons for min / half / **"All in!"**.
-- **Twice the usual answer time.**
+- **30 seconds to answer** (Settings → Game → Timers → Daily Double), however short the
+  normal answer time is.
 
 **Final Jeopardy**
 - **Fix up the scores first** if you need to: when the board is clear, and while wagers are

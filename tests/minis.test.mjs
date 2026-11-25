@@ -457,6 +457,8 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   // ⏩ Two tables at once — the setting lives on the game
   w.run("miniUpdate", { id, patch: { tables: 3 } });
   eq(E.miniSlots(w.state, w.game()), ["Table 1", "Table 2", "Table 3"], "three tables, numbered");
+  w.run("miniReset", { id }); // start the round fresh so all three tables can fill
+  w.run("miniPlay", { id });
   w.run("miniNext", { id });
   let open = E.openMatches(w.game());
   eq(open.map((m) => m.table), ["Table 1", "Table 2", "Table 3"], "one draw fills every table with its own matchup");
@@ -765,6 +767,45 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   // A blind drawing has its own step clock, so it never gets this one.
   const d = w.add({ name: "Blind Drawing", type: "draw", timed: true, seconds: 30 });
   eq(w.state.minis.list[2].timed, false, "blind drawing runs on its own step clock");
+}
+
+// ---------- an odd number of couples at two tables: nobody is called up twice ----------
+{
+  const people = [];
+  for (let i = 1; i <= 3; i++) { people.push({ id: "h" + i, name: "H" + i, team: "team1", pair: i }); people.push({ id: "w" + i, name: "W" + i, team: "team2", pair: i }); }
+  const w = world(people, 5);
+  const id = w.add({ name: "Toss", type: "h2h", tables: 2 });
+  w.run("minisStart");
+  w.run("miniPlay", { id });
+  w.run("miniNext", { id });
+  let open = E.openMatches(w.game());
+  eq(open.length, 2, "first draw fills both tables");
+  eq(new Set(open.flatMap((m) => [m.p1.id, m.p2.id])).size, 4, "…with four different people");
+  for (const m of open) w.run("miniMatch", { id, matchId: m.id, winner: "team1" });
+  // One couple left: the spare table waits instead of calling someone up for a second go.
+  w.run("miniNext", { id });
+  open = E.openMatches(w.game());
+  eq(open.length, 1, "with one couple left, only one table is filled");
+  eq([open[0].p1.name, open[0].p2.name], ["H3", "W3"], "…and it's the couple who hadn't played");
+  // The host can still start the next round at the free table if they want to.
+  w.run("miniNext", { id, table: "Table 2" });
+  eq(E.openMatches(w.game()).length, 2, "🎲 Draw for Table 2 starts the next round there anyway");
+  for (const m of E.openMatches(w.game())) w.run("miniMatch", { id, matchId: m.id, winner: "tie" });
+  // A fresh round fills both tables again.
+  w.run("miniNext", { id });
+  open = E.openMatches(w.game());
+  eq(new Set(open.flatMap((m) => [m.p1.id, m.p2.id])).size, open.length * 2, "a new round fills tables with different people again");
+  // Best overall, three tables, five players: two tables wait for the next round.
+  const b2 = world(roster(3, 2), 4);
+  const bid = b2.add({ name: "Stack", type: "best", tables: 3 });
+  b2.run("minisStart");
+  b2.run("miniPlay", { id: bid });
+  b2.run("miniNext", { id: bid });
+  eq(E.turnsOf(b2.game()).length, 3, "best overall: three tables, three different players");
+  for (const t of E.turnsOf(b2.game())) b2.run("miniScore", { id: bid, turnId: t.id, score: 3 });
+  b2.run("miniNext", { id: bid });
+  eq(E.turnsOf(b2.game()).length, 2, "…then only the two who haven't played");
+  eq(new Set(E.turnsOf(b2.game()).map((t) => t.pid)).size, 2, "…each at their own table");
 }
 
 // ---------- everyone at once: no draws, no scores, Jaren says who won ----------

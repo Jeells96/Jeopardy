@@ -13,6 +13,7 @@ export const otherTeam = (t) => (t === "team1" ? "team2" : "team1");
 
 export const DEFAULT_SETTINGS = {
   answerSeconds: 15,      // time the buzzed-in player has to answer
+  ddSeconds: 30,          // Daily Double: the team gets this long (longer — it's their wager)
   buzzWindowSeconds: 0,   // 0 = buzzers stay open until someone buzzes
   reboundSeconds: 30,     // after a miss, the other team gets this long to buzz in
   readSeconds: 0,         // 0 = host opens buzzers manually; >0 = auto-open after reading time
@@ -27,7 +28,7 @@ export const DEFAULT_SETTINGS = {
 export const DEFAULT_NAMES = { team1: "Husbands", team2: "Wives" };
 
 export const LIMITS = {
-  answerSeconds: [3, 120], buzzWindowSeconds: [0, 120], reboundSeconds: [5, 120], readSeconds: [0, 30], finalSeconds: [10, 300],
+  answerSeconds: [3, 120], ddSeconds: [5, 180], buzzWindowSeconds: [0, 120], reboundSeconds: [5, 120], readSeconds: [0, 30], finalSeconds: [10, 300],
 };
 
 const rid = () => Math.random().toString(36).slice(2, 10);
@@ -192,7 +193,8 @@ export function setControl(s, { team }, ctx) {
   return builder(s, ctx).field("control", team).done();
 }
 // How long the person who buzzed in has to answer — twice as long on a Daily Double.
-export const answerMs = (c, settings) => ((settings && settings.answerSeconds) || 15) * 1000 * (c && c.dd ? 2 : 1);
+export const answerMs = (c, settings) =>
+  (c && c.dd ? (settings && settings.ddSeconds) || 30 : (settings && settings.answerSeconds) || 15) * 1000;
 
 export function startRound2(s, _p, ctx) {
   if (!r2On(s, ctx.questions)) return fail("This game doesn't have a Double Jeopardy round.");
@@ -663,7 +665,7 @@ export function setSettings(s, { patch }, ctx) {
 // every question's `used` flag and clears buzzes.)
 export function newGame(s, _p, ctx) {
   const fresh = defaultState({ teamNames: s.teamNames, settings: s.settings });
-  fresh.minis = { list: minisOf(s).list.map((g) => ({ ...g, ...blankProgress() })), current: null, back: null, tables: minisOf(s).tables || [], recent: [] };
+  fresh.minis = { list: minisOf(s).list.map((g) => ({ ...g, ...blankProgress() })), current: null, back: null, recent: [] };
   fresh.loaded = s.loaded || null; // the questions themselves stay loaded
   const b = builder(s, ctx);
   for (const [k, v] of Object.entries(fresh)) b.field(k, v);
@@ -918,6 +920,14 @@ function summonPicker(s, ctx) {
   };
   return { next, extra: () => ({ recent }) };
 }
+// Is anyone on this team still waiting for their first turn of the round (and free to
+// play)? `busy` keeps growing as a draw fills table after table.
+const fresher = (ctx, played, busy) => (team) => {
+  const ps = teamPlayers(ctx, team);
+  if (!ps.length) return true; // a team with nobody in it never holds a table up
+  const done = (played && played[team]) || [];
+  return ps.some((p) => !busy.includes(p.id) && !done.includes(p.id));
+};
 const busyIn = (items) => items.flatMap((x) => (x.pid ? [x.pid] : [x.p1 && x.p1.id, x.p2 && x.p2.id].filter(Boolean)));
 const mapMini = (s, id, fn) => minisOf(s).list.map((g) => (g.id === id ? fn(g) : g));
 const NO_MINIS_NOW = { clue: "Finish the current question first.", final: "Final Jeopardy has already started.", over: "The game is over — start a new game to play mini games." };
@@ -1039,9 +1049,13 @@ export function miniNext(s, { id, table }, ctx) {
     const anyone = TEAMS.some((t) => teamPlayers(ctx, t).length);
     let played = g.played, tonight = tonightOf(s);
     const pairs = pairingOn(s);
+    // Filling several tables in one go must not start a new round at the last table while
+    // somebody still hasn't played this one: that table waits instead (the host can still
+    // draw for it on its own to get it going again).
     // Couples play each other: draw one side, and their partner is the other side.
     const freeMate = (p) => { const m = partnerOf(ctx.players, p.id); return !!m && m.team === "team2" && !busy.includes(m.id); };
     for (const slot of free) {
+      if (added.length && !TEAMS.every(fresher(ctx, played, busy))) break; // nobody left who hasn't played
       const p1 = choose(ctx, "team1", played.team1, [lastSide(g, "p1")], busy, tonight.team1, pairs ? freeMate : null);
       const p2 = (pairs && mateFor(ctx, p1, "team2", busy)) || choose(ctx, "team2", played.team2, [lastSide(g, "p2")], busy, tonight.team2);
       const short = (!p1 && teamPlayers(ctx, "team1").length) || (!p2 && teamPlayers(ctx, "team2").length);
@@ -1065,6 +1079,7 @@ export function miniNext(s, { id, table }, ctx) {
   const added = [];
   let lastTeam, played = g.played, tonight = tonightOf(s);
   for (const slot of free) {
+    if (added.length && !TEAMS.some(fresher(ctx, played, busy))) break; // nobody left who hasn't played
     const t = pickTurn({ ...g, played }, ctx, null, busy, lastTeam, tonight);
     if (!t) break;
     added.push({ ...t, ...withTable(slot) });

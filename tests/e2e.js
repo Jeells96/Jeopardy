@@ -222,7 +222,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(board, () => window.__G.S.clue.stage === "answering");
   const ddc = (await state(board)).clue;
   const [ddMs, baseSecs] = await host.evaluate(async (c) => [(await import("/js/engine.js")).answerMs(c, window.__G.S.settings), window.__G.S.settings.answerSeconds || 15], ddc);
-  ok(ddMs === baseSecs * 2000, `twice the answer time on a Daily Double (${ddMs / 1000}s instead of ${baseSecs}s)`);
+  ok(ddMs === 30000, `30 seconds to answer a Daily Double (normal questions get ${baseSecs}s)`);
   ok((await board.textContent(".clue-val")).includes(ddMaxTxt), "DD wager shown on the question");
   const ddTeam = (await state(board)).clue.dd.team;
   const ddPlayer = Object.values(P).find((p) => p.team === ddTeam);
