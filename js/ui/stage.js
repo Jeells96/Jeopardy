@@ -1,6 +1,6 @@
 // The show-style "stage": board grid, clue card, Daily Double, Final Jeopardy,
 // podiums and lobby. Used by the projector board and the host console.
-import { esc, money, cls, verb } from "./util.js";
+import { esc, money, cls, verb, possessive } from "./util.js";
 import * as E from "../engine.js";
 import { minisStage } from "./minis.js";
 
@@ -233,7 +233,7 @@ function finalView(G) {
     </div>`;
   }
   if (f.stage === "clue") {
-    const total = (S.settings.finalSeconds || 31) * 1000;
+    const total = (S.settings.finalSeconds || 62) * 1000;
     return `<div class="clue final--clue" data-key="final-clue">
       <div class="clue-head"><span class="clue-cat">${esc(cat)}</span><span class="clue-val">Final Jeopardy!</span></div>
       <div class="clue-body"><div class="clue-text"><span>${esc(fq ? fq.question : "")}</span></div>
@@ -246,8 +246,10 @@ function finalView(G) {
     </div>`;
   }
   // reveal
+  const next = f.order.find((t) => f.eligible[t] && !f.results[t]);
   return `<div class="final final--reveal" data-key="final-reveal">
     <div class="final-kicker">Final Jeopardy! · ${esc(cat)}</div>
+    ${next ? `<div class="final-next">🤫 Jaren is reading the <b>${esc(possessive(tn(G, next)))}</b> answer…</div>` : ""}
     <div class="reveal-row">${f.order.map((t) => revealPanel(G, t)).join("")}</div>
     ${f.order.every((t) => !f.eligible[t] || f.results[t]) ? `<div class="answer-reveal big"><span>Correct response</span>${esc(fq ? fq.answer : "")}</div>` : ""}
   </div>`;

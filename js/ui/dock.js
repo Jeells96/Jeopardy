@@ -202,16 +202,15 @@ export function hostSteps(G, { privateView = false } = {}) {
     if (f.stage === "reveal") {
       const next = f.order.find((t) => f.eligible[t] && !f.results[t]);
       if (next) {
+        // Jaren reads it here first (this screen is private) and says right or wrong —
+        // that's what puts it on the board, one team at a time, lowest score first.
         const w = (f.wagers[next] && f.wagers[next].amount) || 0;
-        if (!f.shown[next].answer) {
-          status = `Reveal answers one team at a time — lowest score first.`;
-          btn(`👁 Reveal ${esc(tn(G, next))}'s answer`, "act", act("finalShowAnswer", { team: next }), "primary", "Space");
-        } else {
-          const a = f.answers[next];
-          status = `<b>${esc(tn(G, next))}</b> wrote: “${esc(a && a.text ? a.text : "(no answer)")}”`;
-          btn(`✓ Correct +${privateView ? money(w) : "wager"}`, "act", act("finalJudge", { team: next, correct: true }), "good", "C");
-          btn(`✗ Wrong −${privateView ? money(w) : "wager"}`, "act", act("finalJudge", { team: next, correct: false }), "bad", "W");
-        }
+        const a = f.answers[next];
+        const left = f.order.filter((t) => f.eligible[t] && !f.results[t]).length;
+        status = `<b>${esc(tn(G, next))}</b> wrote: <b class="finalans">“${esc(a && a.text ? a.text : "(no answer)")}”</b>
+          <div class="muted">Their wager: <b>${privateView ? money(w) : "hidden"}</b> · your call puts it on the board${left > 1 ? ` (${left - 1} more after this)` : ""}</div>`;
+        btn(`✓ Correct +${privateView ? money(w) : "wager"}`, "act", act("finalJudge", { team: next, correct: true }), "good", "C");
+        btn(`✗ Wrong −${privateView ? money(w) : "wager"}`, "act", act("finalJudge", { team: next, correct: false }), "bad", "W");
       } else {
         status = "All answers are in. Drumroll…";
         btn("🏆 Show the winner", "act", act("finalFinish"), "primary", "Space");

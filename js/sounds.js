@@ -6,7 +6,7 @@ export const SLOTS = {
   correct: "correct.mp3",          // right answer
   wrong: "wrong.mp3",              // wrong answer
   timesup: "times-up.mp3",         // a timer ran out
-  final: "final-jeopardy.mp3",     // Final Jeopardy think music (plays once; the timer matches its length)
+  final: "final-jeopardy.mp3",     // Final Jeopardy think music (played twice; the timer matches both)
   intro: "this-is-jeopardy.mp3",   // Jeopardy starts
   dd: "daily-double.mp3",          // Daily Double revealed
   buzz: "buzz-in.mp3",             // someone buzzed in
@@ -304,6 +304,10 @@ function scheduleLoop() {
   }
 }
 
+// How long the think music runs: the song, played twice (or 62 seconds of the built-in
+// waltz). Used for the default think time.
+export const FINAL_PLAYS = 2;
+export const finalSongMs = () => (buffers.final ? Math.round(buffers.final.duration * 1000) : 0);
 // startsIn: ms until the music is due to start by the shared clock (negative = it started
 // that long ago), so every screen plays the same moment of it.
 export function setFinalMusic(on, startsIn = 0) {
@@ -317,10 +321,15 @@ export function setFinalMusic(on, startsIn = 0) {
   if (finalOn || finalEl || loopTimer) return;
   finalOn = true;
   resume();
-  if (playBuffer("final", startsIn)) return;
+  // The song is played twice over the think time, so the room hears it start again.
+  if (playBuffer("final", startsIn)) {
+    const songMs = finalSongMs();
+    for (let i = 1; i < FINAL_PLAYS; i++) playBuffer("final", startsIn + i * songMs);
+    return;
+  }
   if (available.final) {
     finalEl = new Audio(BASE + SLOTS.final);
-    finalEl.loop = false;
+    finalEl.loop = true; // stopped when the thinking time is up
     if (startsIn < -300) { try { finalEl.currentTime = -startsIn / 1000; } catch { /* ignore */ } }
     const p = finalEl.play();
     if (p && p.catch) p.catch(() => { finalEl = null; startLoop(); });

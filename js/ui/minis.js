@@ -88,7 +88,7 @@ function resultBits(G, g) {
   if (!r) return null;
   if (r.winner === "tie") return { cls: "tie", text: "🤝 Tie", pts: r.team1 || r.team2 ? `+${money(r.team1)} each` : "" };
   if (r.winner === "none") return { cls: "none", text: "No winner", pts: "" };
-  return { cls: r.winner, text: `🏆 ${tn(G, r.winner)}`, pts: r[r.winner] ? `+${money(r[r.winner])}` : "" };
+  return { cls: r.winner, text: `🏆 ${r.by ? r.by.name : tn(G, r.winner)}`, pts: r[r.winner] ? `+${money(r[r.winner])}` : "" };
 }
 function kicker(M, g) {
   const i = M.list.findIndex((x) => x.id === g.id) + 1;
@@ -249,7 +249,9 @@ function resultView(G, g) {
   if (g.award === "match" && (r.team1 || r.team2)) pts = E.TEAMS.map((t) => `${esc(tn(G, t))} +${money(r[t])}`).join(" · ");
   else if (r.winner === "tie" && r.team1) pts = `+${money(r.team1)} each`;
   else if (E.TEAMS.includes(r.winner) && r[r.winner]) pts = `+${money(r[r.winner])}`;
-  const detail = g.type === "h2h"
+  const detail = r.by
+    ? `Won for ${esc(tn(G, r.by.team))} by <b>${esc(r.by.name)}</b>`
+    : g.type === "h2h"
     ? (g.matches.length ? `${esc(tn(G, "team1"))} ${st.wins.team1} – ${st.wins.team2} ${esc(tn(G, "team2"))}` : "")
     : (st.sorted[0] ? `Best: ${esc(st.sorted[0].name)} — ${scoreText(g, st.sorted[0].score)}` : "");
   return `<div class="mresult w-${r.winner}" data-key="mr-${esc(g.id)}">
@@ -349,11 +351,17 @@ function gameSteps(G, { privateView = false } = {}) {
   // ---- blind drawing ----
   if (isDraw(g)) return drawSteps(G, g, { btn, act, B, st, n1, n2 });
 
-  // ---- everyone at once: just say who won ----
+  // ---- everyone at once: tap the person who won it for their team ----
   if (g.type === "all") {
-    status = `<b>${esc(g.name)}</b> · everyone plays at the same time — tap who won. <span class="muted">${money(g.points)} to the winners</span>`;
-    btn(`🏆 ${esc(n1)}`, "act", act("miniFinish", { id: g.id, winner: "team1" }), "t1", "1");
-    btn(`🏆 ${esc(n2)}`, "act", act("miniFinish", { id: g.id, winner: "team2" }), "t2", "2");
+    status = `<b>${esc(g.name)}</b> · everyone plays at the same time — tap <b>who won it</b>. <span class="muted">${money(g.points)} to their team${E.minisOf(S).list.length > 1 ? " · it counts toward 🏆 North Pole Champ" : ""}</span>`;
+    panel = `<div class="mpanel wrap allwin">${E.TEAMS.map((t) => {
+      const people = G.P.filter((p) => p.team === t);
+      if (!people.length) return "";
+      return `<div class="allwin-team ${t}"><span class="muted">${esc(tn(G, t))}</span>${people.map((p) =>
+        `<button class="chipbtn ${t}" ${actAttr("miniFinish", { id: g.id, winner: t, pid: p.id })} data-key="aw-${esc(p.id)}">🏆 ${esc(p.name)}</button>`).join("")}</div>`;
+    }).join("")}</div>`;
+    btn(`🏆 ${esc(n1)} <small>(whole team)</small>`, "act", act("miniFinish", { id: g.id, winner: "team1" }), "t1", "1");
+    btn(`🏆 ${esc(n2)} <small>(whole team)</small>`, "act", act("miniFinish", { id: g.id, winner: "team2" }), "t2", "2");
     btn("🤝 Tie <small>(split the points)</small>", "act", act("miniFinish", { id: g.id, winner: "tie" }), "ghost", "T");
     btn("No winner <small>(no points)</small>", "act", act("miniFinish", { id: g.id, winner: "none" }), "ghost");
     btn("↩ Games list", "act", act("miniClose"));
@@ -686,7 +694,7 @@ export function playerMinis(G, extra = "") {
     const title = r.winner === "tie" ? "It's a tie!" : r.winner === "none" ? "No winner this time" : mine ? "Your team won!" : `${esc(tn(G, r.winner))} won`;
     const pts = r.winner === "tie" ? (r.team1 ? `+${money(r.team1)} each` : "") : E.TEAMS.includes(r.winner) && r[r.winner] ? `+${money(r[r.winner])}` : "";
     return `<div class="ph-card hero"><div class="big-emoji">${r.winner === "tie" ? "🤝" : mine ? "🏆" : r.winner === "none" ? "🎄" : "😤"}</div>
-      <h2>${title}</h2><p><b>${esc(g.name)}</b>${pts ? ` · ${pts}` : ""}</p></div>`;
+      <h2>${title}</h2><p><b>${esc(g.name)}</b>${pts ? ` · ${pts}` : ""}</p>${r.by ? `<p class="wonby">🏆 Won by <b>${esc(r.by.name)}</b>${r.by.pid === G.deviceId ? " — that's you!" : ""}</p>` : ""}</div>`;
   }
 
   const head = `<div class="ph-mini-head"><div class="kicker">${typeLabel(g)} · ${prize(g)}</div><h2>${esc(g.name)}</h2>${g.desc ? `<p>${esc(g.desc)}</p>` : ""}${clockBox(G, g, "ph")}</div>`;

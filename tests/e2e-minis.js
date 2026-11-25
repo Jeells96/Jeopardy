@@ -633,10 +633,18 @@ async function until(page, fn, arg, timeout = 8000) {
   ok((await solo.textContent(".r-status")).includes("everyone plays at the same time"), "the controls say the whole room is playing");
   ok(!(await solo.textContent(".r-buttons")).includes("Who's up"), "…and there's nobody to draw");
   await shot(solo, "m24-solo-everyone-at-once");
+  ok((await solo.textContent(".r-panel")).includes("Sue"), "…just a tap for each person, so you can say who won it");
   const was = (await state(solo)).scores.team2;
-  await solo.locator('.r-buttons .btn:has-text("🏆")').nth(1).click();
+  await solo.locator('.allwin .chipbtn:has-text("Sue")').click();
   await until(solo, () => window.__G.S.minis.list.find((x) => x.type === "all").status === "done");
-  ok((await state(solo)).scores.team2 === was + 500, "tapping a team wins it for them on the spot");
+  const allGame = (await state(solo)).minis.list.find((x) => x.type === "all");
+  ok((await state(solo)).scores.team2 === was + 500, "tapping the person who won it gives their team the points");
+  ok(allGame.result.by && allGame.result.by.name.startsWith("Sue"), "…and it's remembered as their win");
+  const winners = await solo.evaluate(async () => {
+    const E2 = await import("/js/engine.js");
+    return Object.values(E2.playerStats(window.__G.S)).filter((r) => r.minis > 0).map((r) => r.name);
+  });
+  ok(winners.some((n) => n.startsWith("Sue")), "…so it counts toward 🏆 North Pole Champ");
 
   // =====================================================================
   console.log("Scenario C — an older saved game is upgraded, not wiped");

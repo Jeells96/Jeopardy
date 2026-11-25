@@ -637,18 +637,20 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   w.run("finalAnswer", { team: "team1", text: "Mars", by: "Hub2", done: true });
   w.run("finalAnswer", { team: "team2", text: "Venus", by: "Wife1", done: true });
   eq(w.state.final.stage, "clue", "both teams in — the music and timer still run to the end");
-  w.run("finalLock", {}, 40000);
+  w.run("finalLock", {}, 70000);
   eq(w.state.final.stage, "reveal", "answers lock when time runs out");
-  w.run("finalShowAnswer", { team: "team2" });
-  eq([w.state.final.results.team2, w.state.scores.team2], ["wrong", 100], "multiple-choice Final: a wrong pick is marked wrong instantly");
-  w.run("finalShowAnswer", { team: "team1" });
-  eq([w.state.final.results.team1, w.state.scores.team1], ["correct", 150], "…and a right one is marked right");
+  // Multiple choice or typed, Jaren reads it and makes the call — the website never does.
+  eq([w.state.final.results.team2, w.state.final.shown.team2.answer], [null, false], "multiple-choice Final isn't marked by the website");
+  w.run("finalJudge", { team: "team2", correct: false });
+  eq([w.state.final.results.team2, w.state.scores.team2, w.state.final.shown.team2.answer], ["wrong", 100, true], "his call takes the wager and puts their answer on the board");
+  w.run("finalJudge", { team: "team1", correct: true });
+  eq([w.state.final.results.team1, w.state.scores.team1], ["correct", 150], "…then the other team");
 }
 
 {
   const old = { ...E.defaultState(), settings: { ...E.DEFAULT_SETTINGS, finalSeconds: 30 } };
-  eq(E.migrate(old).patch.settings.finalSeconds, 31, "old 30-second Final default becomes the song length (31 s)");
-  eq(E.DEFAULT_SETTINGS.finalSeconds, 31, "new games default to the song length");
+  eq(E.migrate(old).patch.settings.finalSeconds, 62, "the old one-play Final time becomes the song twice (62 s)");
+  eq(E.DEFAULT_SETTINGS.finalSeconds, 62, "new games get the song twice");
   const mine = { ...E.defaultState(), settings: { ...E.DEFAULT_SETTINGS, finalSeconds: 45 } };
   eq(E.migrate(mine), null, "a Final time the host chose is left alone");
 }

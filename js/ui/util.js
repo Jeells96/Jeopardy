@@ -12,6 +12,8 @@ export function money(n) {
 // "Husbands win" but "Team 1 wins": pick the verb form that fits a team name.
 export const isPlural = (name) => /[^s]s$/i.test(String(name || "").trim());
 export const verb = (name, singular, plural) => (isPlural(name) ? plural : singular);
+// "the Wives' answer" but "Grandma Jo's answer".
+export const possessive = (name) => `${name}${/s$/i.test(String(name).trim()) ? "’" : "’s"}`;
 
 // One name is plenty — until someone already has it. Two Mikes on the board is chaos, so
 // the second Mike has to add a last name or an initial ("Mike B.").

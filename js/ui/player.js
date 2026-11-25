@@ -268,7 +268,7 @@ function finalBody(G) {
     </div>`;
   }
   if (f.stage === "clue") {
-    const total = (S.settings.finalSeconds || 31) * 1000;
+    const total = (S.settings.finalSeconds || 62) * 1000;
     const clue = `<div class="ph-clue ph-clue--final"><div class="ph-cat"><span>${esc(cat)}</span><span>Final</span></div><div class="ph-q">${esc(fq ? fq.question : "")}</div></div>`;
     if (!playing) return `${clue}${timer(f.deadline, total)}<div class="ph-note">Your team is sitting out — enjoy the show!</div>`;
     const cur = f.answers[me.team];

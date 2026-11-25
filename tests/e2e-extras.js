@@ -258,9 +258,10 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok((await host.evaluate(() => window.__G.S.final.stage)) === "clue", "both teams answered, but the music and timer keep running");
   await until(host, () => window.__G.S.final.stage === "reveal", null, 14000);
   ok(true, "answers lock when the timer runs out");
-  await act(host, "finalShowAnswer", { team: "team2" });
-  await until(host, () => window.__G.S.final.results.team2 === "wrong");
-  ok(true, "a wrong multiple-choice Final is marked wrong the moment it's revealed");
+  ok((await host.evaluate(() => window.__G.S.final.results.team2)) === null, "a multiple-choice Final isn't marked by the website either");
+  await act(host, "finalJudge", { team: "team2", correct: false });
+  await until(host, () => window.__G.S.final.results.team2 === "wrong" && window.__G.S.final.shown.team2.answer);
+  ok(true, "Jaren's call marks it wrong and puts it on the board");
   await sleep(300);
   await shot(board, "x04-board-final-mc");
   await shot(P.Jen, "x05-phone-final-mc");

@@ -60,6 +60,10 @@ points go straight onto the team's score and carry into Jeopardy.
   number of couples at two tables, the **spare table waits** rather than calling someone up
   twice — tap **🎲 Draw for [table]** if you'd rather start the next round there anyway.
 - **Don't like the draw?** Tap 🎲 to re-draw one side, or choose a person from the list.
+- **🏆 Who won it?** On an **Everyone at once** game your controls list everybody as a tap:
+  tap the person who won and their **team gets the points** and **they** get the win toward
+  🏆 North Pole Champ (the board says "Won for the Wives by Liz Eells"). There are still
+  plain **🏆 Husbands / 🏆 Wives (whole team)** buttons when nobody stood out.
 - **⏱ Played against the clock?** Tick **⏱ Timer** on the game in Settings → Mini games and
   type the seconds (it shows you the time, e.g. `0:45`). **You** start it: your controls get
   **⏱ Start the timer (0:45)** (keyboard **K**). The countdown then shows big on the
@@ -234,12 +238,16 @@ switch off phone renaming there too.
 - Only teams above $0 play (official rule — you can override per team).
 - Teams **lock their wager secretly on their phones** (teammates see it, the other team
   and the projector don't). You can also enter wagers by hand.
-- Think music + timer (31 s by default — the length of the music, and it always plays to
-  the end). One answer per team: whoever submits first submits it for everyone, and any
-  teammate can **Undo & change it** until time's up. If the Final has wrong options it's
-  **multiple choice** and they tap one.
-- Dramatic reveal, lowest score first: answer → you judge → wager → new score. Winner
-  screen with confetti.
+- Think music + timer: **62 seconds — the song played twice**, and it always runs to the
+  end (Settings → Game → Timers → Final Jeopardy). One answer per team: whoever submits
+  first submits it for everyone, and any teammate can **Undo & change it** until time's up.
+  If the Final has wrong options it's **multiple choice** and they tap one.
+- **You read each answer first and make the call.** When time's up, your private screen
+  shows the first team's answer and their wager with **✓ Correct** / **✗ Wrong**; the board
+  keeps it hidden and just says "🤫 Jaren is reading the Husbands' answer…". Your verdict is
+  what puts their answer, wager and new score on the board — then the next team, lowest
+  score first. Nothing is ever marked by the website, multiple choice included.
+- Winner screen with confetti.
 
 **Host tools**
 - **Picked the wrong question?** **↩ Oops — wrong question, put it back** (key **B**) puts it
@@ -361,7 +369,7 @@ sound):
 | Correct answer | `correct.mp3` |
 | Wrong answer | `wrong.mp3` |
 | Time's up | `times-up.mp3` |
-| Final Jeopardy think music (loops) | `final-jeopardy.mp3` |
+| Final Jeopardy think music (played twice) | `final-jeopardy.mp3` |
 | Daily Double revealed | `daily-double.mp3` |
 | Someone buzzed in | `buzz-in.mp3` |
 | Board appears / new round | `board-fill.mp3` |

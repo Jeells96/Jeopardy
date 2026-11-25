@@ -384,7 +384,7 @@ function soundEffects(S) {
     if (canPlay && due > -5000) Sounds.play(S.sfx.sound, { delay: due });
   }
   const finalOn = canPlay && S.phase === "final" && S.final && S.final.stage === "clue";
-  const finalSecs = (S.settings && S.settings.finalSeconds) || 31;
+  const finalSecs = (S.settings && S.settings.finalSeconds) || 62;
   Sounds.setFinalMusic(finalOn, finalOn ? S.final.deadline - finalSecs * 1000 - G.now() : 0);
   if (S.phase !== "board") Sounds.stop("intro"); // a question (or anything else) cuts the theme off
 }

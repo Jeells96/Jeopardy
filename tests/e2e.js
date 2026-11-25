@@ -386,11 +386,15 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "answers lock automatically when the Final timer ends");
   S = await state(board);
   ok(S.final.order[0] === "team1", "reveal order starts with the lowest score");
-  await key(host, "Space"); // reveal team1 answer
-  await until(board, () => document.querySelector(".rpanel.team1 .rp-ans")?.textContent.includes("Visit"));
+  // Jaren reads each answer on his own screen and makes the call — that's what puts it on
+  // the board, one team at a time.
+  ok((await host.evaluate(() => document.body.innerText)).includes("Visit"), "the host reads the first team's answer on his private screen");
+  ok(!(await board.textContent(".rpanel.team1 .rp-ans")).includes("Visit"), "…and the board is still hiding it");
+  ok((await board.textContent(".final-next")).includes("Husbands"), "the board says whose answer he's reading");
   await key(host, "c");
   await until(board, () => window.__G.S.final.results.team1 === "correct");
-  await key(host, "Space"); // reveal team2
+  await until(board, () => document.querySelector(".rpanel.team1 .rp-ans")?.textContent.includes("Visit"));
+  ok(!!(await board.$(".rpanel.team2 .rp-hidden")), "the other team's answer stays hidden until it's their turn");
   await key(host, "w");
   await until(board, () => window.__G.S.final.results.team2 === "wrong");
   S = await state(board);

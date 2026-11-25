@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS = {
   buzzWindowSeconds: 0,   // 0 = buzzers stay open until someone buzzes
   reboundSeconds: 30,     // after a miss, the other team gets this long to buzz in
   readSeconds: 0,         // 0 = host opens buzzers manually; >0 = auto-open after reading time
-  finalSeconds: 31,       // Final Jeopardy think time (the length of the think music)
+  finalSeconds: 62,       // Final Jeopardy think time (the think music, played twice)
   autoRebound: true,      // after a miss, instantly reopen buzzers for the other team
   finalNeedsPositive: true, // official rule: only teams with $1+ play Final Jeopardy
   playersRename: true,    // players may rename their own team before Jeopardy starts
@@ -82,8 +82,8 @@ export function migrate(old) {
   const names = modernNames(old.teamNames || {});
   if (JSON.stringify(names) !== JSON.stringify(old.teamNames || {})) patch.teamNames = names;
   if (!old.settings || old.settings.playersRename === undefined) patch.settings = { ...DEFAULT_SETTINGS, ...(old.settings || {}) };
-  // The old 30-second default becomes the length of the Final Jeopardy song.
-  if (old.settings && old.settings.finalSeconds === 30 && !old.settings.finalSong) patch.settings = { ...(patch.settings || old.settings), finalSeconds: 31, finalSong: true };
+  // Final Jeopardy used to be one play of the song (30 s, then 31 s); it's two now.
+  if (old.settings && [30, 31].includes(old.settings.finalSeconds)) patch.settings = { ...(patch.settings || old.settings), finalSeconds: 62, finalSong: true };
   return Object.keys(patch).length ? { patch } : null;
 }
 function modernNames(n) {
@@ -579,7 +579,7 @@ export function finalRevealClue(s, _p, ctx) {
   if (!TEAMS.some((t) => f.eligible[t])) return fail("No team is playing Final Jeopardy — mark at least one team as playing.");
   const wagers = { ...f.wagers };
   for (const t of TEAMS) if (f.eligible[t] && !wagers[t]) wagers[t] = { amount: 0, by: "(no wager)", at: ctx.now };
-  const secs = (s.settings && s.settings.finalSeconds) || 31;
+  const secs = (s.settings && s.settings.finalSeconds) || 62;
   return builder(s, ctx).field("final", { ...f, wagers, stage: "clue", deadline: ctx.now + secs * 1000 }).done();
 }
 
@@ -600,19 +600,9 @@ export function finalLock(s, { force } = {}, ctx) {
   return builder(s, ctx).field("final", { ...f, stage: "reveal" }).done(); // the music ending is the cue
 }
 
-export function finalShowAnswer(s, { team }, ctx) {
-  const f = s.final;
-  if (!f || f.stage !== "reveal" || !TEAMS.includes(team) || f.shown[team].answer) return null;
-  // Multiple-choice Final: scored the moment the answer is revealed.
-  const fq = finalClue(ctx.questions);
-  if (fq && fq.type === "mcq" && f.eligible[team] && !f.results[team]) {
-    const a = f.answers[team];
-    const right = fq.choices[fq.correctIndex];
-    return finalJudge(s, { team, correct: !!(a && right && a.text.toLowerCase() === String(right).toLowerCase()) }, ctx);
-  }
-  return builder(s, ctx).field("final", { ...f, shown: { ...f.shown, [team]: { ...f.shown[team], answer: true } } }).done();
-}
-
+// Jaren reads each team's answer on his own screen first and says whether it's right —
+// only then does the board show it (one team at a time). Nothing is marked by the website,
+// multiple choice included.
 export function finalJudge(s, { team, correct }, ctx) {
   const f = s.final;
   if (!f || f.stage !== "reveal" || !TEAMS.includes(team) || !f.eligible[team] || f.results[team]) return null;
@@ -1315,8 +1305,10 @@ export function miniEntryRemove(s, { id, entryId }, ctx) {
   if (g.status === "done") return fail("That game is finished — reset it to change the results.");
   return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, entries: x.entries.filter((e) => e.id !== entryId) })))).done();
 }
-// winner: 'team1' | 'team2' | 'tie' (points split) | 'none'. Leave it out to use the standings.
-export function miniFinish(s, { id, winner }, ctx) {
+// winner: 'team1' | 'team2' | 'tie' (points split) | 'none'. Leave it out to use the
+// standings. pid: for an "everyone at once" game, who won it for their team (so it counts
+// toward 🏆 North Pole Champ).
+export function miniFinish(s, { id, winner, pid }, ctx) {
   const g = miniById(s, id);
   if (!g || g.status === "done") return null;
   if (!["lobby", "minis", "board"].includes(s.phase)) return fail(NO_MINIS_NOW[s.phase] || "Not right now.");
@@ -1332,7 +1324,9 @@ export function miniFinish(s, { id, winner }, ctx) {
     for (const t of TEAMS) if (got[t]) b.score(t, got[t], "mini", { kind: "mini", miniId: g.id, finish: true });
   }
   const M = minisOf(s);
-  const done = (x) => ({ ...x, status: "done", turn: null, turns: [], clock: null, matches: x.matches.filter((m) => m.winner), result: { winner: w, team1: got.team1, team2: got.team2 } });
+  const hero = (ctx.players || []).find((p) => p.id === pid && p.team === w) || null;
+  const by = hero ? { by: { pid: hero.id, name: hero.name, team: hero.team } } : {};
+  const done = (x) => ({ ...x, status: "done", turn: null, turns: [], clock: null, matches: x.matches.filter((m) => m.winner), result: { winner: w, team1: got.team1, team2: got.team2, ...by } });
   b.field("minis", withList(s, mapMini(s, id, done), { current: s.phase === "minis" ? id : M.current }));
   return b.sfx(w === "none" ? "buzz" : "miniwin").done();
 }
@@ -1441,6 +1435,9 @@ export function playerStats(s) {
       const p = m.winner === "team1" ? m.p1 : m.winner === "team2" ? m.p2 : null;
       if (p && p.id) row(p.id, p.name, m.winner).minis++;
     }
+    // "Everyone at once": whoever won it for their team.
+    const by = g.result && g.result.by;
+    if (by && by.pid) row(by.pid, by.name, by.team).minis++;
     if (g.type === "best" && g.mode !== "draw" && (g.entries || []).length) {
       const top = miniStanding(g).sorted[0];
       if (top && top.pid) row(top.pid, top.name, top.team).minis++;
@@ -1491,7 +1488,7 @@ export const ACTIONS = {
   startGame, setControl, startRound2, pickClue, unpickClue, setDDTeam, lockDDWager, openBuzzers,
   autoOpen, pauseBuzzers, claimBuzz, judge, mcqPick, dropChoice, answerSubmitted, answerTimeout, buzzWindowTimeout, nobody,
   revealAnswer, closeClue, adjustScore, setScore, undo, finalStart, finalSetEligible, finalWager,
-  finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
+  finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
   miniSetTable, miniDrawRound, miniDrawStart, miniDrawCancel, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
   miniTableAdd, miniTableRemove, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,

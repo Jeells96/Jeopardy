@@ -76,7 +76,7 @@ function gameTab(G) {
     <div class="grid2">
       ${num("answerSeconds", "Answer time", st.answerSeconds, 3, 120, "After someone buzzes")}
       ${num("ddSeconds", "Daily Double", st.ddSeconds || 30, 5, 180, "The team has longer — it's their wager")}
-      ${num("finalSeconds", "Final Jeopardy", st.finalSeconds, 10, 300, "Think time — 31 s is the length of the music")}
+      ${num("finalSeconds", "Final Jeopardy", st.finalSeconds, 10, 300, "Think time — 62 s is the song played twice")}
       ${num("buzzWindowSeconds", "Buzz-in window", st.buzzWindowSeconds, 0, 120, "0 = unlimited")}
       ${num("reboundSeconds", "Steal time", st.reboundSeconds || 30, 5, 120, "After a miss or time-out, the other team gets this long to buzz in")}
       ${num("readSeconds", "Auto-open buzzers", st.readSeconds, 0, 30, "0 = I'll open them")}
