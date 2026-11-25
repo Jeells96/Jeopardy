@@ -1,5 +1,5 @@
 // Join screen, host code gate, loading screen and the projector page.
-import { esc, cls } from "./util.js";
+import { esc, cls, cleanName, nameProblem, NAME_MAX } from "./util.js";
 import * as Sounds from "../sounds.js";
 import * as E from "../engine.js";
 import { tn, stage } from "./stage.js";
@@ -7,17 +7,20 @@ import { tn, stage } from "./stage.js";
 const logo = `<div class="join-logo"><span class="brand-xmas">Christmas</span><span class="brand-j">JEOPARDY!</span></div>`;
 
 export function renderJoin(G) {
-  const name = (G.ui.joinName || "").trim();
+  const name = cleanName(G.ui.joinName);
   const team = G.ui.joinTeam;
-  const ok = name.length > 0 && !!team;
+  // First AND last name, so Jaren can tell two Mikes (and two couples) apart.
+  const problem = nameProblem(G.ui.joinName);
+  const ok = !problem && !!team;
   // Two "Mike"s would be confusing on the board ("Mike buzzed in") — suggest an initial.
   const taken = name ? G.P.find((p) => p.id !== G.deviceId && String(p.name || "").trim().toLowerCase() === name.toLowerCase()) : null;
   return `<div class="join">
     <div class="join-card">
       ${logo}
       ${G.ui.kicked ? `<div class="note">Your name was removed from the game — enter your name to join again.</div>` : ""}
-      <label class="join-label" for="jn-name">Your name</label>
-      <input id="jn-name" class="join-input" maxlength="20" autocomplete="nickname" placeholder="e.g. Grandma Jo" value="${esc(G.ui.joinName || "")}" data-input="join-name" data-sticky>
+      <label class="join-label" for="jn-name">Your first and last name</label>
+      <input id="jn-name" class="join-input" maxlength="${NAME_MAX}" autocomplete="name" placeholder="e.g. Grandma Jo Baker" value="${esc(G.ui.joinName || "")}" data-input="join-name" data-sticky>
+      ${problem && (G.ui.joinName || "").trim() ? `<div class="note namenote">✍️ ${esc(problem)}</div>` : `<div class="note hintnote">🎅 Santa's list needs both names — a last initial is fine (“Jo B.”).</div>`}
       ${taken ? `<div class="note dupnote">🎅 Santa already has someone called <b>${esc(taken.name)}</b> on his list (${esc(tn(G, taken.team))}). Add your last initial (like “${esc(taken.name)} B.”) so the elves can tell you apart.</div>` : ""}
       <div class="join-label">Pick your team</div>
       <div class="teampick">${E.TEAMS.map((t) => {

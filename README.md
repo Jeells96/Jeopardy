@@ -20,10 +20,13 @@ laptop) with the answer key and every control. Finish with an **ugly sweater vot
    players' phones. Sound is on by default; 🔊/🔇 turns it off on one screen, and a refresh
    turns it back on. Browsers need one tap on a page before it can make sound, so tap the
    board once (it shows **👆 Tap to start sound** until you do).
-4. **Players** scan the QR code on the lobby screen, type their name, pick **Husbands**
-   or **Wives** and tap **Join & turn on sound** (one tap joins and starts their phone's sound). (A team can rename itself from a phone.)
-   If someone types a name that's already playing (two Mikes), their phone says "🎅 Santa
-   already has someone called Mike on his list" and suggests adding a last initial.
+4. **Players** scan the QR code on the lobby screen, type their **first and last name**,
+   pick **Husbands** or **Wives** and tap **Join & turn on sound** (one tap joins and starts
+   their phone's sound). (A team can rename itself from a phone.)
+   One name isn't enough — the Join button stays off until there's a last name, and a last
+   initial counts ("Jo B."). In a room full of couples that keeps the two Mikes apart.
+   If someone types a name that's already playing, their phone says "🎅 Santa
+   already has someone called Mike Scott on his list" and suggests adding a last initial.
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
    mini games first if you've set any up, then Jeopardy.
 
@@ -44,6 +47,7 @@ and the points go straight onto the team's score and carry into Jeopardy.
 |---|---|---|
 | ⚔️ **Head-to-head** | One husband faces one wife each round | Tap who won (keys **1** / **2**, **T** for a tie) |
 | 🏅 **Best overall** | Everyone takes a turn; best single score wins it for their team | Type each score and press Enter |
+| ✏️ **Blind drawing** | A Best overall game with **✏️ Blind drawing** ticked: everyone draws at once and the website scores every drawing | Nothing — it scores itself |
 
 - **Who's up next?** Press the gold button and the big screen shuffles through the names,
   lands on the pick with a drum-roll, and **says it out loud** ("Up next: Jake versus
@@ -55,7 +59,8 @@ and the points go straight onto the team's score and carry into Jeopardy.
 - **Don't like the draw?** Tap 🎲 to re-draw one side, or choose a person from the list.
 - **Points:** head-to-head games can give the points to the team that wins the game, or
   *for every matchup win*. Best-overall games can be highest-wins or lowest-wins (fastest
-  time), with a unit like "seconds".
+  time), with a unit like "seconds" — and the points go to the team **the overall winner
+  plays for**.
 - **Finishing:** the game suggests the winner from what you tracked; you can overrule it,
   call a **tie** (points split) or give no points. You can also skip the tracking entirely
   and just declare who won.
@@ -63,7 +68,15 @@ and the points go straight onto the team's score and carry into Jeopardy.
   yet" and takes you back to the games list (any points it gave out are taken back).
 - **Fixing mistakes:** remove a wrong result with ✕, **Undo** the last points, or **↺ Reset**
   a game to hand its points back.
-- **No phone?** Add people by hand in **Settings → Players** — they're drawn like anyone else.
+- **No phone?** Add people by hand in **Settings → Players** (first and last name) — they're
+  drawn like anyone else.
+- **💍 Couples play each other:** in **Settings → Players**, give each couple a number — the
+  husband is **1a**, his wife **1b**, then 2a / 2b, and so on (the box in front of each name).
+  Head-to-head games then draw a **couple** each time: pick one of them and their other half
+  is the other side, and they're summoned to the same table together. 🎲 re-drawing one half
+  brings their partner along. Anyone who came on their own is still drawn, against whoever
+  is free, and the Players tab flags a number that's missing its other half. Switch it off
+  with **Couples face each other** at the top of the Players tab.
 - **Several tables at once (to get through the games faster):** right next to the
   **🎲 Who's up first?** button in your mini-game controls, tap **+ Add table** (Table 1,
   Table 2, …) or ✕ to remove one (a table someone is playing at can't be removed until it's
@@ -78,7 +91,10 @@ and the points go straight onto the team's score and carry into Jeopardy.
   button brings you back to the same board.
 
 ### ✏️ Blind Drawing
-Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing" as a game's type).
+Blind drawing isn't its own kind of game: it's a **🏅 Best overall** game with **✏️ Blind
+drawing** ticked. Add it from **Settings → Mini games → ideas**, or add a Best overall game
+and tick the box. The website scores every drawing 0–100% and the **best drawing of the
+night wins the points for its team**, exactly like any other Best overall game.
 1. **Pick the pictures:** under the game, tap **🎄 Ready-made drawings** and choose from 10
    Christmas pictures (snowman, gingerbread man, Santa, reindeer, decorated Christmas tree,
    snowy cottage, stocking, penguin in a Santa hat, hot cocoa, stack of presents), each built
@@ -103,13 +119,13 @@ Add it from **Settings → Mini games → ideas** (or pick "✏️ Blind drawing
    it comes in.
 4. **The website judges** every drawing as soon as they're all in — position, size, rotation
    and mirror image don't matter, and a few stray lines are forgiven. The big screen shows
-   **the picture, the winner and last place** side by side with a % match. **The best
-   drawing wins the round for its team.** Each phone says how that player did ("You came 2nd
+   **the picture, the winner and last place** side by side with a % match, and the tally
+   underneath is each team's **best drawing so far**. Each phone says how that player did ("You came 2nd
    of 9"), shows their own drawing, and has the **full leaderboard** — tap anyone to see
    their drawing (or the original picture). **⏭ Judge now** judges straight away if someone
    never sends (no drawing = last).
-5. **Another round** uses the next picture, or **🏁 Finish game**. Points go to the team that
-   won the most rounds (or, if you choose, to the winning team every round).
+5. **Another round** uses the next picture, or **🏁 Finish game**: the points go to the team
+   with the **best drawing of the night**.
 - **↶ Undo round** throws a round away as if it never started (the same picture comes up next).
 - Only players with a phone draw; anyone who joins before you tap Start draws too.
 
@@ -180,8 +196,13 @@ switch off phone renaming there too.
 - **The result on every phone:** "🎅 Ho ho ho — you got it! +$200 for your team" on the phone
   that answered (with a happy buzz — or a sad one for a miss), "🎄 Amy got it for your team!"
   for teammates, and "🥶 Amy got it — Wives +$200" for the other team, plus the answer.
-- **Answer timer** with show-style countdown lights. Out of time counts as wrong: the
-  points come off automatically (just the time's-up sound), and the other team gets
+- **Answer timer** with show-style countdown lights. **Out of time is your call:** the
+  time's-up bell rings and the answer box (and the multiple-choice options) close on their
+  phone, but **no points come off** until you decide. Your controls say
+  **"Late answer — Liz ran out of time"** with three buttons: **✓ Allow it** (full points,
+  if they blurted it out just after the bell), **✗ Too late** (points off — and it goes down
+  as unanswered, not a wrong answer) or **Let them off** (no points either way). Nothing
+  buzzes a second time. After "Too late" or "Let them off" the other team gets
   **30 seconds to steal** (Settings → Game → Steal time). If nobody buzzes in, the answer
   is shown and nobody loses points.
 

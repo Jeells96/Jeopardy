@@ -27,7 +27,7 @@ export const subDocId = (roundId, pid) => `drawsub-${roundId}-${pid}`;
 const J = (o) => esc(JSON.stringify(o));
 const actAttr = (name, p = {}, extra = {}) => `data-action="act" data-p="${J({ name, p, ...extra })}"`;
 const num = (v) => Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 });
-const scoreText = (g, v) => `${num(v)}${g.unit ? " " + esc(g.unit) : ""}`;
+const scoreText = (g, v) => (isDraw(g) ? `${num(v)}% match` : `${num(v)}${g.unit ? " " + esc(g.unit) : ""}`);
 const prize = (g) => (g.type === "h2h" && g.award === "match" ? `${money(g.points)} per ${isDraw(g) ? "round" : "matchup"} win` : `${money(g.points)} to the winners`);
 const namesOn = (G, team) => G.P.filter((p) => !team || p.team === team).map((p) => p.name);
 // The names shuffled before landing on a pick: only people still in the pool (and the pick).
@@ -68,7 +68,7 @@ export const PRESETS = [
   { name: "Present Stack", type: "best", better: "high", unit: "boxes", desc: "Stack gift boxes one-handed for 30 seconds. Tallest tower still standing wins." },
   { name: "Speed Wrap", type: "best", better: "low", unit: "seconds", desc: "Wrap a box as fast as you can — every side covered. Fastest time wins." },
   { name: "Reindeer Ring Toss", type: "best", better: "high", unit: "rings", desc: "Five tosses at the antlers. Most rings landed wins." },
-  { name: "Blind Drawing", type: "draw", desc: "Everyone at once, right where you're sitting: phone on top of your head, follow the steps on the big screen and draw without looking. The closest drawing wins it for their team!" },
+  { name: "Blind Drawing", type: "best", mode: "draw", desc: "Everyone at once, right where you're sitting: phone on top of your head, follow the steps on the big screen and draw without looking. The closest drawing wins it for their team!" },
 ];
 
 function resultBits(G, g) {
@@ -538,23 +538,25 @@ export function minisTab(G) {
       </div>
       <div class="mini-row">
         <select aria-label="Type of game" ${field(g, "type")}${started ? " disabled" : ""}>
-          <option value="h2h"${g.type === "h2h" && !isDraw(g) ? " selected" : ""}>⚔️ Head-to-head</option>
+          <option value="h2h"${g.type === "h2h" ? " selected" : ""}>⚔️ Head-to-head</option>
           <option value="best"${g.type === "best" ? " selected" : ""}>🏅 Best overall</option>
-          <option value="draw"${isDraw(g) ? " selected" : ""}>✏️ Blind drawing</option>
         </select>
         <label class="pts"><span>$</span><input type="number" inputmode="numeric" min="0" step="50" value="${g.points}" aria-label="Points" ${field(g, "points")}></label>
       </div>
       <div class="mini-row">${g.type === "h2h"
         ? `<select class="grow" aria-label="How points are won" ${field(g, "award")}${started ? " disabled" : ""}>
-             <option value="game"${g.award === "game" ? " selected" : ""}>Points go to the team that wins the game${isDraw(g) ? " (most rounds won)" : ""}</option>
-             <option value="match"${g.award === "match" ? " selected" : ""}>Points for every ${isDraw(g) ? "round" : "matchup"} win</option>
+             <option value="game"${g.award === "game" ? " selected" : ""}>Points go to the team that wins the game</option>
+             <option value="match"${g.award === "match" ? " selected" : ""}>Points for every matchup win</option>
            </select>`
-        : `<select class="grow" aria-label="Which score wins" ${field(g, "better")}>
+        : isDraw(g)
+        ? ""
+        : `<select aria-label="Which score wins" ${field(g, "better")}>
              <option value="high"${g.better === "high" ? " selected" : ""}>Highest score wins</option>
              <option value="low"${g.better === "low" ? " selected" : ""}>Lowest wins (fastest time)</option>
            </select>
            <input class="unit" value="${esc(g.unit)}" maxlength="16" placeholder="unit, e.g. seconds" aria-label="Unit" ${field(g, "unit")}>`}
       </div>
+      ${g.type === "best" ? `<label class="mini-row drawtick"><input type="checkbox"${isDraw(g) ? " checked" : ""}${started ? " disabled" : ""} data-change="mini-draw" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-draw"><span>✏️ Blind drawing <small>— everyone draws at once, the website scores every drawing, and the best one wins the points for its team</small></span></label>` : ""}
       <textarea class="desc auto" rows="1" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>${esc(g.desc)}</textarea>
       <div class="mini-row foot">${state}<span class="grow"></span>
         ${started ? `<button class="btn ghost sm" data-action="mini-reset-ask" data-id="${esc(g.id)}">↺ Reset</button>` : ""}
@@ -580,7 +582,7 @@ export function minisTab(G) {
     </ul>
   </section>
   <section class="sect"><h4>Need ideas? <small>tap to add</small></h4>
-    <div class="ideas">${PRESETS.map((p, i) => `<button class="chipbtn" data-action="mini-preset" data-i="${i}" title="${esc(p.desc)}">${p.type === "draw" ? "✏️" : p.type === "h2h" ? "⚔️" : "🏅"} ${esc(p.name)}</button>`).join("")}</div>
+    <div class="ideas">${PRESETS.map((p, i) => `<button class="chipbtn" data-action="mini-preset" data-i="${i}" title="${esc(p.desc)}">${p.mode === "draw" ? "✏️" : p.type === "h2h" ? "⚔️" : "🏅"} ${esc(p.name)}</button>`).join("")}</div>
   </section>`;
 }
 
@@ -705,6 +707,9 @@ function stepPanel(G, g, m, size = "") {
       <div class="sp-time">⏱ ${cd(ph.endsAt)}${ph.last ? " left to finish your drawing" : " until the next step"}</div></div>
   </div>`;
 }
+// Blind drawing is scored like any Best overall game: each team's best drawing so far.
+const bestPct = (st, t) => (st.best[t] ? `${st.best[t].score}%` : "—");
+const bestWho = (st, t) => (st.best[t] ? st.best[t].name : "");
 const roundNo = (g, r) => E.drawRounds(g).findIndex((x) => x.id === r.id) + 1;
 const lastRound = (g) => { const rs = E.drawRounds(g); return rs.length ? rs[rs.length - 1] : null; };
 const isSent = (G, r, pid) => !!((r.done || {})[pid] || (G.subs || {})[pid] || (pid === G.deviceId && G.sentRounds && G.sentRounds.has(r.id)));
@@ -775,15 +780,16 @@ function drawView(G, M, g) {
     ${gameHead(M, g)}
     ${main}
     <div class="tally">
-      <span class="t team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span>
+      <span class="t team1">${esc(tn(G, "team1"))} <b>${bestPct(st, "team1")}</b>${bestWho(st, "team1") ? `<small>${esc(bestWho(st, "team1"))}</small>` : ""}</span>
       <span class="t-sep">–</span>
-      <span class="t team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span>
+      <span class="t team2"><b>${bestPct(st, "team2")}</b>${bestWho(st, "team2") ? `<small>${esc(bestWho(st, "team2"))}</small>` : ""} ${esc(tn(G, "team2"))}</span>
     </div>
+    <div class="tally-note">Best drawing of the night wins ${money(g.points)}</div>
     <div class="mhistory">${past.map((x) => roundChip(G, g, x)).join("")}</div>
   </div>`;
 }
 function drawSteps(G, g, { btn, act, B, st, n1, n2 }) {
-  const tally = `${esc(n1)} <b>${st.wins.team1}</b> – <b>${st.wins.team2}</b> ${esc(n2)}`;
+  const tally = `best so far: ${esc(n1)} <b>${bestPct(st, "team1")}</b> – <b>${bestPct(st, "team2")}</b> ${esc(n2)}`;
   let status, panel = "";
   const r = E.drawRound(g);
   if (!(g.pics || []).length && !r) {
@@ -839,7 +845,7 @@ function drawPhone(G, g) {
     </div>`;
   }
   const st = E.miniStanding(g);
-  const tally = `<div class="ph-tally"><span class="team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span><span>–</span><span class="team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span></div>`;
+  const tally = `<div class="ph-tally"><span class="team1">${esc(tn(G, "team1"))} <b>${bestPct(st, "team1")}</b></span><span>–</span><span class="team2"><b>${bestPct(st, "team2")}</b> ${esc(tn(G, "team2"))}</span></div>`;
   if (r) return `<div class="ph-note">✏️ Everyone's drawing — you joined after this round started, so you're in the next one!</div>${tally}`;
   const last = lastRound(g);
   let verdict = "";

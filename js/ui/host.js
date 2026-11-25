@@ -142,18 +142,44 @@ function questionsTab(G) {
 }
 
 function playersTab(G) {
-  return E.TEAMS.map((t) => {
+  // Couples: each pair gets a number — the husband is 1a, his wife 1b. Head-to-head mini
+  // games then put a couple against each other and summon them to the table together.
+  const pairs = {};
+  for (const p of G.P) { const n = E.pairNo(p); if (n) (pairs[n] = pairs[n] || []).push(p); }
+  const warn = (p) => {
+    const n = E.pairNo(p);
+    if (!n) return "";
+    const mates = pairs[n].filter((x) => x.id !== p.id);
+    if (!mates.length) return `Nobody is ${n}${p.team === "team2" ? "a" : "b"} yet`;
+    if (mates.some((x) => x.team === p.team)) return `Two people are ${E.pairTag(p)}`;
+    return "";
+  };
+  const couples = Math.floor(G.P.filter((p) => E.pairNo(p) && !warn(p)).length / 2);
+  const on = (G.S.settings || E.DEFAULT_SETTINGS).pairUp !== false;
+  const body = E.TEAMS.map((t) => {
     const ps = G.P.filter((p) => p.team === t);
     return `<section class="sect"><h4><span class="dot ${t}"></span> ${esc(tn(G, t))} <small>(${ps.length})</small></h4>
-      ${ps.length ? ps.map((p) => `<div class="prow" data-key="pr-${esc(p.id)}">
-        <input value="${esc(p.name)}" maxlength="20" data-change="player-name" data-id="${esc(p.id)}" aria-label="Player name">
+      ${ps.length ? ps.map((p) => {
+        const w = warn(p);
+        return `<div class="prow" data-key="pr-${esc(p.id)}">
+        <label class="pairf${w ? " warn" : ""}" title="${w || `Couple number — ${E.pairTag(p) || "1a"} and their partner play each other`}">
+          <input type="number" inputmode="numeric" min="1" max="99" value="${E.pairNo(p) || ""}" placeholder="–" aria-label="Couple number for ${esc(p.name)}" data-change="player-pair" data-id="${esc(p.id)}">
+          <span class="ptag">${E.pairNo(p) ? esc(E.pairTag(p)) : "pair"}</span></label>
+        <input value="${esc(p.name)}" maxlength="32" data-change="player-name" data-id="${esc(p.id)}" aria-label="Player name">
         <button class="btn ghost sm" data-action="player-team" data-id="${esc(p.id)}" data-team="${E.otherTeam(t)}" title="Move to the other team">⇄</button>
         <button class="btn bad sm" data-action="player-remove" data-id="${esc(p.id)}" title="Remove (they can rejoin)">✕</button>
-      </div>`).join("") : `<p class="muted">Nobody yet.</p>`}
-      <div class="prow add"><input id="add-player-${t}" maxlength="20" placeholder="Add someone without a phone" aria-label="Add a player to ${esc(tn(G, t))}" data-sticky>
+      </div>`;
+      }).join("") : `<p class="muted">Nobody yet.</p>`}
+      <div class="prow add"><input id="add-player-${t}" maxlength="32" placeholder="First and last name" aria-label="Add a player to ${esc(tn(G, t))}" data-sticky>
         <button class="btn ghost sm" data-action="player-add" data-team="${t}">+ Add</button></div>
     </section>`;
-  }).join("") + `<small class="muted">Players can't change their own name or team — fix it here and their phone updates instantly. People you add by hand can be drawn for mini games too.</small>`;
+  }).join("");
+  const bad = G.P.filter((p) => warn(p)).map((p) => `${esc(p.name)}: ${esc(warn(p))}`);
+  return `<section class="sect"><h4>💍 Couples</h4>
+    ${toggle("pairUp", "Couples face each other", on, "Head-to-head mini games put a couple against each other and summon them to the table together")}
+    <p class="muted"><small>Number each couple: the ${esc(tn(G, "team1"))} half is <b>1a</b>, the ${esc(tn(G, "team2"))} half is <b>1b</b>, then 2a / 2b, and so on. ${couples ? `<b>${couples}</b> couple${couples === 1 ? "" : "s"} set up so far.` : "Nobody is paired up yet."}</small></p>
+    ${bad.length ? `<div class="qstat warn"><b>Check these:</b><span>${bad.join(" · ")}</span></div>` : ""}
+  </section>${body}<small class="muted">Players can't change their own name or team — fix it here and their phone updates instantly. People you add by hand can be drawn for mini games too.</small>`;
 }
 
 function helpTab() {

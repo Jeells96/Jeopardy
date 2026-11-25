@@ -615,7 +615,9 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   w.run("claimBuzz", { buzzRound: w.state.clue.buzzRound, candidates: [{ deviceId: "w1", name: "Wife1", team: "team2", t: w.state.clue.openedAt + 50 }] }, 2000);
   const k2 = E.lockKey(w.state.clue);
   w.run("answerTimeout", { key: k2 }, 60000);
-  eq([w.state.clue.stage, w.state.scores.team2], ["open", -200], "time runs out on a slow answer: marked wrong automatically");
+  eq([w.state.clue.stage, w.state.scores.team2], ["answering", 0], "time runs out on a slow answer: the bell rings, nothing is decided");
+  w.run("judge", { result: "wrong" });
+  eq([w.state.clue.stage, w.state.scores.team2], ["open", -200], "…and Jaren rules they missed it");
   w.run("answerSubmitted", { key: k2 });
   ok(!!w.error && !w.state.clue.submitted, "an answer after time's up is refused");
   w.run("nobody");

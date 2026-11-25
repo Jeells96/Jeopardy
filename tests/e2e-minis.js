@@ -102,7 +102,7 @@ async function until(page, fn, arg, timeout = 8000) {
       eq(await p.$$eval(".teambtn .tb-name", (els) => els.map((e) => e.textContent)), ["Husbands", "Wives"], "join screen offers Husbands / Wives");
       await shot(p, "m01-join");
     }
-    await p.fill("#jn-name", n);
+    await p.fill("#jn-name", n + " Mistle");
     await p.click(`.teambtn.${t}`);
     await p.click('[data-action="join"]');
     await p.waitForSelector(".phone");
@@ -133,10 +133,28 @@ async function until(page, fn, arg, timeout = 8000) {
 
   // ---- add someone without a phone ----
   await host.click('.tab:has-text("Players")');
-  await host.fill("#add-player-team1", "Grandpa");
+  await host.fill("#add-player-team1", "Grandpa Mistle");
   await host.press("#add-player-team1", "Enter");
-  await until(board, () => [...document.querySelectorAll(".roster.team1 .chip")].some((e) => e.textContent === "Grandpa"));
+  await until(board, () => [...document.querySelectorAll(".roster.team1 .chip")].some((e) => e.textContent === "Grandpa Mistle"));
   ok(true, "host adds a player who has no phone (3 husbands vs 2 wives)");
+
+  // ---- couples: 1a plays 1b ----
+  const pid = (n) => host.evaluate((x) => window.__G.P.find((p) => p.name.startsWith(x)).id, n);
+  const setPair = async (name, n) => {
+    const id = await pid(name);
+    await host.fill(`.pairf input[data-id="${id}"]`, String(n));
+    await host.dispatchEvent(`.pairf input[data-id="${id}"]`, "change");
+  };
+  await setPair("Jake", 1);
+  await until(host, () => document.body.innerText.includes("Nobody is 1b yet"));
+  ok(true, "half a couple is flagged until their other half has the same number");
+  await setPair("Sarah", 1);
+  await setPair("Tom", 2);
+  await setPair("Emma", 2);
+  await until(host, () => window.__G.P.filter((p) => p.pair).length === 4);
+  eq((await host.$$eval(".pairf .ptag", (els) => els.map((e) => e.textContent))).filter((t) => t !== "pair").sort(), ["1a", "1b", "2a", "2b"], "couples are numbered 1a / 1b, 2a / 2b");
+  ok((await host.textContent(".sect")).includes("2 couples"), "the Players tab counts the couples");
+  await shot(host, "m05b-settings-couples");
 
   // ---- questions ----
   await host.click('.tab:has-text("Questions")');
@@ -203,15 +221,18 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(board, () => document.querySelectorAll(".versus .spin.landed").length === 2, null, 4000);
   let S = await state(host);
   let m = S.minis.list[0].matches[0];
-  ok(m.p1 && m.p2 && ["Jake", "Tom", "Grandpa"].includes(m.p1.name) && ["Sarah", "Emma"].includes(m.p2.name), `random draw: ${m.p1.name} vs ${m.p2.name}`);
+  const first = (x) => x.name.split(" ")[0];
+  ok(m.p1 && m.p2 && ["Jake", "Tom", "Grandpa"].includes(first(m.p1)) && ["Sarah", "Emma"].includes(first(m.p2)), `random draw: ${m.p1.name} vs ${m.p2.name}`);
+  const mate = { Jake: "Sarah", Sarah: "Jake", Tom: "Emma", Emma: "Tom" };
+  ok(!mate[first(m.p1)] || mate[first(m.p1)] === first(m.p2), `a couple is drawn together: ${m.p1.name} vs ${m.p2.name}`);
   eq(await board.$$eval(".versus .spin", (els) => els.map((e) => e.textContent)), [m.p1.name, m.p2.name], "the big screen lands on the drawn names");
   ok((await board.$$(".versus .spin.landed")).length === 2, "…with the landing animation");
   await until(board, () => window.__said.length === 1);
   eq(await board.evaluate(() => window.__said[0]), `Up next: ${m.p1.name}, versus, ${m.p2.name}!`, "the big screen SAYS who's up next out loud");
-  const wife1 = P[m.p2.name];
+  const wife1 = P[first(m.p2)];
   await until(wife1, () => !!document.querySelector(".youup.big"));
   ok((await wife1.textContent(".youup")).includes("You're up") && (await wife1.textContent(".youup")).includes(m.p1.name), "the drawn wife's phone says You're up vs her opponent");
-  const otherWife = m.p2.name === "Sarah" ? P.Emma : P.Sarah;
+  const otherWife = first(m.p2) === "Sarah" ? P.Emma : P.Sarah;
   ok((await otherWife.textContent(".ph-versus")).includes(m.p1.name), "everyone else sees who's facing off");
   await sleep(300);
   await shot(board, "m08-board-h2h-versus");
@@ -235,7 +256,7 @@ async function until(page, fn, arg, timeout = 8000) {
   await sleep(1900);
   await host.selectOption(".mside.team2 select", emmaId);
   await until(host, (id) => window.__G.S.minis.list[0].matches[1].p2.id === id, emmaId);
-  await until(board, () => document.querySelector(".versus .vs-side.team2 .spin")?.textContent === "Emma");
+  await until(board, () => document.querySelector(".versus .vs-side.team2 .spin")?.textContent === "Emma Mistle");
   ok(true, "host hand-picks a player from the list instead");
   await until(P.Emma, () => !!document.querySelector(".youup.big"));
   await host.evaluate(() => document.activeElement && document.activeElement.blur());
@@ -354,8 +375,8 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(host, (id) => window.__G.S.minis.list[2].turn.id !== id, t3.id);
   const t3b = (await state(host)).minis.list[2].turn;
   ok(t3b.pid !== t3.pid && t3b.team === t3.team, "'Someone else' swaps in a teammate");
-  await host.selectOption(".mpanel select", { label: "Grandpa — Husbands" });
-  await until(host, () => window.__G.S.minis.list[2].turn.name === "Grandpa");
+  await host.selectOption(".mpanel select", { label: "Grandpa Mistle — Husbands" });
+  await until(host, () => window.__G.S.minis.list[2].turn.name.startsWith("Grandpa"));
   ok(true, "host hand-picks the phone-less player");
   await host.fill("#mini-score", "55");
   await host.press("#mini-score", "Enter");
@@ -508,7 +529,7 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(solo, () => window.__G.S.minis.list[0].matches.filter((x) => x.winner).length === 1);
   // add people by hand, mid-game
   await openDrawer(solo, "Players");
-  for (const [team, name] of [["team1", "Bob"], ["team1", "Al"], ["team2", "Sue"]]) {
+  for (const [team, name] of [["team1", "Bob Pine"], ["team1", "Al Pine"], ["team2", "Sue Pine"]]) {
     await solo.fill(`#add-player-${team}`, name);
     await solo.click(`[data-action="player-add"][data-team="${team}"]`);
   }
@@ -518,7 +539,7 @@ async function until(page, fn, arg, timeout = 8000) {
   await waitDock(solo, "who won?");
   S = await state(solo);
   m = S.minis.list[0].matches[1];
-  ok(["Bob", "Al"].includes(m.p1.name) && m.p2.name === "Sue", `hand-added players are drawn: ${m.p1.name} vs ${m.p2.name}`);
+  ok(["Bob Pine", "Al Pine"].includes(m.p1.name) && m.p2.name === "Sue Pine", `hand-added players are drawn: ${m.p1.name} vs ${m.p2.name}`);
   await key(solo, "2");
   await sleep(200);
   await solo.click('.r-buttons .btn:has-text("Finish game")');
@@ -540,7 +561,7 @@ async function until(page, fn, arg, timeout = 8000) {
     await solo.press("#mini-score", "Enter");
     await until(solo, (n) => window.__G.S.minis.list[1].entries.length === n, seen.length);
   }
-  eq(seen.slice().sort(), ["Al", "Bob", "Sue"], "everyone gets exactly one turn (uneven teams)");
+  eq(seen.map((n) => n.split(" ")[0]).sort(), ["Al", "Bob", "Sue"], "everyone gets exactly one turn (uneven teams)");
   await waitDock(solo, "Everyone's had a turn");
   ok((await solo.textContent(".r-buttons .btn.primary")).includes("Finish game"), "after everyone's turn the gold button becomes Finish");
   await shot(solo, "m22-solo-best-everyone");

@@ -122,7 +122,7 @@ console.log("engine tests");
   eq(st.state.clue.mcq.index, 1, "mcq selection recorded");
 }
 
-// --- answer timeout: points come off automatically, the other team gets to steal ---
+// --- out of time: the bell rings, but Jaren decides whether the points come off ---
 {
   let st = fresh();
   st = run(st, "startGame", {});
@@ -132,16 +132,32 @@ console.log("engine tests");
   const key = E.lockKey(st.state.clue);
   ok(run(st, "answerTimeout", { key }).noop, "timeout ignored before time runs out");
   st = run(st, "answerTimeout", { key }, 16000);
-  eq(st.state.scores.team1, -100, "typed answer out of time: points come off automatically");
-  eq(st.state.sfx.sound, "timesup", "only the time's-up sound plays (not the wrong-answer one)");
-  eq([st.state.clue.stage, st.state.clue.blocked], ["open", ["team1"]], "the other team can buzz in to steal");
-  const until = E.buzzDeadline(st.state.clue, st.state.settings);
-  ok(until - st.state.clue.openedAt === 30000, "…with 30 seconds to buzz in");
-  ok(run(st, "answerTimeout", { key }, 1000).noop, "timeout only fires once");
-  const rk = E.lockKey(st.state.clue);
-  ok(run(st, "buzzWindowTimeout", { key: rk }, 10000).noop, "steal window still open after 10 s");
-  const after = run(st, "buzzWindowTimeout", { key: rk }, 31000);
+  eq(st.state.scores.team1, 0, "out of time: nothing comes off until Jaren says so");
+  eq(st.state.sfx.sound, "timesup", "the time's-up bell rings");
+  eq([st.state.clue.stage, st.state.clue.timeUp === key, E.isLate(st.state.clue)], ["answering", true, true], "it waits on Jaren as a late answer");
+  ok(run(st, "answerTimeout", { key }, 1000).noop, "the bell only rings once");
+  ok(run(st, "answerSubmitted", { key }, 1000).error, "the answer box is closed");
+  ok(run(st, "mcqPick", { index: 0, me: P1 }, 1000).noop, "and so are the multiple-choice options");
+
+  // Jaren forgives it: full points, just like a normal correct answer.
+  const kind = run(st, "judge", { result: "correct" }, 2000);
+  eq([kind.state.scores.team1, kind.state.clue.stage, kind.state.clue.result], [100, "done", "correct"], "“Allow it” gives them the points");
+  eq(kind.state.sfx.sound, "correct", "…with the correct sound");
+  // Jaren rules they missed it: points off, the other team can steal, and no second bell.
+  const hard = run(st, "judge", { result: "wrong" }, 2000);
+  eq(hard.state.scores.team1, -100, "“Too late” takes the points");
+  eq(hard.state.sfx, st.state.sfx, "…and nothing buzzes a second time");
+  eq([hard.state.clue.stage, hard.state.clue.blocked], ["open", ["team1"]], "the other team can buzz in to steal");
+  eq(hard.state.history[hard.state.history.length - 1].why, "time", "it goes down as unanswered, not a wrong answer");
+  const until = E.buzzDeadline(hard.state.clue, hard.state.settings);
+  ok(until - hard.state.clue.openedAt === 30000, "…with 30 seconds to buzz in");
+  const rk = E.lockKey(hard.state.clue);
+  ok(run(hard, "buzzWindowTimeout", { key: rk }, 10000).noop, "steal window still open after 10 s");
+  const after = run(hard, "buzzWindowTimeout", { key: rk }, 31000);
   eq([after.state.clue.stage, after.state.clue.result, after.state.clue.revealed, after.state.scores.team2], ["done", "nobody", true, 0], "nobody steals in 30 s → answer shown, no points lost");
+  // Or he lets them off entirely.
+  const off = run(st, "judge", { result: "skip" }, 2000);
+  eq([off.state.scores.team1, off.state.clue.stage], [0, "open"], "“Let them off” costs nothing and rebounds");
 
   let m = fresh();
   m = run(m, "startGame", {});
@@ -149,8 +165,9 @@ console.log("engine tests");
   m = run(m, "openBuzzers");
   m = buzz(m, P1);
   m = run(m, "answerTimeout", { key: E.lockKey(m.state.clue) }, 16000);
-  eq(m.state.scores.team1, -200, "mcq timeout docks automatically");
-  eq(m.state.clue.stage, "open", "and rebounds to the other team");
+  eq(m.state.scores.team1, 0, "multiple choice waits on Jaren too");
+  m = run(m, "judge", { result: "wrong" }, 1000);
+  eq([m.state.scores.team1, m.state.clue.stage], [-200, "open"], "…and rebounds once he's taken the points");
 }
 
 // --- buzz window timeout ---
@@ -528,6 +545,89 @@ console.log("engine tests");
   dd = run(dd, "judge", { result: "correct" });
   eq(dd.state.clue.stage, "done", "question finished");
   ok(run(dd, "dropChoice").noop, "…but not once the question is over");
+}
+
+// --- couples: 1a plays 1b, and they're summoned to the table together ---
+{
+  // Three couples, plus one husband who came on his own.
+  const people = [
+    { id: "h1", name: "Jaren E.", team: "team1", pair: 1 }, { id: "w1", name: "Liz E.", team: "team2", pair: 1 },
+    { id: "h2", name: "Mike S.", team: "team1", pair: 2 }, { id: "w2", name: "Ann S.", team: "team2", pair: 2 },
+    { id: "h3", name: "Tom R.", team: "team1", pair: 3 }, { id: "w3", name: "Kay R.", team: "team2", pair: 3 },
+    { id: "h4", name: "Solo Sam", team: "team1" },
+  ];
+  eq([E.pairTag(people[0]), E.pairTag(people[1]), E.pairTag(people[6])], ["1a", "1b", ""], "the husband is 1a, his wife 1b, and an unpaired player has no tag");
+  eq(E.partnerOf(people, "h2").id, "w2", "2a's partner is 2b");
+  eq(E.partnerOf(people, "w3").id, "h3", "…and the other way round");
+  eq(E.partnerOf(people, "h4"), null, "someone without a number has no partner");
+
+  const couples6 = people.filter((p) => p.pair);
+  let st = { state: E.defaultState(), qs: [] };
+  const go = (name, params = {}, players = couples6) => {
+    const ch = E.ACTIONS[name](st.state, params, { now: (T += 50), questions: [], players });
+    if (ch && !ch.error) st = apply(st.state, st.qs, ch);
+    return ch;
+  };
+  go("miniAdd", { game: { name: "Snowball Toss", type: "h2h", points: 500 } });
+  const gid = st.state.minis.list[0].id;
+  go("miniPlay", { id: gid });
+  const couples = new Set();
+  for (let i = 0; i < 6; i++) {
+    go("miniNext", { id: gid });
+    const m = st.state.minis.list[0].matches[i];
+    const a = people.find((x) => x.id === m.p1.id), b = people.find((x) => x.id === m.p2.id);
+    couples.add(`${a.name} vs ${b.name}`);
+    ok(a.pair === b.pair, `couple ${i + 1} faces each other: ${a.name} vs ${b.name}`);
+    go("miniMatch", { id: gid, winner: "team1" });
+  }
+  ok(couples.size === 3, "every couple gets a turn before anyone repeats");
+
+  // Re-drawing one side brings their partner along.
+  go("miniNext", { id: gid });
+  let open = E.openMatch(st.state.minis.list[0]);
+  const was = open.p1.id;
+  go("miniRepick", { id: gid, team: "team1", matchId: open.id });
+  open = E.openMatch(st.state.minis.list[0]);
+  const hus = people.find((x) => x.id === open.p1.id), wif = people.find((x) => x.id === open.p2.id);
+  ok(open.p1.id !== was && hus.pair === wif.pair, `🎲 re-drawing the husband brings his wife along (${hus.name} vs ${wif.name})`);
+
+  // Two tables at once: two different couples, nobody drawn twice.
+  go("miniTables", { tables: "Kitchen, Garage" });
+  go("miniReset", { id: gid });
+  go("miniPlay", { id: gid });
+  go("miniNext", { id: gid });
+  const two = st.state.minis.list[0].matches;
+  eq(two.length, 2, "both tables are filled in one draw");
+  ok(two.every((m) => people.find((x) => x.id === m.p1.id).pair === people.find((x) => x.id === m.p2.id).pair), "each table gets a couple");
+  ok(two[0].p1.id !== two[1].p1.id && two[0].p2.id !== two[1].p2.id, "…and nobody plays at two tables at once");
+  ok(two.every((m) => m.table && m.summon != null), "each table gets its own Christmas summons for the pair");
+
+  // The odd one out still gets a game — against whoever is free.
+  go("miniReset", { id: gid });
+  go("miniPlay", { id: gid });
+  const drawn = new Set();
+  for (let i = 0; i < 4; i++) {
+    go("miniNext", { id: gid }, people);
+    const m = E.openMatch(st.state.minis.list[0]);
+    drawn.add(m.p1.id);
+    go("miniMatch", { id: gid, winner: "team1" }, people);
+  }
+  ok(drawn.has("h4"), "a husband who came on his own is still drawn (against whoever is free)");
+
+  // Switched off, it's a free-for-all again.
+  go("setSettings", { patch: { pairUp: false } });
+  go("miniReset", { id: gid });
+  go("miniTables", { tables: "" });
+  go("miniPlay", { id: gid });
+  let mixed = 0;
+  for (let i = 0; i < 7; i++) {
+    go("miniNext", { id: gid }, people);
+    const m = E.openMatch(st.state.minis.list[0]);
+    const a = people.find((x) => x.id === m.p1.id), b = people.find((x) => x.id === m.p2.id);
+    if (a.pair !== b.pair) mixed++;
+    go("miniMatch", { id: gid, winner: "team2" }, people);
+  }
+  ok(mixed > 0, "with couples switched off the draw is random again");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -50,7 +50,7 @@ const run = (name, p, now = 1000, who = players) => { const r = E.ACTIONS[name](
 const game = () => st.minis.list[0];
 run("miniAdd", { game: { name: "Blind Drawing", type: "draw" } });
 const g0 = game();
-eq([g0.type, g0.mode, g0.pics], ["h2h", "draw", []], "Blind Drawing is a team game judged from drawings");
+eq([g0.type, g0.mode, g0.better, g0.pics], ["best", "draw", "high", []], "Blind Drawing is a Best overall game judged from the drawings");
 run("miniPlay", { id: g0.id });
 ok(!!run("miniDrawRound", { id: g0.id }).error, "can't start without a picture to describe");
 run("miniUpdate", { id: g0.id, patch: { pics: ["drawpic-a", "drawpic-b"] } });
@@ -90,7 +90,8 @@ run("miniDrawJudge", { id: g0.id, matchId: r.id, scores: { h1: 55, h2: 31, w1: 8
 let done = game().matches.find((x) => x.id === r.id);
 eq(done.winner, "team2", "the best drawing (Emma, 87%) wins the round for her team");
 eq(E.drawRanking(done).map((d) => [d.name, d.score]), [["Emma", 87], ["Jake", 55], ["Sam", 31], ["Lily", 12]], "everyone ranked best to worst");
-eq(E.miniStanding(game()).wins, { team1: 0, team2: 1, ties: 0 }, "the round counts as a win for the team");
+eq(E.miniStanding(game()).sorted.map((e) => [e.name, e.score]), [["Emma", 87], ["Jake", 55], ["Sam", 31], ["Lily", 12]], "every drawing is a score in the standings");
+eq(E.miniStanding(game()).leader, "team2", "the best drawing of the night is leading it for her team");
 ok(E.ACTIONS.miniDrawJudge(st, { id: g0.id, matchId: r.id, scores: { h1: 100 } }, { now: 2000, questions: [], players }) === null, "a verdict can't be changed afterwards");
 run("miniDrawRound", { id: g0.id });
 r = E.drawRound(game());
@@ -101,19 +102,35 @@ run("miniDrawJudge", { id: g0.id, matchId: r.id, scores: { h2: 64, w2: 64, h1: 9
 done = game().matches.find((x) => x.id === r.id);
 eq([done.winner, done.scores.h1], ["tie", null], "both teams share the best score → a tie (a drawing that wasn't sent scores nothing)");
 eq(E.drawRanking(done).slice(-2).map((d) => d.score), [null, null], "no drawing = bottom of the list");
-ok(!!E.ACTIONS.miniUpdate(st, { id: g0.id, patch: { type: "best" } }, { now: 1 }).error, "can't change the game type once it's started");
-// Points per round win
+ok(!!E.ACTIONS.miniUpdate(st, { id: g0.id, patch: { type: "h2h" } }, { now: 1 }).error, "can't change the game type once it's started");
+// Undoing a judged round takes its scores back out of the standings
+{
+  const first = game().matches.find((x) => x.scores && x.scores.w1 === 87);
+  const back = E.ACTIONS.miniMatchRemove(st, { id: g0.id, matchId: first.id }, { now: 3000, players });
+  eq(E.miniStanding({ ...game(), ...back.set.minis.list[0] }).sorted.filter((e) => e.roundId === first.id).length, 0, "↶ a round that's taken out takes its scores with it");
+}
+// The best drawing of the night wins the points for its team
 {
   let s3 = E.defaultState();
   const r3 = (name, p) => { const x = E.ACTIONS[name](s3, p, { now: 1000, questions: [], players, rand: rnd }); if (x && !x.error) s3 = { ...s3, ...x.set }; return x; };
-  r3("miniAdd", { game: { name: "Blind Drawing", type: "draw", award: "match", points: 300, pics: ["builtin:tree"] } });
+  r3("miniAdd", { game: { name: "Blind Drawing", type: "draw", points: 300, pics: ["builtin:tree"] } });
   const id = s3.minis.list[0].id;
   r3("miniPlay", { id });
   r3("miniDrawRound", { id });
   const rr = E.drawRound(s3.minis.list[0]);
   r3("miniDrawSubmitted", { id, matchId: rr.id, pid: "h2" });
-  r3("miniDrawJudge", { id, matchId: rr.id, scores: { h2: 40 } });
-  eq(s3.scores.team1, 300, "points for every round win go straight to the winning team");
+  r3("miniDrawSubmitted", { id, matchId: rr.id, pid: "w2" });
+  r3("miniDrawJudge", { id, matchId: rr.id, scores: { h2: 40, w2: 70 } });
+  eq(s3.scores.team1, 0, "no points while it's being played — it's scored like any Best overall game");
+  r3("miniFinish", { id });
+  eq([s3.scores.team2, s3.scores.team1, s3.minis.list[0].result.winner], [300, 0, "team2"], "the best drawing of the night wins the points for its team");
+  r3("miniReset", { id });
+  eq(s3.scores.team2, 0, "↺ Reset hands the points back");
+  r3("miniPlay", { id });
+  r3("miniDrawRound", { id });
+  const r4 = E.drawRound(s3.minis.list[0]);
+  r3("miniDrawSubmitted", { id, matchId: r4.id, pid: "h2" });
+  r3("miniDrawJudge", { id, matchId: r4.id, scores: { h2: 40 } });
   // Undo starting the whole game: back to not played yet, points handed back
   r3("miniReset", { id });
   eq([s3.minis.list[0].status, s3.minis.list[0].matches.length, s3.scores.team1, s3.minis.current], ["pending", 0, 0, null], "↶ Undo start: the game is back to not played yet, its points are taken back, and you're back at the games list");

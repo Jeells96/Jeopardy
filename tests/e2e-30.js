@@ -54,7 +54,7 @@ const dump = async () => (await fetch(URL + "__fs/dump", { method: "POST" })).js
       const i = b + k, team = i % 2 ? "team2" : "team1";
       const p = await device("P" + (i + 1), { width: 360, height: 740 }, { hasTouch: true });
       await p.goto(URL);
-      await p.fill("#jn-name", "Player" + (i + 1));
+      await p.fill("#jn-name", "Player" + (i + 1) + " Snow");
       await p.click(`.teambtn.${team}`);
       await p.click('[data-action="join"]');
       await p.waitForSelector(".phone");
@@ -105,9 +105,9 @@ const dump = async () => (await fetch(URL + "__fs/dump", { method: "POST" })).js
   await buzzNow(B);
   await until(host, () => window.__G.S.clue.stage === "answering", null, 8000);
   let c = (await state(host)).clue;
-  ok(c.locked.name === "Player1", `the faster press wins even though it reached the server later (${c.order.map((o) => `${o.name} ${o.ms}ms`).join(", ")})`);
-  ok(c.order.length === 2 && c.order[1].name === "Player2" && c.order[1].ms - c.order[0].ms >= 70, "…and Player2, who pressed 0.1s later, is second");
-  ok(!c.order.some((o) => o.name === "Player3"), "the too-soon press isn't in the list");
+  ok(c.locked.name === "Player1 Snow", `the faster press wins even though it reached the server later (${c.order.map((o) => `${o.name} ${o.ms}ms`).join(", ")})`);
+  ok(c.order.length === 2 && c.order[1].name === "Player2 Snow" && c.order[1].ms - c.order[0].ms >= 70, "…and Player2, who pressed 0.1s later, is second");
+  ok(!c.order.some((o) => o.name === "Player3 Snow"), "the too-soon press isn't in the list");
   await A.unroute("**/__fs/commit");
   // every screen lit up at the same moment
   const lit = await Promise.all([...phones, board].map((p) => p.evaluate(() => window.__liveAt)));
@@ -142,7 +142,7 @@ const dump = async () => (await fetch(URL + "__fs/dump", { method: "POST" })).js
   ok(c.locked.deviceId === fastest.deviceId, `exactly one winner: the fastest press (${c.locked.name}, ${c.locked.ms} ms)`);
   ok(c.order.length === 5 && c.order.every((o, i) => i === 0 || o.ms >= c.order[i - 1].ms), "the top 5 are listed fastest first");
   ok(decidedIn < 2500, `decided in ${decidedIn} ms`);
-  const winnerPhone = phones.find((p) => p.name === "P" + c.locked.name.replace("Player", ""));
+  const winnerPhone = phones.find((p) => p.name === "P" + c.locked.name.replace("Player", "").split(" ")[0]);
   await until(winnerPhone, () => document.body.textContent.includes("You're up"));
   ok(true, "the winner's phone says You're up");
   await toBoard();

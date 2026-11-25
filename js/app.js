@@ -1,7 +1,7 @@
 // Christmas Jeopardy — app bootstrap, routing, rendering, actions and automations.
 import * as D from "./data.js";
 import * as E from "./engine.js";
-import { morph, money } from "./ui/util.js";
+import { morph, money, cleanName, nameProblem } from "./ui/util.js";
 import { renderHost } from "./ui/host.js";
 import { renderRemote } from "./ui/remote.js";
 import { renderPlayer } from "./ui/player.js";
@@ -722,8 +722,9 @@ async function handle(a, p, el) {
     }
     case "player-add": {
       const input = document.getElementById("add-player-" + el.dataset.team);
-      const name = input ? input.value.trim().slice(0, 20) : "";
-      if (!name) { if (input) input.focus(); return toast("Type their name first.", "bad"); }
+      const name = input ? cleanName(input.value) : "";
+      const problem = nameProblem(name);
+      if (problem) { if (input) input.focus(); return toast(problem, "bad"); }
       await submitField(input, () => D.addPlayer(name, el.dataset.team));
       return;
     }
@@ -745,8 +746,8 @@ async function handle(a, p, el) {
     }
     case "join-team": G.ui.joinTeam = el.dataset.team; return render();
     case "join": {
-      const name = (document.getElementById("jn-name").value || "").trim().slice(0, 20);
-      if (!name || !G.ui.joinTeam) return;
+      const name = cleanName(document.getElementById("jn-name").value);
+      if (nameProblem(name) || !G.ui.joinTeam) return;
       G.me = { name, team: G.ui.joinTeam };
       G.ui.kicked = false;
       // Joining is also the tap that switches this phone's sound on (browsers need one).
@@ -846,15 +847,17 @@ document.addEventListener("change", async (e) => {
     else if (k === "setting") await D.act("setSettings", { patch: { [el.dataset.key]: Number(el.value) } });
     else if (k === "setting-bool") await D.act("setSettings", { patch: { [el.dataset.key]: el.checked } });
     else if (k === "team-name") await D.act("setTeamName", { team: el.dataset.team, name: el.value });
-    else if (k === "player-name") { const n = el.value.trim().slice(0, 20); if (n) await D.updatePlayer(el.dataset.id, { name: n }); }
+    else if (k === "player-name") { const n = cleanName(el.value); const bad = nameProblem(n); if (bad) throw new Error(bad); await D.updatePlayer(el.dataset.id, { name: n }); }
+    else if (k === "player-pair") { const n = Math.round(Number(el.value)); await D.updatePlayer(el.dataset.id, { pair: Number.isFinite(n) && n > 0 ? Math.min(99, n) : null }); }
     else if (k === "final-eligible") await D.act("finalSetEligible", { team: el.dataset.team, eligible: el.checked });
     else if (k === "import") await importFile(el);
     else if (k === "mini-field") await D.act("miniUpdate", { id: el.dataset.id, patch: { [el.dataset.f]: el.value } });
+    else if (k === "mini-draw") await D.act("miniUpdate", { id: el.dataset.id, patch: { mode: el.checked ? "draw" : "normal" } });
     else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value, matchId: el.dataset.ref || undefined, turnId: el.dataset.ref || undefined });
     else if (k === "mini-move") await D.act("miniSetTable", { id: el.dataset.id, table: el.value, matchId: el.dataset.ref, turnId: el.dataset.ref });
   } catch (err) {
     toast(err.message || String(err), "bad");
-    if (k === "mini-field" || k === "team-name" || k.startsWith("lib-")) { el.blur(); render(); } // snap the field back to the saved value
+    if (k === "mini-field" || k === "team-name" || k === "player-name" || k.startsWith("lib-")) { el.blur(); render(); } // snap the field back to the saved value
   }
 });
 

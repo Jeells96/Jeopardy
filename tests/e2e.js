@@ -72,12 +72,14 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await remote.waitForSelector(".remote");
   ok(true, "host remote opens");
 
-  const people = [["Jo", "team1"], ["Amy", "team1"], ["Rick", "team2"], ["Bea", "team2"]];
+  // Everyone joins with a first AND last name — that's the rule on the join screen.
+  const people = [["Jo Frost", "team1"], ["Amy Holly", "team1"], ["Rick Snow", "team2"], ["Bea Noel", "team2"]];
   const P = {};
-  for (const [n, t] of people) {
+  for (const [full, t] of people) {
+    const n = full.split(" ")[0];
     const p = await device(n, { width: 390, height: 844 });
     await p.goto(URL);
-    await p.fill("#jn-name", n);
+    await p.fill("#jn-name", full);
     await p.click(`.teambtn.${t}`);
     await p.click('[data-action="join"]');
     await p.waitForSelector(".phone");
@@ -129,7 +131,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(!!winner, `exactly one winner of a 4-way simultaneous buzz (${winner.name})`);
   await until(board, () => document.querySelectorAll(".bo-row").length === 4);
   ok(true, "buzz order lists all 4 presses");
-  const wp = P[winner.name];
+  const wp = P[winner.name.split(" ")[0]];
   ok(await wp.isVisible(".youup"), "the winner's phone says You're up");
   const mates = Object.values(P).filter((p) => p.team === winner.team && p !== wp);
   const opps = Object.values(P).filter((p) => p.team !== winner.team);
@@ -297,7 +299,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await host.click(`[data-action="player-remove"][data-id="${amyId}"]`);
   await until(P.Amy, () => !!document.querySelector("#jn-name"));
   ok((await P.Amy.textContent(".note")).includes("removed from the game"), "removed player goes back to the join screen");
-  await P.Amy.fill("#jn-name", "Amy");
+  await P.Amy.fill("#jn-name", "Amy Holly");
   await P.Amy.click(".teambtn.team1");
   await P.Amy.click('[data-action="join"]');
   await P.Amy.waitForSelector(".phone");
@@ -375,7 +377,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(true, "any teammate can undo it, and it opens for editing on every phone");
   await P.Bea.fill("#fa-input", "Twas the Night Before Christmas");
   await P.Bea.click('[data-action="final-answer"]');
-  await until(board, () => window.__G.S.final.answers.team2.done && window.__G.S.final.answers.team2.by === "Bea");
+  await until(board, () => window.__G.S.final.answers.team2.done && window.__G.S.final.answers.team2.by.startsWith("Bea"));
   ok(true, "…and re-submit a changed answer");
   await sleep(300);
   await shot(board, "16-board-final-clue");

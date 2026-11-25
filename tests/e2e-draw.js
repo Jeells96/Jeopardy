@@ -74,6 +74,11 @@ async function hold(page, sel) {
   await host.click('.ideas .chipbtn:has-text("Blind Drawing")');
   await until(host, () => window.__G.S.minis.list.length === 1 && window.__G.S.minis.list[0].mode === "draw");
   ok(true, "Blind Drawing can be added from the ideas");
+  // It's a Best overall game with the drawing tick box on — no separate kind of game.
+  ok((await host.$$eval(".minicard select[data-f='type'] option", (els) => els.map((e) => e.textContent.trim()))).join("|") === "⚔️ Head-to-head|🏅 Best overall", "two kinds of mini game to choose from");
+  ok(await host.$eval(".minicard select[data-f='type']", (e) => e.value === "best"), "Blind Drawing is a 🏅 Best overall game");
+  ok(await host.$eval(".minicard .drawtick input", (e) => e.checked), "…with ✏️ Blind drawing ticked");
+  ok((await host.textContent(".minicard")).includes("the best one wins the points"), "the card says how it's scored");
   // ready-made Christmas drawings
   await host.click('[data-action="draw-gallery"]');
   await until(host, () => document.querySelectorAll(".gallery .gpic").length === 10);
@@ -110,14 +115,14 @@ async function hold(page, sel) {
   for (const [n, t] of [["Jake", "team1"], ["Emma", "team2"], ["Kim", "team2"]]) {
     const p = await device(n, { width: 390, height: 844 });
     await p.goto(URL);
-    await p.fill("#jn-name", n);
+    await p.fill("#jn-name", n + " Pine");
     await p.click(`.teambtn.${t}`);
     await p.click('[data-action="join"]');
     await p.waitForSelector(".phone");
     P[n] = p;
   }
   // a player without a phone can't draw
-  await host.evaluate(async () => { const D = await import("/js/data.js"); await D.addPlayer("Grandpa", "team1"); });
+  await host.evaluate(async () => { const D = await import("/js/data.js"); await D.addPlayer("Grandpa Pine", "team1"); });
   // tables are set up for the other games — blind drawing ignores them
   await host.evaluate(async () => { const D = await import("/js/data.js"); await D.act("miniTables", { tables: "Kitchen, Garage" }); });
   const btnText = () => host.evaluate(() => (document.querySelector(".r-buttons") || {}).textContent || "");
@@ -133,7 +138,7 @@ async function hold(page, sel) {
   await host.keyboard.press("Space");
   await until(host, () => window.__G.S.minis.list[0].matches.length === 1);
   let rd = await host.evaluate(() => window.__G.S.minis.list[0].matches[0]);
-  ok(rd.drawers.map((d) => d.name).join() === "Jake,Emma,Kim", "everyone with a phone draws at once (Grandpa has no phone)");
+  ok(rd.drawers.map((d) => d.name.split(" ")[0]).join() === "Jake,Emma,Kim", "everyone with a phone draws at once (Grandpa has no phone)");
   ok(!rd.table && rd.pic === own, "no table; the first round uses the first picture");
   for (const n of ["Jake", "Emma", "Kim"]) await until(P[n], () => !!document.querySelector(".drawfull canvas.drawpad"), null, 5000);
   ok(true, "every phone becomes a drawing pad");
@@ -145,7 +150,7 @@ async function hold(page, sel) {
   ok(!(await P.Jake.$(".drawfull svg")) && !(await P.Jake.$(".describe")), "drawers never see the picture");
   ok(!(await board.$(".spin")), "no name shuffle — nobody is picked");
   ok((await board.textContent(".steppanel")).includes("on top of your head"), "the board says get ready until you start");
-  ok((await board.$$eval(".dchips .dchip", (els) => els.map((e) => e.textContent.trim()))).join("|") === "✏️ Jake|✏️ Emma|✏️ Kim", "the board lists everyone who's drawing");
+  ok((await board.$$eval(".dchips .dchip", (els) => els.map((e) => e.textContent.trim().split(" ").slice(0, 2).join(" ")))).join("|") === "✏️ Jake|✏️ Emma|✏️ Kim", "the board lists everyone who's drawing");
   // (the app's own copy of draw.js — on a deployed build its URL carries ?v=…)
   const ink = (n) => P[n].evaluate(async () => { const q = (document.querySelector('script[type="module"]').src.split("?")[1] || ""); return (await import("/js/draw.js" + (q ? "?" + q : ""))).padStrokes(document.querySelector(".drawfull canvas").dataset.pad).length; });
   await drawOn(P.Jake, ".drawfull canvas", [[[0.2, 0.2], [0.8, 0.8]]]);
@@ -200,8 +205,8 @@ async function hold(page, sel) {
   await until(P.Jake, () => !document.querySelector(".drawfull") && !document.documentElement.classList.contains("padlock"));
   const done = await host.evaluate(() => window.__G.S.minis.list[0].matches[0]);
   const ranked = await host.evaluate(async () => { const E = await import("/js/engine.js"); return E.drawRanking(window.__G.S.minis.list[0].matches[0]); });
-  ok(done.winner === "team1" && ranked[0].name === "Jake", `the best drawing wins it for their team (shape, not placement): ${ranked.map((d) => `${d.name} ${d.score}%`).join(", ")}`);
-  ok(ranked[2].name === "Emma", "the scribble comes last");
+  ok(done.winner === "team1" && ranked[0].name.startsWith("Jake"), `the best drawing wins it for their team (shape, not placement): ${ranked.map((d) => `${d.name} ${d.score}%`).join(", ")}`);
+  ok(ranked[2].name.startsWith("Emma"), "the scribble comes last");
   await until(board, () => document.querySelectorAll(".dverdict .dpanel svg.drawing polyline").length >= 3, null, 8000);
   const labels = await board.$$eval(".dverdict .dpanel", (els) => els.map((e) => e.querySelector(".dp-label").textContent + "|" + e.querySelector(".dp-name").textContent));
   ok(labels.length === 3 && labels[0].startsWith("The picture") && labels[1].includes("Winner") && labels[1].includes("Jake") && labels[2].includes("Last place") && labels[2].includes("Emma"), "board shows the picture, the winner and last place side by side");
@@ -213,9 +218,9 @@ async function hold(page, sel) {
   await until(P.Emma, () => document.body.textContent.includes("You came 3rd of 3"));
   ok(true, "every phone says how they did");
   ok((await P.Kim.textContent(".dbrowse .mysub small")).startsWith("Your drawing — 5") || (await P.Kim.textContent(".dbrowse .mysub small")).startsWith("Your drawing"), "each phone shows its own drawing first");
-  ok((await P.Kim.$$eval(".dlb-row .dlb-name", (els) => els.map((e) => e.textContent.replace(" (you)", "")))).join("|") === "Jake|Kim|Emma", "…with the full leaderboard, best first");
+  ok((await P.Kim.$$eval(".dlb-row .dlb-name", (els) => els.map((e) => e.textContent.replace(" (you)", "").split(" ")[0]))).join("|") === "Jake|Kim|Emma", "…with the full leaderboard, best first");
   await P.Kim.click('.dlb-row:has-text("Jake")');
-  await until(P.Kim, () => document.querySelector(".dbrowse .mysub small")?.textContent.startsWith("Jake's drawing"));
+  await until(P.Kim, () => document.querySelector(".dbrowse .mysub small")?.textContent.startsWith("Jake Pine's drawing"));
   await until(P.Kim, () => document.querySelectorAll(".dbrowse .mysub svg.drawing polyline").length >= 1);
   ok(true, "tap anyone on the leaderboard to see their drawing");
   await shot(P.Kim, "d03b-phone-verdict");

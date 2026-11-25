@@ -171,7 +171,7 @@ function clueStatus(G, c, q) {
     const total = E.answerMs(c, set);
     const key = E.lockKey(c);
     const sp = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard">✍️ “${esc(G.spoken.text)}”</div>` : "";
-    const tu = c.timeUp === key ? `<div class="status-sub timeup">⏰ Time's up!</div>` : "";
+    const tu = c.timeUp === key ? `<div class="status-sub timeup">⏰ Time's up! — Jaren's call</div>` : "";
     const who = c.dd ? `${esc(tn(G, L.team))}` : `${esc(L.name)} <small>${esc(tn(G, L.team))}</small>`;
     const done = c.submitted === key ? `<div class="status-sub">✓ Answer in</div>` : "";
     const fast = !c.dd && Number.isFinite(L.ms) ? `<div class="status-sub">⚡ ${(L.ms / 1000).toFixed(2)}s</div>` : "";

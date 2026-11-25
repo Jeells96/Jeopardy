@@ -111,7 +111,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   for (const [n, t] of [["Jen", "team1"], ["Kim", "team2"]]) {
     const p = await device(n, { width: 390, height: 844 });
     await p.goto(URL);
-    await p.fill("#jn-name", n);
+    await p.fill("#jn-name", n + " Berry");
     await p.click(`.teambtn.${t}`);
     await p.click('[data-action="join"]');
     await p.waitForSelector(".phone");
@@ -187,7 +187,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await shot(P.Jen, "x03-phone-summon");
   await shot(host, "x02b-host-tables");
   // swap tables from the host controls
-  const jenMatch = await host.evaluate(() => window.__G.S.minis.list[0].matches.find((m) => !m.winner && (m.p1.name === "Jen" || m.p2.name === "Jen")).id);
+  const jenMatch = await host.evaluate(() => window.__G.S.minis.list[0].matches.find((m) => !m.winner && (m.p1.name.startsWith("Jen") || m.p2.name.startsWith("Jen"))).id);
   await host.click(`[data-action="mini-row-edit"][data-id="${jenMatch}"]`);
   const otherTable = jenTable === "Table 1" ? "Table 2" : "Table 1";
   await host.selectOption(`select[data-change="mini-move"][data-ref="${jenMatch}"]`, otherTable);
@@ -220,12 +220,18 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   const lateKey = await host.evaluate(async () => (await import("/js/engine.js")).lockKey(window.__G.S.clue));
   const t1Before = await host.evaluate(() => window.__G.S.scores.team1);
   const t2Before = await host.evaluate(() => window.__G.S.scores.team2);
-  await until(host, () => window.__G.S.clue && window.__G.S.clue.stage === "open" && window.__G.S.clue.blocked.length === 1, null, 8000);
-  ok((await host.evaluate(() => window.__G.S.scores.team1)) === t1Before - 500, "out of time: points come off automatically, no button needed");
+  // Out of time: the bell rings, but nothing happens to the scores until Jaren says so.
+  await until(host, () => window.__G.S.clue && window.__G.S.clue.timeUp, null, 8000);
+  ok((await host.evaluate(() => window.__G.S.scores.team1)) === t1Before, "out of time: the bell rings but no points come off yet");
+  await until(host, () => document.body.innerText.includes("Late answer"));
+  ok(true, "the host is asked to make the call");
   await until(P.Jen, () => !document.getElementById("typed-answer"));
   ok(true, "the answer box closes on the phone");
   const refused = await P.Jen.evaluate(async (k) => { const D = await import("/js/data.js"); try { await D.act("answerSubmitted", { key: k }); return false; } catch { return true; } }, lateKey);
   ok(refused, "…and a late answer is refused by the database");
+  await host.locator('.r-buttons .btn:has-text("Too late")').click();
+  await until(host, () => window.__G.S.clue && window.__G.S.clue.stage === "open" && window.__G.S.clue.blocked.length === 1, null, 8000);
+  ok((await host.evaluate(() => window.__G.S.scores.team1)) === t1Before - 500, "“Too late” takes the points off");
   await until(P.Kim, () => !!document.querySelector(".buzz.live") && !!document.querySelector(".timer, .ph-timer, .lights"));
   ok(true, "the other team gets the buzzer back, with a countdown to steal");
   await until(host, () => window.__G.S.clue.stage === "done", null, 9000);

@@ -144,14 +144,25 @@ export function hostSteps(G, { privateView = false } = {}) {
       const L = c.locked;
       const key = E.lockKey(c);
       const who = c.dd ? `<b>${esc(tn(G, L.team))}</b>` : `<b>${esc(L.name)}</b> <span class="muted">(${esc(tn(G, L.team))})</span>`;
+      const late = E.isLate(c);
       const clock = c.submitted === key
         ? `<span class="timeup">✓ Answer in — your call.</span>`
-        : c.timeUp === key
+        : late
         ? `<span class="timeup">⏰ Time's up — your call.</span>`
         : `<span class="pill-cd"><span class="cd" data-deadline="${L.at + E.answerMs(c, set)}" data-format="s"></span></span>`;
       const heard = G.spoken && G.spoken.key === key && G.spoken.text ? `<div class="heard-line">✍️ “${esc(G.spoken.text)}”</div>` : "";
       const isMcq = q && q.type === "mcq";
       const fastest = !c.dd && c.order && c.order.length ? `<div class="muted fastest">⚡ ${c.order.slice(0, 3).map((o) => `${esc(o.name)} ${(o.ms / 1000).toFixed(2)}s`).join(" · ")}</div>` : "";
+      // Out of time: the bell has rung but nothing is decided — Jaren can let a late
+      // answer stand, or rule they missed it (and nothing buzzes a second time).
+      if (late) {
+        status = `<b>Late answer ⏰</b> — ${who} ran out of time. <b>Your call:</b> let it stand or take the points.${fastest}${heard}`;
+        btn(`✓ Allow it +${money(value)}`, "act", act("judge", { result: "correct" }), "good", "C");
+        btn(`✗ Too late −${money(value)}`, "act", act("judge", { result: "wrong" }), "bad", "W");
+        btn("Let them off (no points either way)", "act", act("judge", { result: "skip" }), "ghost", "S");
+        oops();
+        return { status, panel, buttons: B };
+      }
       status = `${who} ${c.dd ? verb(tn(G, L.team), "is", "are") : "is"} answering ${clock}${fastest}${isMcq ? `<div class="muted">They choose on ${c.dd ? "their team's phones" : "their phone"} — scored automatically.</div>` : ""}${heard}`;
       if (isMcq) {
         fifty();

@@ -54,10 +54,10 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await board.waitForSelector(".stage");
 
   const P = {};
-  const join = async (name, team, viewport = { width: 390, height: 844 }) => {
+  const join = async (name, team, viewport = { width: 390, height: 844 }, full = name + " Bell") => {
     const p = await device(name, viewport);
     await p.goto(URL);
-    await p.fill("#jn-name", name);
+    await p.fill("#jn-name", full);
     await p.click(`.teambtn.${team}`);
     await p.click('[data-action="join"]');
     await p.waitForSelector(".phone");
@@ -70,15 +70,29 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await join("Bob", "team2");
   await until(host, () => window.__G.P.length === 3);
 
+  // ---- Santa's list needs a first AND last name ----
+  const newbie = await device("Newbie", { width: 390, height: 844 });
+  await newbie.goto(URL);
+  await newbie.fill("#jn-name", "Dave");
+  await newbie.click(".teambtn.team1");
+  await until(newbie, () => !!document.querySelector(".namenote"));
+  ok((await newbie.textContent(".namenote")).includes("Last name"), "one name isn't enough — the join screen asks for a last name");
+  ok(await newbie.$eval('[data-action="join"]', (b) => b.disabled), "…and the Join button stays off");
+  await shot(newbie, "u00-join-needs-last-name");
+  await newbie.fill("#jn-name", "Dave N.");
+  await until(newbie, () => !document.querySelector(".namenote"));
+  ok(!(await newbie.$eval('[data-action="join"]', (b) => b.disabled)), "a last initial is enough");
+  await newbie.ctx.close();
+
   // ---- a name that's already taken ----
   const dup = await device("Ann2", { width: 390, height: 844 });
   await dup.goto(URL);
-  await dup.fill("#jn-name", "ann");
+  await dup.fill("#jn-name", "ann bell");
   await until(dup, () => !!document.querySelector(".dupnote"));
-  ok((await dup.textContent(".dupnote")).includes("Santa already has someone called Ann"), "typing a name someone already has warns you (names aren't case-sensitive)");
+  ok((await dup.textContent(".dupnote")).includes("Santa already has someone called Ann Bell"), "typing a name someone already has warns you (names aren't case-sensitive)");
   ok((await dup.textContent(".dupnote")).includes("last initial"), "…and suggests adding a last initial");
   await shot(dup, "u01-join-duplicate-name");
-  await dup.fill("#jn-name", "Ann K");
+  await dup.fill("#jn-name", "Ann Kringle");
   await until(dup, () => !document.querySelector(".dupnote"));
   ok(true, "a different name clears the warning");
   await dup.click(".teambtn.team2");
@@ -103,7 +117,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   const buzzIn = async (page) => {
     await until(page, () => !!document.querySelector(".buzz.live"));
     await page.dispatchEvent('[data-action="buzz"]', "pointerdown");
-    await until(host, (n) => window.__G.S.clue && window.__G.S.clue.stage === "answering" && window.__G.S.clue.locked.name === n, page.name);
+    await until(host, (n) => window.__G.S.clue && window.__G.S.clue.stage === "answering" && window.__G.S.clue.locked.name.startsWith(n), page.name);
   };
 
   // picked the wrong question: back out (even after the buzzers opened and someone buzzed)
@@ -160,7 +174,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(P.Ann, () => !!document.querySelector(".ph-missed"));
   ok(/not quite/i.test(await P.Ann.textContent(".ph-missed")) && (await P.Ann.textContent(".ph-missed")).includes("$100"), "the answering phone says “Brrr — not quite! (−$100)”");
   await until(P.Cy, () => !!document.querySelector(".ph-missed"));
-  ok((await P.Cy.textContent(".ph-missed")).includes("Ann missed"), "teammates see who missed");
+  ok((await P.Cy.textContent(".ph-missed")).includes("Ann Bell missed"), "teammates see who missed");
   await until(P.Bob, () => !!document.querySelector(".ph-missed.theirs"));
   ok((await P.Bob.textContent(".ph-missed")).includes("steal"), "the other team is told it's their turn to steal");
   await until(board, () => !!document.querySelector(".spop.down"), null, 3000);
@@ -176,9 +190,9 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(P.Bob, () => !!document.querySelector(".ph-result"));
   ok((await P.Bob.textContent(".ph-result")).includes("Ho ho ho — you got it!"), "the phone that answered says “Ho ho ho — you got it!”");
   await until(P["Ann K"], () => !!document.querySelector(".ph-result"));
-  ok((await P["Ann K"].textContent(".ph-result")).includes("Bob got it for your team"), "teammates: “Bob got it for your team!”");
+  ok((await P["Ann K"].textContent(".ph-result")).includes("Bob Bell got it for your team"), "teammates: “Bob got it for your team!”");
   await until(P.Cy, () => !!document.querySelector(".ph-result"));
-  ok((await P.Cy.textContent(".ph-result")).includes("Bob got it — Wives"), "the other team: “Bob got it — Wives +$100”");
+  ok((await P.Cy.textContent(".ph-result")).includes("Bob Bell got it — Wives"), "the other team: “Bob got it — Wives +$100”");
   await until(P.Ann, () => !!document.querySelector(".spop.up"), null, 3000);
   ok(true, "phones' score chips float “+$100” up too");
   await shot(P.Bob, "u07-phone-you-got-it");
@@ -245,7 +259,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   // the ugly sweater winner keeps the crown on the final scores
   await act(host, "voteSetup");
   await act(host, "voteOpen");
-  const ids = await host.evaluate(() => Object.fromEntries(window.__G.P.map((p) => [p.name, p.id])));
+  const ids = await host.evaluate(() => Object.fromEntries(window.__G.P.map((p) => [p.name === "Ann Kringle" ? "Ann K" : p.name.split(" ")[0], p.id])));
   for (const [voter, pick] of [["Ann", "Cy"], ["Bob", "Cy"], ["Ann K", "Cy"], ["Cy", "Ann"]]) await P[voter].evaluate(async ([v, p]) => { const D = await import("/js/data.js"); await D.act("castVote", { voter: v, pick: p }); }, [ids[voter], ids[pick]]);
   await until(host, () => window.__G.S.vote.stage === "reveal");
   await act(host, "voteBack");

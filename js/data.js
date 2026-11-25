@@ -139,7 +139,8 @@ export async function act(name, params = {}) {
 export async function joinGame(name, team) {
   const id = deviceId();
   setLocalIdentity(name, team);
-  await setDoc(doc(playersCol, id), { name, team, deviceId: id, joinedAt: serverNow() });
+  // merge: rejoining keeps whatever the host set up for them (their couple number).
+  await setDoc(doc(playersCol, id), { name, team, deviceId: id, joinedAt: serverNow() }, { merge: true });
 }
 // On load: is this phone still in the game? If the host deleted its name (or started over),
 // the phone is released and must enter a name again. Returns true if still registered.

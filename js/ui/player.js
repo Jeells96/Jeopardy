@@ -23,9 +23,11 @@ export function renderPlayer(G) {
 function answerBox(G, key, label, c) {
   const sent = G.spoken && G.spoken.key === key ? G.spoken : null;
   if (c && c.timeUp === key) {
-    // Out of time: no more typing. Whatever was sent before the buzzer is what Jaren judges.
-    return `<div class="typebox closed" data-key="tb-${esc(key)}-up"><div class="ph-note timeup">⏰ Out of time — answers are closed.</div>
-      ${sent && sent.text ? `<div class="locked-note">Sent in time: “${esc(sent.text)}”</div>` : ""}</div>`;
+    // Out of time: no more typing. Whatever was sent before the bell is what Jaren judges,
+    // and the line under this says he's deciding.
+    return sent && sent.text
+      ? `<div class="typebox closed" data-key="tb-${esc(key)}-up"><div class="locked-note">Sent in time: “${esc(sent.text)}”</div></div>`
+      : "";
   }
   return `<div class="typebox" data-key="tb-${esc(key)}">
     <label class="lbl" for="typed-answer">${label}</label>
@@ -134,7 +136,7 @@ function clueBox(G, c, q, { options = true } = {}) {
 
 function choices(G, c, q) {
   return `<div class="ph-mcq">${q.choices.map((ch, i) => ch
-    ? `<button class="mcqbtn" data-action="mcq" data-i="${i}"${c.eliminated.includes(i) ? " disabled" : ""}><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></button>` : "").join("")}</div>`;
+    ? `<button class="mcqbtn" data-action="mcq" data-i="${i}"${c.eliminated.includes(i) || E.isLate(c) ? " disabled" : ""}><b>${"ABCDEF"[i]}</b><span>${esc(ch)}</span></button>` : "").join("")}</div>`;
 }
 
 // Who was fastest, to the hundredth of a second (and how you did, if you buzzed).
@@ -189,7 +191,7 @@ function clueBody(G) {
   if (c.stage === "answering" && c.locked) {
     const L = c.locked;
     const total = E.answerMs(c, set);
-    const clock = c.submitted === key ? `<div class="ph-note">✓ Answer in — waiting for Jaren to judge</div>` : c.timeUp === key ? `<div class="ph-note timeup">⏰ Time's up!</div>` : timer(L.at + total, total);
+    const clock = c.submitted === key ? `<div class="ph-note">✓ Answer in — waiting for Jaren to judge</div>` : E.isLate(c) ? `<div class="ph-note timeup">⏰ Time's up — Jaren is deciding…</div>` : timer(L.at + total, total);
     if (c.dd) {
       if (me.team === c.dd.team) {
         return q.type === "mcq"

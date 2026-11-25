@@ -13,6 +13,19 @@ export function money(n) {
 export const isPlural = (name) => /[^s]s$/i.test(String(name || "").trim());
 export const verb = (name, singular, plural) => (isPlural(name) ? plural : singular);
 
+// Everyone goes on Santa's list with a first AND last name — two Mikes in a room full of
+// couples is chaos. A last initial counts ("Jo B.").
+export const NAME_MAX = 32;
+export const cleanName = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, NAME_MAX);
+export function nameProblem(v) {
+  const n = cleanName(v);
+  if (!n) return "Type your name.";
+  const parts = n.split(" ").filter((w) => /\p{L}/u.test(w));
+  if (parts.length < 2) return "Last name too, please — an initial is fine, like “Jo B.”";
+  if (parts[0].replace(/[^\p{L}]/gu, "").length < 2) return "That first name looks too short.";
+  return "";
+}
+
 export const attr = (cond, name, value = "") => (cond ? ` ${name}${value !== "" ? `="${esc(value)}"` : ""}` : "");
 export const cls = (...parts) => parts.filter(Boolean).join(" ");
 

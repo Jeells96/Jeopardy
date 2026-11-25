@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS = {
   autoRebound: true,      // after a miss, instantly reopen buzzers for the other team
   finalNeedsPositive: true, // official rule: only teams with $1+ play Final Jeopardy
   playersRename: true,    // players may rename their own team before Jeopardy starts
+  pairUp: true,           // mini games: couples (1a / 1b in Settings → Players) face each other
   announce: true,         // mini games: read "who's up next" out loud on the screen with sound on
 };
 
@@ -73,6 +74,9 @@ export function migrate(old) {
   }
   const patch = {};
   if (!old.minis) patch.minis = freshMinis();
+  // Blind drawing used to be its own kind of game; it's a Best overall game now.
+  const stale = ((old.minis && old.minis.list) || []).filter((g) => g.mode === "draw" && g.type !== "best" && !(g.matches || []).length && !(g.entries || []).length);
+  if (stale.length) patch.minis = { ...old.minis, list: old.minis.list.map((g) => (stale.includes(g) ? { ...g, type: "best", better: "high", unit: "% match" } : g)) };
   if (old.jStarted === undefined) patch.jStarted = !["lobby", "minis"].includes(old.phase);
   const names = modernNames(old.teamNames || {});
   if (JSON.stringify(names) !== JSON.stringify(old.teamNames || {})) patch.teamNames = names;
@@ -260,7 +264,7 @@ export function lockDDWager(s, { team, wager, by }, ctx) {
   return builder(s, ctx)
     .field("control", team)
     .field("clue", {
-      ...c, stage: "answering", dd: { team, wager: w, by: by ? { deviceId: by.deviceId, name: String(by.name || "").slice(0, 20), team } : null },
+      ...c, stage: "answering", dd: { team, wager: w, by: by ? { deviceId: by.deviceId, name: String(by.name || "").slice(0, 32), team } : null },
       locked: { deviceId: "dd", name: teamName(s, team), team, at: ctx.now },
     }).done();
 }
@@ -328,12 +332,12 @@ export function claimBuzz(s, { buzzRound, candidates, pun }, ctx) {
   for (const b of presses) {
     if (seen.has(b.deviceId)) continue;
     seen.add(b.deviceId);
-    order.push({ name: String(b.name || "").slice(0, 20), team: b.team, ms: Math.max(0, Math.round(b.t - c.openedAt)) });
+    order.push({ name: String(b.name || "").slice(0, 32), team: b.team, ms: Math.max(0, Math.round(b.t - c.openedAt)) });
     if (order.length >= 5) break;
   }
   return builder(s, ctx).field("clue", {
     ...c, stage: "answering",
-    locked: { deviceId: w.deviceId, name: String(w.name || "").slice(0, 20), team: w.team, at: ctx.now, ms: order[0].ms },
+    locked: { deviceId: w.deviceId, name: String(w.name || "").slice(0, 32), team: w.team, at: ctx.now, ms: order[0].ms },
     order, pun: pun || null, timeUp: null, mcq: null,
   }).sfx("buzz").done();
 }
@@ -357,7 +361,8 @@ function resolve(s, outcome, ctx, extra = {}) {
   }
   if (outcome === "wrong" || outcome === "timeout") {
     b.score(team, -value, outcome === "timeout" ? "time" : "wrong", { kind: "clue", qid: c.id, ...who });
-    b.sfx(outcome === "timeout" ? "timesup" : "wrong");
+    // The time's-up bell has already rung for a late answer — no second buzz.
+    if (outcome !== "timeout") b.sfx("wrong");
   }
   // Phones show who just missed (the answer box is gone by then).
   if ((outcome === "wrong" || outcome === "timeout") && !c.dd) base.missed = { deviceId: c.locked.deviceId || null, name: c.locked.name || "", team, why: outcome };
@@ -380,12 +385,16 @@ function resolve(s, outcome, ctx, extra = {}) {
   return b.done();
 }
 
+// Jaren's verdict. After the time's-up bell a "wrong" is really "ran out of time", so
+// that's how it's recorded (it counts as unanswered in the night's awards).
 export function judge(s, { result }, ctx) {
   const c = s.clue;
   if (!c || c.stage !== "answering" || !c.locked) return null;
   if (!["correct", "wrong", "skip"].includes(result)) return null;
-  return resolve(s, result, ctx);
+  return resolve(s, result === "wrong" && isLate(c) ? "timeout" : result, ctx);
 }
+// The answer clock has run out on this buzz-in and Jaren hasn't decided yet.
+export const isLate = (c) => !!c && c.stage === "answering" && !!c.locked && c.timeUp === lockKey(c);
 
 // Multiple choice: how many options are still standing (crossed-off ones don't count).
 export function mcqLeft(clue, q) {
@@ -411,7 +420,7 @@ export function mcqPick(s, { index, me }, ctx) {
   const q = findQ(ctx, c.id);
   if (!q || q.type !== "mcq") return null;
   const allowed = c.dd ? me.team === c.dd.team : c.locked.deviceId === me.deviceId;
-  if (!allowed || c.eliminated.includes(index)) return null;
+  if (!allowed || c.eliminated.includes(index) || isLate(c)) return null;
   const correct = index === q.correctIndex;
   const mcq = { index, correct, by: me.name };
   if (correct) return resolve(s, "correct", ctx, { mcq });
@@ -431,9 +440,10 @@ export function answerTimeout(s, { key }, ctx) {
   const c = s.clue;
   if (!c || c.stage !== "answering" || !c.locked || lockKey(c) !== key || c.timeUp === key || c.submitted === key) return null;
   if (ctx.now < c.locked.at + answerMs(c, s.settings) - 60) return null;
-  // Out of time = wrong: points come off automatically (with the time's-up sound only),
-  // and the other team gets a chance to steal.
-  return resolve(s, "timeout", ctx);
+  // The bell rings, but nothing is decided: no points come off until Jaren says so. He
+  // can forgive a late answer (full points) or rule they missed it (points off, and the
+  // other team gets a chance to steal) — either way the bell doesn't ring twice.
+  return builder(s, ctx).field("clue", { ...c, timeUp: key }).sfx("timesup").done();
 }
 
 // Nobody buzzed in time: show the answer. No points lost.
@@ -689,17 +699,18 @@ function blankProgress() {
 }
 
 function cleanMini(src) {
-  const type = src.type === "best" ? "best" : "h2h";
-  // Blind drawing is a head-to-head game whose winner is judged from the drawings.
-  const mode = type === "h2h" && (src.type === "draw" || src.mode === "draw") ? "draw" : "normal";
+  // Blind drawing is a Best overall game: the website scores every drawing 0–100 and the
+  // best drawing of the night wins the points for its team.
+  const mode = src.type === "draw" || src.mode === "draw" ? "draw" : "normal";
+  const type = mode === "draw" || src.type === "best" ? "best" : "h2h";
   const pts = Math.round(Number(src.points));
   return {
     name: String(src.name == null ? "" : src.name).replace(/\s+/g, " ").trim().slice(0, 40) || "Mini game",
     type,
     points: src.points === "" || src.points == null || !Number.isFinite(pts) ? 500 : clamp(pts, [0, 100000]),
     award: type === "h2h" && src.award === "match" ? "match" : "game", // points for the game, or per matchup win
-    better: src.better === "low" ? "low" : "high",                     // best: highest or lowest score wins
-    unit: String(src.unit == null ? "" : src.unit).trim().slice(0, 16),
+    better: mode === "draw" || src.better !== "low" ? "high" : "low",  // best: highest or lowest score wins (drawings: highest match)
+    unit: mode === "draw" ? "% match" : String(src.unit == null ? "" : src.unit).trim().slice(0, 16),
     desc: String(src.desc == null ? "" : src.desc).trim().slice(0, 240),
     mode,
     // Blind drawing: the host's pictures (ids of state/drawpic-* docs), used in turn.
@@ -778,6 +789,28 @@ export function miniEveryonePlayed(g, players) {
 }
 
 const teamPlayers = (ctx, team) => (ctx.players || []).filter((p) => p.team === team);
+// ---------- couples ----------
+// Settings → Players gives each couple a number: husband 1a, wife 1b. Head-to-head mini
+// games then put a couple against each other, and they're summoned to the table together.
+export const pairNo = (p) => {
+  const n = Math.round(Number(p && p.pair));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+export const pairTag = (p) => (pairNo(p) ? `${pairNo(p)}${p.team === "team2" ? "b" : "a"}` : "");
+export function partnerOf(players, pid) {
+  const me = (players || []).find((p) => p.id === pid);
+  const n = pairNo(me);
+  if (!n || !TEAMS.includes(me.team)) return null;
+  return (players || []).find((p) => p.id !== pid && TEAMS.includes(p.team) && p.team !== me.team && pairNo(p) === n) || null;
+}
+const pairingOn = (s) => !s.settings || s.settings.pairUp !== false;
+// The partner of whoever was just drawn, if they're free to play right now.
+function mateFor(ctx, pick, team, busy) {
+  if (!pick) return null;
+  const m = partnerOf(ctx.players, pick.id);
+  if (!m || m.team !== team || busy.includes(m.id)) return null;
+  return { id: m.id, name: m.name, at: ctx.now };
+}
 const random = (ctx) => (ctx.rand || Math.random)();
 
 // Random player from a team: nobody repeats until the whole team has had a turn. A player
@@ -785,7 +818,7 @@ const random = (ctx) => (ctx.rand || Math.random)();
 // busy: players already playing at another table right now — never drawn twice at once.
 // tonight: who has already played some mini game tonight — everyone else goes first, so
 // the whole party gets a turn across the mini games.
-function choose(ctx, team, played, avoid = [], busy = [], tonight = []) {
+function choose(ctx, team, played, avoid = [], busy = [], tonight = [], want = null) {
   const all = teamPlayers(ctx, team).filter((p) => !busy.includes(p.id));
   if (!all.length) return null;
   let pool = all.filter((p) => !played.includes(p.id) && !avoid.includes(p.id));
@@ -793,6 +826,7 @@ function choose(ctx, team, played, avoid = [], busy = [], tonight = []) {
   if (!pool.length) pool = all;                                      // a team of one
   const fresh = pool.filter((p) => !tonight.includes(p.id));
   if (fresh.length) pool = fresh;
+  if (want) { const liked = pool.filter(want); if (liked.length) pool = liked; } // e.g. their partner is free
   const p = pool[Math.floor(random(ctx) * pool.length)];
   return { id: p.id, name: p.name, at: ctx.now };
 }
@@ -863,7 +897,7 @@ export function miniUpdate(s, { id, patch }, ctx) {
   const g = miniById(s, id);
   if (!g || !patch) return null;
   const started = g.status !== "pending" || g.matches.length > 0 || g.entries.length > 0;
-  const next = cleanMini({ ...g, ...patch, ...(patch.type === "h2h" ? { mode: "normal" } : {}) });
+  const next = cleanMini({ ...g, ...patch, ...(patch.type === "h2h" || patch.mode === "normal" ? { mode: "normal" } : {}) });
   if (started && (next.type !== g.type || next.award !== g.award || next.mode !== (g.mode || "normal"))) return fail("That game has already started — reset it before changing how it's played.");
   return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, ...next })))).done();
 }
@@ -970,9 +1004,12 @@ export function miniNext(s, { id, table }, ctx) {
     const added = [];
     const anyone = TEAMS.some((t) => teamPlayers(ctx, t).length);
     let played = g.played, tonight = tonightOf(s);
+    const pairs = pairingOn(s);
+    // Couples play each other: draw one side, and their partner is the other side.
+    const freeMate = (p) => { const m = partnerOf(ctx.players, p.id); return !!m && m.team === "team2" && !busy.includes(m.id); };
     for (const slot of free) {
-      const p1 = choose(ctx, "team1", played.team1, [lastSide(g, "p1")], busy, tonight.team1);
-      const p2 = choose(ctx, "team2", played.team2, [lastSide(g, "p2")], busy, tonight.team2);
+      const p1 = choose(ctx, "team1", played.team1, [lastSide(g, "p1")], busy, tonight.team1, pairs ? freeMate : null);
+      const p2 = (pairs && mateFor(ctx, p1, "team2", busy)) || choose(ctx, "team2", played.team2, [lastSide(g, "p2")], busy, tonight.team2);
       const short = (!p1 && teamPlayers(ctx, "team1").length) || (!p2 && teamPlayers(ctx, "team2").length);
       if (added.length && (short || !anyone)) break; // not enough free players for another table
       if (short && open.length) break;
@@ -1020,14 +1057,25 @@ export function miniRepick(s, { id, team, matchId, turnId }, ctx) {
     const busy = busyIn(openMatches(g).filter((x) => x.id !== m.id));
     const next = { ...m };
     let played = g.played, tonight = tonightOf(s);
-    for (const t of TEAMS.includes(team) ? [team] : TEAMS) {
-      const key = t === "team1" ? "p1" : "p2";
-      const other = t === "team1" ? m.p2 : m.p1;
-      const was = m[key] ? m[key].id : null;
-      played = unmark(played, t, was); // they didn't get to play after all — back in the pool
-      tonight = unmark(tonight, t, was);
-      next[key] = choose(ctx, t, played[t], [was], [...busy, ...(other ? [other.id] : [])], tonight[t] || []) || m[key];
-      if (next[key]) { played = markPlayed(played, t, next[key].id, ctx); tonight = markPlayed(tonight, t, next[key].id, ctx); }
+    const pairs = pairingOn(s);
+    const keyOf = (t) => (t === "team1" ? "p1" : "p2");
+    const drop = (t) => { const was = m[keyOf(t)] ? m[keyOf(t)].id : null; played = unmark(played, t, was); tonight = unmark(tonight, t, was); return was; };
+    const take = (t, pick) => { next[keyOf(t)] = pick; if (pick) { played = markPlayed(played, t, pick.id, ctx); tonight = markPlayed(tonight, t, pick.id, ctx); } };
+    // Redraw the side Jaren asked for (or both), and bring the new player's partner along.
+    const first = TEAMS.includes(team) ? team : "team1";
+    const second = otherTeam(first);
+    const bothSides = !TEAMS.includes(team);
+    const wasFirst = drop(first);
+    const wasSecond = bothSides || pairs ? drop(second) : null;
+    const freeMate = (p) => { const x = partnerOf(ctx.players, p.id); return !!x && x.team === second && !busy.includes(x.id); };
+    const other = bothSides || pairs ? null : m[keyOf(second)];
+    take(first, choose(ctx, first, played[first], [wasFirst], [...busy, ...(other ? [other.id] : [])], tonight[first] || [], pairs ? freeMate : null) || m[keyOf(first)]);
+    if (bothSides || pairs) {
+      const mate = pairs ? mateFor(ctx, next[keyOf(first)], second, busy) : null;
+      // No partner free (or couples are off): a fresh draw for that side, or leave them be.
+      take(second, mate || (bothSides
+        ? choose(ctx, second, played[second], [wasSecond], [...busy, ...(next[keyOf(first)] ? [next[keyOf(first)].id] : [])], tonight[second] || [])
+        : m[keyOf(second)]));
     }
     if (m.table) next.summon = sp.next();
     return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, played, matches: x.matches.map((y) => (y.id === m.id ? next : y)) })), { ...sp.extra(), tonight }))
@@ -1177,11 +1225,17 @@ export function miniDrawJudge(s, { id, matchId, scores = {} }, ctx) {
   const top = ranked.length ? ranked[0].score : null;
   const topTeams = new Set(ranked.filter((x) => top != null && x.score === top).map((x) => x.team));
   const winner = topTeams.size === 1 ? [...topTeams][0] : "tie";
-  const res = miniMatch(s, { id, matchId: r.id, winner }, ctx);
-  if (!res || res.error) return res;
-  const minis = res.set.minis;
-  res.set.minis = { ...minis, list: minis.list.map((x) => (x.id === id ? { ...x, matches: x.matches.map((y) => (y.id === r.id ? { ...y, done, scores: sc, judged: ctx.now } : y)) } : x)) };
-  return res;
+  // Every drawing is a score in the standings: the best one of the night wins the game.
+  const entries = ranked.filter((d) => d.score != null)
+    .map((d) => ({ id: rid(), pid: d.id, name: d.name, team: d.team, score: d.score, at: ctx.now, roundId: r.id }));
+  let played = g.played;
+  for (const d of r.drawers) played = addOnce(played, d.team, d.id);
+  const judged = { ...r, winner, done, scores: sc, judged: ctx.now };
+  return builder(s, ctx)
+    .field("minis", withList(s, mapMini(s, id, (x) => ({
+      ...x, played, entries: [...x.entries, ...entries], matches: x.matches.map((y) => (y.id === r.id ? judged : y)),
+    }))))
+    .sfx(winner === "tie" ? "buzz" : "correct").done();
 }
 
 export function miniMatchRemove(s, { id, matchId }, ctx) {
@@ -1191,7 +1245,9 @@ export function miniMatchRemove(s, { id, matchId }, ctx) {
   if (g.status === "done") return fail("That game is finished — reset it to change the results.");
   const b = builder(s, ctx);
   if (g.award === "match" && m.winner && m.winner !== "tie" && g.points) b.score(m.winner, -g.points, "mini-fix", { kind: "mini-fix", miniId: g.id });
-  return b.field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, matches: x.matches.filter((y) => y.id !== matchId) })))).done();
+  return b.field("minis", withList(s, mapMini(s, id, (x) => ({
+    ...x, matches: x.matches.filter((y) => y.id !== matchId), entries: x.entries.filter((e) => e.roundId !== matchId),
+  })))).done();
 }
 export function miniScore(s, { id, score, turnId }, ctx) {
   const g = miniById(s, id);
@@ -1337,7 +1393,7 @@ export function playerStats(s) {
       const p = m.winner === "team1" ? m.p1 : m.winner === "team2" ? m.p2 : null;
       if (p && p.id) row(p.id, p.name, m.winner).minis++;
     }
-    if (g.type === "best" && (g.entries || []).length) {
+    if (g.type === "best" && g.mode !== "draw" && (g.entries || []).length) {
       const top = miniStanding(g).sorted[0];
       if (top && top.pid) row(top.pid, top.name, top.team).minis++;
     }
