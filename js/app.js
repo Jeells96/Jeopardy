@@ -299,10 +299,14 @@ function tick() {
   const now = G.now();
   for (const el of document.querySelectorAll(".cd[data-deadline]")) {
     const left = Math.max(0, Number(el.dataset.deadline) - now);
-    const txt = Math.ceil(left / 1000) + (el.dataset.format === "s" ? "s" : "");
+    const secs = Math.ceil(left / 1000);
+    const txt = el.dataset.format === "ms" ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}` : secs + (el.dataset.format === "s" ? "s" : "");
     if (el.textContent !== txt) el.textContent = txt;
     el.classList.toggle("low", left <= 5000);
   }
+  // The game clock hitting zero changes what the screen says ("TIME'S UP!"), so redraw once.
+  const liveClock = document.querySelector('.cd[data-format="ms"][data-deadline]');
+  if (liveClock && now >= Number(liveClock.dataset.deadline)) render();
   for (const el of document.querySelectorAll(".lights[data-deadline]")) {
     const left = Math.max(0, Number(el.dataset.deadline) - now);
     const lit = Math.ceil((left / (Number(el.dataset.total) || 1)) * 5); // 5 levels, outside lights go first
@@ -351,6 +355,12 @@ function automations() {
     const until = E.buzzDeadline(c, set);
     if (until && now >= until) fire("bw" + key + c.openedAt, "buzzWindowTimeout", { key });
     if (c.stage === "answering" && c.locked && c.timeUp !== key && c.submitted !== key && now >= c.locked.at + E.answerMs(c, set)) fire("at" + key + c.locked.at, "answerTimeout", { key });
+  }
+  if (S.phase === "minis") {
+    for (const g of E.minisOf(S).list) {
+      const c = E.miniClock(g);
+      if (c && !c.done && now >= c.endsAt - SOUND_LEAD_MS) fire("mt" + g.id + c.startedAt, "miniTimerDone", { id: g.id });
+    }
   }
   if (S.phase === "final" && S.final.stage === "clue" && now >= S.final.deadline) fire("fl" + S.final.deadline, "finalLock", {});
   if (S.phase === "over" && S.vote && S.vote.stage === "open" && E.voteProgress(S, G.P).all) fire("vr" + S.vote.openedAt, "voteReveal", {});
@@ -853,6 +863,7 @@ document.addEventListener("change", async (e) => {
     else if (k === "import") await importFile(el);
     else if (k === "mini-field") await D.act("miniUpdate", { id: el.dataset.id, patch: { [el.dataset.f]: el.value } });
     else if (k === "mini-draw") await D.act("miniUpdate", { id: el.dataset.id, patch: { mode: el.checked ? "draw" : "normal" } });
+    else if (k === "mini-timed") await D.act("miniUpdate", { id: el.dataset.id, patch: { timed: el.checked } });
     else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value, matchId: el.dataset.ref || undefined, turnId: el.dataset.ref || undefined });
     else if (k === "mini-move") await D.act("miniSetTable", { id: el.dataset.id, table: el.value, matchId: el.dataset.ref, turnId: el.dataset.ref });
   } catch (err) {

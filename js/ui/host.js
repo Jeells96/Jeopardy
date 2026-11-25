@@ -183,7 +183,7 @@ function playersTab(G) {
 }
 
 function helpTab() {
-  const keys = [["Space / Enter", "Do the highlighted (gold) step"], ["1 / 2 / T", "Mini game matchup: left team won / right team won / tie"], ["C", "Correct"], ["W", "Wrong"], ["S", "Skip — no penalty"],
+  const keys = [["Space / Enter", "Do the highlighted (gold) step"], ["1 / 2 / T", "Mini game matchup: left team won / right team won / tie"], ["K", "Mini game: start / stop the timer"], ["C", "Correct"], ["W", "Wrong"], ["S", "Skip — no penalty"],
     ["N", "Nobody knows — reveal answer"], ["P", "Pause buzzers"], ["R", "Show answer"], ["U", "Undo last score change"],
     ["M", "Sound on/off"], ["F", "Fullscreen"], ["Esc", "Close panels"]];
   return `<section class="sect"><h4>Keyboard shortcuts</h4>

@@ -717,6 +717,60 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   ok(husbands.length === 2 && husbands.every((pid) => !tonight.includes(pid)), "the next mini game picks people who haven't played tonight first");
 }
 
+// ---------- the game clock: one timer for every table, horn at zero ----------
+{
+  const w = world(roster(2, 2));
+  const plain = w.add({ name: "Snowball Toss", type: "h2h", points: 500 });
+  const id = w.add({ name: "Cup Stack", type: "h2h", points: 500, timed: true, seconds: 45 });
+  eq([w.game(1).timed, w.game(1).seconds, w.game(1).clock], [true, 45, null], "a game can be played against the clock");
+  eq([w.game(0).timed, w.game(0).seconds], [false, 60], "untimed games default to a minute, unticked");
+  w.run("miniUpdate", { id, patch: { seconds: 5000 } });
+  eq(w.game(1).seconds, 3600, "the clock tops out at an hour");
+  w.run("miniUpdate", { id, patch: { seconds: 30 } });
+
+  ok(w.run("miniTimerStart", { id }).noop, "the clock can't start before the game does");
+  w.run("minisStart");
+  w.run("miniPlay", { id });
+  ok(w.run("miniTimerStart", { id: plain }).noop, "a game with no timer has no clock to start");
+  const at = w.t + 10;
+  w.run("miniTimerStart", { id });
+  eq([w.game(1).clock.endsAt - w.game(1).clock.startedAt, w.game(1).clock.done], [30000, false], "Jaren starts it: 30 seconds on the clock");
+  eq(w.state.sfx.sound, "buzz", "…with a cue so everyone knows it's running");
+  const ends = w.game(1).clock.endsAt;
+  ok(at <= ends, "the end time is on the shared clock, so every screen counts down together");
+
+  ok(w.run("miniTimerDone", { id }, 1000).noop, "no horn while there's time left");
+  // Several tables are playing the same game — they all run off this one clock.
+  w.run("miniTableAdd");
+  w.run("miniNext", { id });
+  eq(E.openMatches(w.game(1)).length, 2, "two tables are playing");
+  eq(w.game(1).clock.endsAt, ends, "…off the same clock");
+
+  // The horn is cued a moment early so it lands on zero, on every screen at once.
+  w.t = ends - E.TIMER_LEAD_MS - 100;
+  ok(w.run("miniTimerDone", { id }).noop, "…and not a moment too soon");
+  w.t = ends - 300;
+  w.run("miniTimerDone", { id });
+  eq([w.game(1).clock.done, w.state.sfx.sound], [true, "horn"], "time's up: the horn sounds");
+  ok(w.run("miniTimerDone", { id }, 2000).noop, "the horn only sounds once");
+  eq(E.miniClockLeft(w.game(1), ends - 5000), 5000, "screens show the time left off the same end time");
+  ok(E.miniClockRunning(w.game(1), ends - 1) && !E.miniClockRunning(w.game(1), ends + 1), "the clock is running right up to zero");
+
+  // Start it again for the next pair, stop it by hand, and clear it when the game is over.
+  w.run("miniTimerStart", { id });
+  ok(w.game(1).clock.done === false && w.game(1).clock.endsAt > ends, "↻ Restart puts 30 seconds back on");
+  w.run("miniTimerStop", { id });
+  eq(w.game(1).clock, null, "⏹ Stop clears it");
+  w.run("miniTimerStart", { id });
+  w.run("miniFinish", { id, winner: "team1" });
+  eq(w.game(1).clock, null, "finishing the game puts the clock away");
+  w.run("miniReset", { id });
+  eq([w.game(1).clock, w.game(1).timed, w.game(1).seconds], [null, true, 30], "↺ Reset clears the clock but keeps the setting");
+  // A blind drawing has its own step clock, so it never gets this one.
+  const d = w.add({ name: "Blind Drawing", type: "draw", timed: true, seconds: 30 });
+  eq(w.state.minis.list[2].timed, false, "blind drawing runs on its own step clock");
+}
+
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -831,6 +831,20 @@ body[data-view="host"] .toast.show { transform: translate(-50%, 0); }
 .mg-kicker, .mr-kicker { font: 700 clamp(12px, 1.4vw, 22px) var(--cat); letter-spacing: 3px; text-transform: uppercase; color: var(--gold); text-shadow: 2px 2px 0 #000; }
 .mg-title { font-size: clamp(30px, 5.4vw, 92px); }
 .mg-desc { max-width: min(1100px, 92%); font: 600 clamp(13px, 1.5vw, 24px)/1.4 var(--ui); color: #dfe4ff; }
+/* the game clock — one timer for every table */
+.gclock { display: inline-flex; align-items: center; gap: 10px; margin-top: 6px; padding: 6px 22px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42); border: 2px solid rgba(255, 207, 64, 0.65); box-shadow: var(--shadow); }
+.gclock .cd { font: 400 clamp(34px, 6vw, 86px)/1 var(--display); letter-spacing: 2px; color: var(--gold); text-shadow: 2px 2px 0 #000; font-variant-numeric: tabular-nums; }
+.gclock .cd.low { color: #ff8b98; animation: pulse 1s ease-in-out infinite; }
+.gclock.done { border-color: #ff8b98; background: rgba(224, 40, 63, 0.3); animation: pulse 1.1s ease-in-out infinite; }
+.gc-up { font: 400 clamp(26px, 4.4vw, 64px)/1 var(--display); letter-spacing: 2px; color: #ffd6dc; text-shadow: 2px 2px 0 #000; }
+.gclock.ph { margin: 10px auto 0; padding: 4px 18px; }
+.gclock.ph .cd { font-size: 40px; }
+.gclock.ph .gc-up { font-size: 26px; }
+.timerline { margin-top: 6px; font-size: 15px; }
+.timerline .cd { font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+.timerline .cd.low { color: #ff8b98; }
+.timerline.up { color: #ffd6dc; font-weight: 700; }
 .versus { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 2vw; width: min(1400px, 100%); }
 .vs-side, .upnext {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.8vh; min-width: 0;
@@ -943,6 +957,12 @@ select option { color: #10142e; background: #fff; }
 .mini-row.foot { font-size: 13px; }
 .ms { color: var(--muted); font-weight: 600; }
 .ms.live { color: #7dffb0; } .ms.team1 { color: #ff9aa7; } .ms.team2 { color: #7dffb0; }
+.minicard .timerrow { align-items: center; }
+.minicard .timertick { display: inline-flex; align-items: center; gap: 8px; flex: none; cursor: pointer; font-size: 14px; font-weight: 700; }
+.minicard .timertick input { width: 20px; height: 20px; flex: none; accent-color: var(--gold); }
+.minicard .pts.secs input { width: 76px; }
+.minicard .pts.secs span { color: var(--muted); font-weight: 600; font-size: 13px; }
+.minicard .pts.secs small { color: var(--gold); }
 .minicard .drawtick { gap: 10px; flex-wrap: nowrap; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 1.35; }
 .minicard .drawtick input { width: 20px; height: 20px; flex: none; accent-color: var(--gold); }
 .minicard .drawtick small { color: var(--muted); }

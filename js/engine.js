@@ -695,7 +695,34 @@ export const openMatches = (g) => (g.matches || []).filter((m) => !m.winner);
 export const turnsOf = (g) => (Array.isArray(g.turns) ? g.turns : g.turn ? [g.turn] : []);
 const withTurns = (x, turns) => ({ ...x, turns, turn: turns[0] || null });
 function blankProgress() {
-  return { status: "pending", matches: [], entries: [], turn: null, turns: [], played: { team1: [], team2: [] }, result: null };
+  return { status: "pending", matches: [], entries: [], turn: null, turns: [], played: { team1: [], team2: [] }, result: null, clock: null };
+}
+
+// ---------- the game clock ----------
+// Some games are played against the clock ("30 seconds to stack the most cups"). Jaren
+// starts it; every screen counts down off the same shared clock, so several tables all
+// play to the same timer, and the horn sounds everywhere at once when it runs out.
+export const TIMER_LEAD_MS = 700; // the horn is cued a moment early so it lands on zero
+export const miniClock = (g) => (g && g.clock) || null;
+export const miniClockLeft = (g, now) => { const c = miniClock(g); return c ? Math.max(0, c.endsAt - now) : 0; };
+export const miniClockRunning = (g, now) => { const c = miniClock(g); return !!c && now < c.endsAt; };
+export function miniTimerStart(s, { id }, ctx) {
+  const g = miniById(s, id);
+  if (!g || g.status !== "active" || !g.timed) return null;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, clock: { startedAt: ctx.now, endsAt: ctx.now + x.seconds * 1000, done: false } }))))
+    .sfx("buzz").done();
+}
+export function miniTimerStop(s, { id }, ctx) {
+  const g = miniById(s, id);
+  if (!g || !g.clock) return null;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, clock: null })))).done();
+}
+// Time's up: the horn, on every screen at the same instant.
+export function miniTimerDone(s, { id }, ctx) {
+  const g = miniById(s, id);
+  const c = miniClock(g);
+  if (!c || c.done || ctx.now < c.endsAt - TIMER_LEAD_MS) return null;
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, clock: { ...c, done: true } })))).sfx("horn").done();
 }
 
 function cleanMini(src) {
@@ -718,6 +745,9 @@ function cleanMini(src) {
     // How many steps each hand-drawn picture has (ready-made ones know their own steps).
     picSteps: mode === "draw" ? cleanPicSteps(src.picSteps, src.pics) : {},
     stepSeconds: clamp(Math.round(Number(src.stepSeconds)) || 20, [5, 120]), // a new step every this many seconds
+    // Played against the clock: Jaren starts it, every table plays to the same one.
+    timed: mode !== "draw" && !!src.timed,
+    seconds: clamp(Math.round(Number(src.seconds)) || 60, [5, 3600]),
   };
 }
 
@@ -1284,7 +1314,7 @@ export function miniFinish(s, { id, winner }, ctx) {
     for (const t of TEAMS) if (got[t]) b.score(t, got[t], "mini", { kind: "mini", miniId: g.id, finish: true });
   }
   const M = minisOf(s);
-  const done = (x) => ({ ...x, status: "done", turn: null, turns: [], matches: x.matches.filter((m) => m.winner), result: { winner: w, team1: got.team1, team2: got.team2 } });
+  const done = (x) => ({ ...x, status: "done", turn: null, turns: [], clock: null, matches: x.matches.filter((m) => m.winner), result: { winner: w, team1: got.team1, team2: got.team2 } });
   b.field("minis", withList(s, mapMini(s, id, done), { current: s.phase === "minis" ? id : M.current }));
   return b.sfx(w === "none" ? "buzz" : "miniwin").done();
 }
@@ -1446,6 +1476,6 @@ export const ACTIONS = {
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
   miniSetTable, miniDrawRound, miniDrawStart, miniDrawCancel, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
-  miniTables, miniTableAdd, miniTableRemove, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
+  miniTables, miniTableAdd, miniTableRemove, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

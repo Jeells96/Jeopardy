@@ -170,6 +170,13 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(host, () => window.__G.S.minis.list.length === 1);
   let g = await mini(host, "Snowball Toss");
   await setField(host, `[data-id="${g.id}"][data-f="points"]`, 300);
+  // played against the clock
+  ok(!(await host.$(`.minicard[data-key="mini-${g.id}"] .pts.secs`)), "no seconds box until the timer is ticked");
+  await host.check(`input[data-change="mini-timed"][data-id="${g.id}"]`);
+  await until(host, () => window.__G.S.minis.list[0].timed === true);
+  await setField(host, `[data-id="${g.id}"][data-f="seconds"]`, 6);
+  await until(host, () => window.__G.S.minis.list[0].seconds === 6);
+  ok((await host.textContent(`.minicard[data-key="mini-${g.id}"] .timerrow`)).includes("0:06"), "⏱ Timer: 6 seconds on the clock");
   await host.click('.ideas .chipbtn:has-text("Speed Wrap")');
   await until(host, () => window.__G.S.minis.list.length === 2);
   await host.fill("#mini-new-name", "Cookie Stack");
@@ -233,6 +240,26 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(wife1, () => !!document.querySelector(".youup.big"));
   ok((await wife1.textContent(".youup")).includes("You're up") && (await wife1.textContent(".youup")).includes(m.p1.name), "the drawn wife's phone says You're up vs her opponent");
   const otherWife = first(m.p2) === "Sarah" ? P.Emma : P.Sarah;
+  // ---- the game clock: Jaren starts it, every screen runs off it, horn at zero ----
+  ok((await host.textContent(".r-buttons")).includes("Start the timer"), "a timed game gets ⏱ Start the timer in the controls");
+  await host.locator('.r-buttons .btn:has-text("Start the timer")').click();
+  await until(board, () => !!document.querySelector(".gclock .cd"));
+  await until(P.Jake, () => !!document.querySelector(".gclock .cd"));
+  ok(true, "the countdown shows on the big screen and on every phone");
+  const ends = await Promise.all([board, P.Jake, P.Emma].map((p) => p.evaluate(() => window.__G.S.minis.list[0].clock.endsAt)));
+  ok(ends[0] === ends[1] && ends[1] === ends[2], "every screen counts down to the same moment — all tables share one clock");
+  ok(/^\d:\d\d$/.test((await board.textContent(".gclock .cd")).trim()), "…shown as minutes:seconds");
+  await sleep(400);
+  await shot(board, "m07b-board-timer");
+  await board.waitForFunction(() => (window.__G.S.sfx || {}).sound === "horn", null, { timeout: 15000 });
+  ok(true, "the horn is cued for every screen when the clock runs out");
+  const hornAt = await board.evaluate(() => window.__G.S.sfx.at - window.__G.S.minis.list[0].clock.endsAt);
+  ok(hornAt <= 0 && hornAt > -1500, `the horn is cued to land on zero (${hornAt} ms, played after the shared-sound lead)`);
+  for (const p of [board, P.Jake, P.Emma]) await until(p, () => (document.querySelector(".gclock") || {}).textContent?.includes("TIME'S UP"));
+  ok(true, "…and every screen says TIME'S UP");
+  await shot(board, "m07c-board-times-up");
+  await shot(P.Jake, "m07d-phone-times-up");
+  ok((await host.textContent(".r-buttons")).includes("Restart the timer"), "the host can put the clock back on for the next pair");
   ok((await otherWife.textContent(".ph-versus")).includes(m.p1.name), "everyone else sees who's facing off");
   await sleep(300);
   await shot(board, "m08-board-h2h-versus");

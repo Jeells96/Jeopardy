@@ -14,6 +14,7 @@ export const SLOTS = {
   win: "winner.mp3",               // winner announced
   pick: "up-next.mp3",             // mini games: drawing who's up next (about 2 seconds)
   miniwin: "mini-game-win.mp3",    // mini games: a team wins a mini game
+  horn: "horn.mp3",                // mini games: the game clock runs out
 };
 
 const BASE = "./sounds/";
@@ -177,6 +178,15 @@ const SYNTH = {
     for (let i = 0; i < 18; i++) { pluck(N(12 + (i % 5) * 2), t, 0.08, 0.07); noise(t, 0.03, { gain: 0.04, hp: 4000 }); t += 0.14 - i * 0.004; }
     [7, 12, 16].forEach((s2) => bell(N(s2 + 12), 1.8, 0.9, 0.13));
     sleighBells(1.8, 5, 0.06);
+  },
+  // Two big brassy blasts to end a timed mini game — hard to miss across a noisy room.
+  horn() {
+    const blast = (t, d) => {
+      [[N(-5), 0.1], [N(-5), 0.07], [N(2), 0.05], [N(7), 0.035]].forEach(([f, gain], i) => tone(f, t, d, { type: "sawtooth", gain, attack: 0.015, detune: i * 7 }));
+      noise(t, 0.06, { gain: 0.035, hp: 1500 });
+    };
+    blast(0, 0.5);
+    blast(0.62, 0.95);
   },
   miniwin() {
     [[0, 0], [4, 0.1], [7, 0.2], [12, 0.3], [16, 0.42]].forEach(([s2, t]) => bell(N(s2 + 12), t, 0.9, 0.12));

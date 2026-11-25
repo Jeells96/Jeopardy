@@ -54,6 +54,18 @@ function canDrawMore(G, g, items) {
   const free = (t) => G.P.some((p) => p.team === t && !busy.has(p.id));
   return g.type === "h2h" ? E.TEAMS.every((t) => free(t) || !G.P.some((p) => p.team === t)) && E.TEAMS.some(free) : E.TEAMS.some(free);
 }
+// The game clock: one timer for the whole game, however many tables are playing.
+const mmss = (ms) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+export const timerLabel = (g) => mmss((g.seconds || 0) * 1000);
+// The big countdown, shown on the board and on every phone while the clock runs.
+function clockBox(G, g, cls2 = "") {
+  const c = E.miniClock(g);
+  if (!c) return "";
+  const live = G.now() < c.endsAt;
+  return `<div class="gclock ${cls2}${live ? "" : " done"}" data-key="gclock-${esc(g.id)}-${c.startedAt}">
+    ${live ? `<span class="cd" data-deadline="${c.endsAt}" data-format="ms" data-total="${c.endsAt - c.startedAt}">${esc(mmss(c.endsAt - G.now()))}</span>`
+      : `<span class="gc-up">📣 TIME'S UP!</span>`}</div>`;
+}
 const tableTag = (pick) => (pick && pick.table ? `<span class="tabletag">📍 ${esc(pick.table)}</span>` : "");
 function summonBanner(G) {
   const text = pickSummon(G.S);
@@ -138,10 +150,11 @@ function hub(G, M, opts) {
   </div>`;
 }
 
-function gameHead(M, g) {
+function gameHead(M, g, G = null) {
   return `<div class="mg-kicker">${esc(kicker(M, g))}</div>
     <div class="${cls("mg-title", g.name.length > 24 && "long")}">${esc(g.name)}</div>
-    ${g.desc ? `<div class="mg-desc">${esc(g.desc)}</div>` : ""}`;
+    ${g.desc ? `<div class="mg-desc">${esc(g.desc)}</div>` : ""}
+    ${G ? clockBox(G, g) : ""}`;
 }
 
 // Several tables playing the same game at once: one card per table.
@@ -167,7 +180,7 @@ function h2hView(G, M, g) {
   if (multiTable(G, g, open)) {
     const past = g.matches.filter((x) => x.winner).slice(-5).reverse();
     return `<div class="mgame" data-key="mg-${esc(g.id)}">
-      ${gameHead(M, g)}
+      ${gameHead(M, g, G)}
       ${tableCards(G, g, open)}
       <div class="tally">
         <span class="t team1">${esc(tn(G, "team1"))} <b>${st.wins.team1}</b></span>
@@ -186,7 +199,7 @@ function h2hView(G, M, g) {
     : `<div class="mg-wait" data-key="wait-${g.matches.length}">${g.matches.length ? "Who's up next? 🎲" : "Who's up first? 🎲"}</div>`;
   const past = g.matches.filter((x) => x.winner).slice(-5).reverse();
   return `<div class="mgame" data-key="mg-${esc(g.id)}">
-    ${gameHead(M, g)}
+    ${gameHead(M, g, G)}
     ${center}
     ${m ? summonBanner(G) : ""}
     <div class="tally">
@@ -209,7 +222,7 @@ function bestView(G, M, g) {
   const rows = st.sorted.slice(0, 8).map((e, i) =>
     `<div class="${cls("lb-row", e.team, i === 0 && "top")}" data-key="lb-${esc(e.id)}"><span class="lb-n">${i === 0 ? "👑" : i + 1}</span><span class="lb-name">${esc(e.name)}</span><span class="lb-team">${esc(tn(G, e.team))}</span><b class="lb-score">${scoreText(g, e.score)}</b></div>`).join("");
   return `<div class="mgame mgame--best" data-key="mg-${esc(g.id)}">
-    ${gameHead(M, g)}
+    ${gameHead(M, g, G)}
     <div class="best-cols">
       <div class="upcol">${multi ? tableCards(G, g, turns) : up + (t ? summonBanner(G) : "")}</div>
       <div class="lboard" style="--rows:${Math.max(3, Math.min(8, st.sorted.length))}"><div class="lb-head">Leaderboard${st.sorted.length > 8 ? ` <small>top 8 of ${st.sorted.length}</small>` : ""}</div>${rows || `<div class="lb-empty">No scores yet</div>`}</div>
@@ -244,8 +257,25 @@ function resultView(G, g) {
 export function miniSteps(G, opts = {}) {
   const out = gameSteps(G, opts);
   const g = currentGame(E.minisOf(G.S));
-  if (g && g.status === "active") out.buttons.push({ label: "↶ Undo start", action: "mini-unstart", params: { id: g.id }, kind: "ghost", key: "" });
+  if (g && g.status === "active") {
+    timerSteps(G, g, out);
+    out.buttons.push({ label: "↶ Undo start", action: "mini-unstart", params: { id: g.id }, kind: "ghost", key: "" });
+  }
   return out;
+}
+// ⏱ The game clock — one for the whole game, whatever is happening at the tables.
+function timerSteps(G, g, out) {
+  if (!g.timed) return;
+  const c = E.miniClock(g);
+  const running = c && G.now() < c.endsAt;
+  const act = (name) => ({ name, p: { id: g.id } });
+  if (running) {
+    out.status += `<div class="timerline running">⏱ <span class="cd" data-deadline="${c.endsAt}" data-format="ms">${esc(mmss(c.endsAt - G.now()))}</span> left <span class="muted">— every table is playing to this clock</span></div>`;
+    out.buttons.push({ label: "⏹ Stop the timer", action: "act", params: act("miniTimerStop"), kind: "ghost", key: "K" });
+  } else {
+    if (c) out.status += `<div class="timerline up">📣 Time's up! <span class="muted">— the horn sounded on every screen</span></div>`;
+    out.buttons.push({ label: `⏱ ${c ? "Restart" : "Start"} the timer <small>(${timerLabel(g)})</small>`, action: "act", params: act("miniTimerStart"), kind: c ? "ghost" : "primary", key: "K" });
+  }
 }
 // Has this game given out results (so undoing it needs a confirm)?
 export const miniHasResults = (g) => !!g && ((g.matches || []).some((m) => m.winner) || (g.entries || []).length > 0);
@@ -556,6 +586,10 @@ export function minisTab(G) {
            </select>
            <input class="unit" value="${esc(g.unit)}" maxlength="16" placeholder="unit, e.g. seconds" aria-label="Unit" ${field(g, "unit")}>`}
       </div>
+      ${isDraw(g) ? "" : `<div class="mini-row timerrow">
+        <label class="timertick"><input type="checkbox"${g.timed ? " checked" : ""} data-change="mini-timed" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-timed"><span>⏱ Timer</span></label>
+        ${g.timed ? `<label class="pts secs"><input type="number" inputmode="numeric" min="5" max="3600" value="${g.seconds}" aria-label="Seconds on the clock" ${field(g, "seconds")}><span>seconds <small>(${timerLabel(g)})</small></span></label>` : `<span class="muted small">Tick it for a game played against the clock</span>`}
+      </div>`}
       ${g.type === "best" ? `<label class="mini-row drawtick"><input type="checkbox"${isDraw(g) ? " checked" : ""}${started ? " disabled" : ""} data-change="mini-draw" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-draw"><span>✏️ Blind drawing <small>— everyone draws at once, the website scores every drawing, and the best one wins the points for its team</small></span></label>` : ""}
       <textarea class="desc auto" rows="1" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>${esc(g.desc)}</textarea>
       <div class="mini-row foot">${state}<span class="grow"></span>
@@ -628,7 +662,7 @@ export function playerMinis(G, extra = "") {
       <h2>${title}</h2><p><b>${esc(g.name)}</b>${pts ? ` · ${pts}` : ""}</p></div>`;
   }
 
-  const head = `<div class="ph-mini-head"><div class="kicker">${typeLabel(g)} · ${prize(g)}</div><h2>${esc(g.name)}</h2>${g.desc ? `<p>${esc(g.desc)}</p>` : ""}</div>`;
+  const head = `<div class="ph-mini-head"><div class="kicker">${typeLabel(g)} · ${prize(g)}</div><h2>${esc(g.name)}</h2>${g.desc ? `<p>${esc(g.desc)}</p>` : ""}${clockBox(G, g, "ph")}</div>`;
   if (isDraw(g)) return head + drawPhone(G, g);
   const pick = E.currentPick(S);
   const spinning = isSpinning(G);
@@ -777,7 +811,7 @@ function drawView(G, M, g) {
   else main = `<div class="mg-wait">✏️ Everyone draws at once — right where you're sitting!</div>`;
   const past = E.drawRounds(g).filter((x) => x.winner && (r || x.id !== (last && last.id))).slice(-5).reverse();
   return `<div class="mgame mgame--draw" data-key="mg-${esc(g.id)}">
-    ${gameHead(M, g)}
+    ${gameHead(M, g, G)}
     ${main}
     <div class="tally">
       <span class="t team1">${esc(tn(G, "team1"))} <b>${bestPct(st, "team1")}</b>${bestWho(st, "team1") ? `<small>${esc(bestWho(st, "team1"))}</small>` : ""}</span>

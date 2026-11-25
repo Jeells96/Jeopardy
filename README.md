@@ -57,6 +57,14 @@ and the points go straight onto the team's score and carry into Jeopardy.
   go, and the shuffle only shows names still in the pool. Across the night, people who
   haven't played any mini game yet are picked first. Uneven teams are fine.
 - **Don't like the draw?** Tap 🎲 to re-draw one side, or choose a person from the list.
+- **⏱ Played against the clock?** Tick **⏱ Timer** on the game in Settings → Mini games and
+  type the seconds (it shows you the time, e.g. `0:45`). **You** start it: your controls get
+  **⏱ Start the timer (0:45)** (keyboard **K**). The countdown then shows big on the
+  projector and on **every phone**, all off the same clock — so however many tables are
+  playing, they're all playing to the **one timer**. When it runs out, the **horn sounds on
+  every screen at the same moment** and everything says **📣 TIME'S UP!**. **⏹ Stop** cancels
+  it, **↻ Restart** puts it back on for the next pair, and the clock clears itself when the
+  game finishes. (Blind drawing doesn't use it — it has its own step clock.)
 - **Points:** head-to-head games can give the points to the team that wins the game, or
   *for every matchup win*. Best-overall games can be highest-wins or lowest-wins (fastest
   time), with a unit like "seconds" — and the points go to the team **the overall winner
@@ -238,8 +246,8 @@ switch off phone renaming there too.
 - Rename or move players between teams (their phone updates instantly) or remove them —
   a removed player's phone is released and has to enter a name again to rejoin.
 - Keyboard: Space next step · C correct · W wrong · S skip · N nobody · P pause buzzers ·
-  R show answer · B put the question back · H take away a wrong answer · U undo · M sound ·
-  F fullscreen · Esc close.
+  R show answer · B put the question back · H take away a wrong answer · K mini-game timer ·
+  U undo · M sound · F fullscreen · Esc close.
 
 **🌟 The North Pole Awards (on the final-scores screen)**
 - Under the winner, the board reveals the awards one after another, each on a gift tag with a
@@ -355,6 +363,7 @@ sound):
 | Winner announced | `winner.mp3` |
 | Mini games: drawing who's up next (~2 s) | `up-next.mp3` |
 | Mini games: a team wins a mini game | `mini-game-win.mp3` |
+| Mini games: the game clock runs out | `horn.mp3` |
 
 > The official *Jeopardy!* sounds and music are copyrighted and aren't included. Use audio
 > you have the rights to use.
