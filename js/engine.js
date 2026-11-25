@@ -680,12 +680,13 @@ export function setLoaded(s, { id, name } = {}, ctx) {
 // Mini games — played for team points (usually before Jeopardy)
 //   h2h  : one player from each team faces off; record who won each matchup
 //   best : players take turns; the best single score wins it for their team
+//   all  : everyone plays at the same time and Jaren says who won — no draws, no scores
 // The host can always skip the tracking and simply declare a winner.
 // =================================================================
 export const SPIN_MS = 1800; // length of the "who's up next?" shuffle animation
+export const MAX_TABLES = 8;  // the same game played at this many tables at once
 
-export function freshMinis() { return { list: [], current: null, back: null, tables: [], recent: [] }; }
-export const minisTables = (s) => minisOf(s).tables || [];
+export function freshMinis() { return { list: [], current: null, back: null, recent: [] }; }
 export function minisOf(s) { return (s && s.minis) || freshMinis(); }
 export const miniById = (s, id) => minisOf(s).list.find((g) => g.id === id) || null;
 export const openMatch = (g) => (g.matches || []).find((m) => !m.winner) || null;
@@ -729,7 +730,7 @@ function cleanMini(src) {
   // Blind drawing is a Best overall game: the website scores every drawing 0–100 and the
   // best drawing of the night wins the points for its team.
   const mode = src.type === "draw" || src.mode === "draw" ? "draw" : "normal";
-  const type = mode === "draw" || src.type === "best" ? "best" : "h2h";
+  const type = mode === "draw" ? "best" : src.type === "best" || src.type === "all" ? src.type : "h2h";
   const pts = Math.round(Number(src.points));
   return {
     name: String(src.name == null ? "" : src.name).replace(/\s+/g, " ").trim().slice(0, 40) || "Mini game",
@@ -748,6 +749,9 @@ function cleanMini(src) {
     // Played against the clock: Jaren starts it, every table plays to the same one.
     timed: mode !== "draw" && !!src.timed,
     seconds: clamp(Math.round(Number(src.seconds)) || 60, [5, 3600]),
+    // Played at this many tables at the same time, to get through it faster. Blind drawing
+    // and "everyone at once" games are played by everybody together, so they have one spot.
+    tables: mode === "draw" || type === "all" ? 1 : clamp(Math.round(Number(src.tables)) || 1, [1, MAX_TABLES]),
   };
 }
 
@@ -786,7 +790,7 @@ export function miniStanding(g) {
 export function currentPick(s) {
   const M = minisOf(s);
   const g = M.current ? M.list.find((x) => x.id === M.current) : null;
-  if (!g || g.status !== "active" || g.mode === "draw") return null; // blind drawing: everyone draws, nobody is picked
+  if (!g || g.status !== "active" || g.mode === "draw" || g.type === "all") return null; // everyone plays at once: nobody is picked
   let items;
   if (g.type === "h2h") {
     items = openMatches(g).map((m) => {
@@ -896,9 +900,11 @@ function pickTurn(g, ctx, replacing, busy = [], lastTeam, tonight = { team1: [],
 const withList = (s, list, extra = {}) => ({ ...minisOf(s), list, ...extra });
 // The tables a game runs at, all at once. No tables set up → a single spot (null).
 export const miniSlots = (s, g) => slotsFor(s, g);
-function slotsFor(s) {
-  const tables = minisTables(s);
-  return tables.length ? tables : [null];
+// Where this game is played: one spot (null = nothing to announce), or the tables it runs
+// at, named from the host's list (Kitchen, Garage…) or just Table 1, Table 2, …
+function slotsFor(s, g) {
+  const n = clamp(Math.round(Number(g && g.tables)) || 1, [1, MAX_TABLES]);
+  return n < 2 ? [null] : Array.from({ length: n }, (_, i) => `Table ${i + 1}`);
 }
 // Christmas summon lines that haven't been used lately.
 function summonPicker(s, ctx) {
@@ -921,6 +927,8 @@ export function miniAdd(s, { game }, ctx) {
   const M = minisOf(s);
   if (M.list.length >= 20) return fail("That's plenty of mini games! Remove one first.");
   const g = { id: rid(), ...cleanMini(game || {}), ...blankProgress() };
+  // Blind Drawing is a once-a-night thing — everyone draws together.
+  if (g.mode === "draw" && M.list.some((x) => x.mode === "draw")) return fail("You've already got a Blind Drawing — it's played once for the night.");
   return builder(s, ctx).field("minis", withList(s, [...M.list, g])).done();
 }
 export function miniUpdate(s, { id, patch }, ctx) {
@@ -957,36 +965,31 @@ export function miniReset(s, { id }, ctx) {
   return b.field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, ...blankProgress() })), { current: M.current === id ? null : M.current })).done();
 }
 
-// The tables (stations) mini games are played at. Empty = one spot, nothing to announce.
-export function miniTables(s, { tables }, ctx) {
-  const seen = new Set();
-  const list = [];
-  for (const t of Array.isArray(tables) ? tables : String(tables || "").split(/[\n,;]+/)) {
-    const v = String(t || "").replace(/\s+/g, " ").trim().slice(0, 24);
-    if (v && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); list.push(v); }
+// Add / remove a table for one game, right from the "who's up next" controls (the same
+// setting is a tick box in Settings → Mini games). One table = everyone in one spot.
+export function miniTableAdd(s, { id }, ctx) {
+  const g = miniById(s, id);
+  if (!g) return null;
+  if (g.mode === "draw" || g.type === "all") return fail("Everyone plays this one together.");
+  const n = clamp(Math.round(Number(g.tables)) || 1, [1, MAX_TABLES]);
+  if (n >= MAX_TABLES) return fail(`Up to ${MAX_TABLES} tables.`);
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({ ...x, tables: Math.max(2, n + 1) })))).done();
+}
+export function miniTableRemove(s, { id, table }, ctx) {
+  const g = miniById(s, id);
+  if (!g) return null;
+  const slots = slotsFor(s, g);
+  if (table !== undefined && !slots.includes(table)) return null;
+  if (g.status === "active" && [...openMatches(g), ...turnsOf(g)].some((x) => x.table === table)) {
+    return fail(`Someone is still playing at ${table} — finish that first.`);
   }
-  if (list.length > 8) return fail("Up to 8 tables.");
-  return builder(s, ctx).field("minis", { ...minisOf(s), tables: list }).done();
-}
-// Add / remove a table right from the "who's up next" controls. Tables are numbered;
-// going from one spot to two tables adds Table 1 and Table 2.
-const MAX_TABLES = 8;
-export function miniTableAdd(s, _p, ctx) {
-  const tables = minisTables(s);
-  if (tables.length >= MAX_TABLES) return fail(`Up to ${MAX_TABLES} tables.`);
-  const used = new Set(tables.map((t) => t.toLowerCase()));
-  const nextName = () => { for (let n = 1; ; n++) if (!used.has(`table ${n}`)) { used.add(`table ${n}`); return `Table ${n}`; } };
-  const list = tables.length ? [...tables, nextName()] : [nextName(), nextName()];
-  return builder(s, ctx).field("minis", { ...minisOf(s), tables: list }).done();
-}
-export function miniTableRemove(s, { table }, ctx) {
-  const tables = minisTables(s);
-  if (!tables.includes(table)) return null;
-  const playing = minisOf(s).list.some((g) => g.status === "active" && [...openMatches(g), ...turnsOf(g)].some((x) => x.table === table));
-  if (playing) return fail(`Someone is still playing at ${table} — finish that first.`);
-  const left = tables.filter((t) => t !== table);
   // Down to one table = back to playing in one spot (no table to announce).
-  return builder(s, ctx).field("minis", { ...minisOf(s), tables: left.length > 1 ? left : [] }).done();
+  const left = slots.length - 1 > 1 ? slots.length - 1 : 1;
+  const keep = slotsFor(s, { tables: left });
+  const move = (x) => (x.table && !keep.includes(x.table) ? { ...x, table: keep[0] || null } : x);
+  return builder(s, ctx).field("minis", withList(s, mapMini(s, id, (x) => ({
+    ...withTurns(x, turnsOf(x).map(move)), tables: left, matches: x.matches.map(move),
+  })))).done();
 }
 
 // ---------- flow ----------
@@ -1021,6 +1024,7 @@ export function miniClose(s, _p, ctx) {
 export function miniNext(s, { id, table }, ctx) {
   const g = miniById(s, id);
   if (!g || g.status !== "active") return null;
+  if (g.type === "all") return null; // everyone plays at once — nobody is drawn
   if (g.mode === "draw") return miniDrawRound(s, { id }, ctx); // everyone draws at once
   const slots = slotsFor(s, g);
   const sp = summonPicker(s, ctx);
@@ -1125,8 +1129,7 @@ export function miniRepick(s, { id, team, matchId, turnId }, ctx) {
 // Host sends a matchup / player to a particular table (swapping with whoever is there).
 export function miniSetTable(s, { id, table, matchId, turnId }, ctx) {
   const g = miniById(s, id);
-  const tables = minisTables(s);
-  if (!g || g.status !== "active" || !tables.includes(table)) return null;
+  if (!g || g.status !== "active" || !slotsFor(s, g).includes(table)) return null;
   const summon = (x) => (x.summon == null ? Math.floor(random(ctx) * SUMMONS.length) : x.summon);
   const move = (items, target) => {
     if (!target || target.table === table) return null;
@@ -1476,6 +1479,6 @@ export const ACTIONS = {
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalShowAnswer, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
   miniSetTable, miniDrawRound, miniDrawStart, miniDrawCancel, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
-  miniTables, miniTableAdd, miniTableRemove, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
+  miniTableAdd, miniTableRemove, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

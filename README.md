@@ -20,13 +20,12 @@ laptop) with the answer key and every control. Finish with an **ugly sweater vot
    players' phones. Sound is on by default; 🔊/🔇 turns it off on one screen, and a refresh
    turns it back on. Browsers need one tap on a page before it can make sound, so tap the
    board once (it shows **👆 Tap to start sound** until you do).
-4. **Players** scan the QR code on the lobby screen, type their **first and last name**,
-   pick **Husbands** or **Wives** and tap **Join & turn on sound** (one tap joins and starts
-   their phone's sound). (A team can rename itself from a phone.)
-   One name isn't enough — the Join button stays off until there's a last name, and a last
-   initial counts ("Jo B."). In a room full of couples that keeps the two Mikes apart.
-   If someone types a name that's already playing, their phone says "🎅 Santa
-   already has someone called Mike Scott on his list" and suggests adding a last initial.
+4. **Players** scan the QR code on the lobby screen, type their name, pick **Husbands**
+   or **Wives** and tap **Join & turn on sound** (one tap joins and starts their phone's
+   sound). (A team can rename itself from a phone.) A first name on its own is fine —
+   **unless someone already has it**: then their phone says "🎅 Santa already has someone
+   called Mike on his list" and they can't join until they add a last name or an initial
+   ("Mike B."), so nobody is confused when the board says who buzzed in.
 5. **Follow the gold button.** It always shows the next step (keyboard: **Space**):
    mini games first if you've set any up, then Jeopardy.
 
@@ -39,15 +38,17 @@ tap **▶ Use in the game** on your real set.
 
 ## 🎯 Mini games (before Jeopardy)
 
-Set them up in **⚙ Settings → Mini games**: type a name and tap **+ Head-to-head** or
-**+ Best overall** (or tap one of the ready-made ideas). Each game has its own point value,
-and the points go straight onto the team's score and carry into Jeopardy.
+Set them up in **⚙ Settings → Mini games**: type a name and tap **+ Head-to-head**,
+**+ Best overall** or **+ Everyone at once** (or tap one of the ready-made ideas). Each game
+has its own point value, a **⏱ Timer** and a **⏩ Two tables at once** tick box, and the
+points go straight onto the team's score and carry into Jeopardy.
 
 | Type | How it plays | What you do |
 |---|---|---|
 | ⚔️ **Head-to-head** | One husband faces one wife each round | Tap who won (keys **1** / **2**, **T** for a tie) |
 | 🏅 **Best overall** | Everyone takes a turn; best single score wins it for their team | Type each score and press Enter |
-| ✏️ **Blind drawing** | A Best overall game with **✏️ Blind drawing** ticked: everyone draws at once and the website scores every drawing | Nothing — it scores itself |
+| 🏆 **Everyone at once** | The whole room plays at the same time — no draws, no scores | Tap who won (keys **1** / **2**, **T** for a tie) |
+| ✏️ **Blind drawing** | Everyone draws at once and the website scores every drawing; scored like Best overall | Nothing — it scores itself |
 
 - **Who's up next?** Press the gold button and the big screen shuffles through the names,
   lands on the pick with a drum-roll, and **says it out loud** ("Up next: Jake versus
@@ -85,24 +86,25 @@ and the points go straight onto the team's score and carry into Jeopardy.
   brings their partner along. Anyone who came on their own is still drawn, against whoever
   is free, and the Players tab flags a number that's missing its other half. Switch it off
   with **Couples face each other** at the top of the Players tab.
-- **Several tables at once (to get through the games faster):** right next to the
-  **🎲 Who's up first?** button in your mini-game controls, tap **+ Add table** (Table 1,
-  Table 2, …) or ✕ to remove one (a table someone is playing at can't be removed until it's
-  free). Every mini game is then played at **all of them at the same time**: one draw puts a different matchup (or
-  player) at every table — nobody is drawn for two tables — and the board, the phones and
-  the announcer tell everyone which table they're summoned to, with a different Christmas
-  summons every time. Your controls show a row per table: tap who won (or type the score)
-  for each table as it finishes, then **🎲 Draw for [table]** refills just that table.
-  🎲 re-draws a table; ✏️ lets you swap a player or move a matchup to another table. Remove
-  tables down to one to go back to one matchup at a time.
+- **⏩ Two tables at once (to get through the games faster):** every head-to-head and
+  best-overall game has a **⏩ Two tables at once** tick box in Settings → Mini games — that's
+  where you say a game is played at more than one table. Ticked, it runs at **both tables at
+  the same time**: one draw puts a different matchup (or player) at every table — nobody is
+  drawn for two tables — and the board, the phones and the announcer tell everyone which
+  table they're summoned to, with a different Christmas summons every time. Your controls
+  show a row per table: tap who won (or type the score) for each table as it finishes, then
+  **🎲 Draw for [table]** refills just that table. 🎲 re-draws a table; ✏️ lets you swap a
+  player or move a matchup to another table. While you play, **+ Add table** next to the
+  draw button goes up to 8, and ✕ takes one away (a table someone is playing at can't be
+  removed until it's free). Each game remembers its own setting, and **Everyone at once**
+  and **Blind drawing** have none — the whole room plays those together.
 - **Mid-game bonus round:** Settings → Jump to → **Mini games** pauses Jeopardy; the gold
   button brings you back to the same board.
 
 ### ✏️ Blind Drawing
-Blind drawing isn't its own kind of game: it's a **🏅 Best overall** game with **✏️ Blind
-drawing** ticked. Add it from **Settings → Mini games → ideas**, or add a Best overall game
-and tick the box. The website scores every drawing 0–100% and the **best drawing of the
-night wins the points for its team**, exactly like any other Best overall game.
+Add it from **Settings → Mini games → ideas** — it's a once-a-night game, so there can only
+be one. The website scores every drawing 0–100% and the **best drawing of the night wins the
+points for its team**, scored like a Best overall game.
 1. **Pick the pictures:** under the game, tap **🎄 Ready-made drawings** and choose from 10
    Christmas pictures (snowman, gingerbread man, Santa, reindeer, decorated Christmas tree,
    snowy cottage, stocking, penguin in a Santa hat, hot cocoa, stack of presents), each built

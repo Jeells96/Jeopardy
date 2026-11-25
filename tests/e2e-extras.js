@@ -154,15 +154,15 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await act(host, "miniPlay", { id });
   // tables are added/removed right next to the "who's up first" button
   await until(host, () => !!document.querySelector('.tablectl [data-key="tb-add"]'));
-  ok((await host.textContent(".tablectl")).includes("one table"), "the mini game controls say you're playing at one table");
+  ok((await host.textContent(".tablectl")).includes("one spot"), "the mini game controls say you're playing in one spot");
   await host.click('.tablectl [data-key="tb-add"]');
-  await until(host, () => (window.__G.S.minis.tables || []).join() === "Table 1,Table 2");
-  ok(true, "+ Add table: now Table 1 and Table 2");
+  await until(host, () => window.__G.S.minis.list[0].tables === 2);
+  ok(true, "+ Play at two tables at once: now Table 1 and Table 2");
   await host.click('.tablectl [data-key="tb-add"]');
-  await until(host, () => (window.__G.S.minis.tables || []).length === 3);
+  await until(host, () => window.__G.S.minis.list[0].tables === 3);
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Draw for all 3 tables"));
   await host.click('.tablectl [aria-label="Remove Table 3"]');
-  await until(host, () => (window.__G.S.minis.tables || []).length === 2);
+  await until(host, () => window.__G.S.minis.list[0].tables === 2);
   ok(true, "✕ removes a table");
   await shot(host, "x01-host-tables");
   await until(host, () => (document.querySelector(".r-buttons") || {}).textContent?.includes("Draw for all 2 tables"));

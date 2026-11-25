@@ -184,6 +184,14 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(host, () => window.__G.S.minis.list.length === 3);
   g = await mini(host, "Cookie Stack");
   await setField(host, `[data-id="${g.id}"][data-f="unit"]`, "cookies");
+  // ⏩ two tables at once, ticked right on the game
+  ok(await host.$eval(`input[data-change="mini-tables"][data-id="${g.id}"]`, (e) => !e.checked), "games are played in one spot unless you say otherwise");
+  await host.check(`input[data-change="mini-tables"][data-id="${g.id}"]`);
+  await until(host, (id) => window.__G.S.minis.list.find((x) => x.id === id).tables === 2, g.id);
+  ok(true, "⏩ Two tables at once: the same game runs at both");
+  await host.uncheck(`input[data-change="mini-tables"][data-id="${g.id}"]`);
+  await until(host, (id) => window.__G.S.minis.list.find((x) => x.id === id).tables === 1, g.id);
+  ok(true, "…and untick puts it back to one spot");
   await host.fill("#mini-new-name", "Tug of War");
   await host.press("#mini-new-name", "Enter"); // Enter adds a head-to-head game
   await until(host, () => window.__G.S.minis.list.length === 4);
@@ -611,6 +619,24 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(solo, () => window.__G.S.phase === "board");
   ok(true, "host-only night flows from mini games into Jeopardy");
   await shot(solo, "m23-solo-board-720p");
+
+  // ---- everyone at once: no draws, no scores, just tap who won ----
+  await openDrawer(solo, "Mini games");
+  await solo.fill("#mini-new-name", "Tug of War");
+  await solo.click('[data-action="mini-add"][data-type="all"]');
+  await until(solo, () => window.__G.S.minis.list.some((x) => x.type === "all"));
+  const tug2 = (await minis(solo)).find((x) => x.type === "all");
+  ok((await solo.textContent(`.minicard[data-key="mini-${tug2.id}"]`)).includes("no scores to type"), "the card says everyone plays at once and you just tap who won");
+  ok(!(await solo.$(`.minicard[data-key="mini-${tug2.id}"] .drawtick`)), "…so there's no two-tables tick box on it");
+  await solo.click(`.minicard[data-key="mini-${tug2.id}"] [data-action="act"][data-p*="miniPlay"]`);
+  await until(solo, () => window.__G.S.minis.current === window.__G.S.minis.list.find((x) => x.type === "all").id);
+  ok((await solo.textContent(".r-status")).includes("everyone plays at the same time"), "the controls say the whole room is playing");
+  ok(!(await solo.textContent(".r-buttons")).includes("Who's up"), "…and there's nobody to draw");
+  await shot(solo, "m24-solo-everyone-at-once");
+  const was = (await state(solo)).scores.team2;
+  await solo.locator('.r-buttons .btn:has-text("🏆")').nth(1).click();
+  await until(solo, () => window.__G.S.minis.list.find((x) => x.type === "all").status === "done");
+  ok((await state(solo)).scores.team2 === was + 500, "tapping a team wins it for them on the spot");
 
   // =====================================================================
   console.log("Scenario C — an older saved game is upgraded, not wiped");

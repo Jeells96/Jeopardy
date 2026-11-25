@@ -75,10 +75,12 @@ async function hold(page, sel) {
   await until(host, () => window.__G.S.minis.list.length === 1 && window.__G.S.minis.list[0].mode === "draw");
   ok(true, "Blind Drawing can be added from the ideas");
   // It's a Best overall game with the drawing tick box on — no separate kind of game.
-  ok((await host.$$eval(".minicard select[data-f='type'] option", (els) => els.map((e) => e.textContent.trim()))).join("|") === "⚔️ Head-to-head|🏅 Best overall", "two kinds of mini game to choose from");
-  ok(await host.$eval(".minicard select[data-f='type']", (e) => e.value === "best"), "Blind Drawing is a 🏅 Best overall game");
-  ok(await host.$eval(".minicard .drawtick input", (e) => e.checked), "…with ✏️ Blind drawing ticked");
-  ok((await host.textContent(".minicard")).includes("the best one wins the points"), "the card says how it's scored");
+  ok((await host.$$eval(".minicard select[data-f='type'] option", (els) => els.map((e) => e.textContent.trim()))).join("|") === "⚔️ Head-to-head|🏅 Best overall|🏆 Everyone at once", "three kinds of mini game to choose from");
+  ok(await host.$eval(".minicard select[data-f='type']", (e) => e.value === "best"), "Blind Drawing is scored like a 🏅 Best overall game");
+  ok(!(await host.$(".minicard .drawtick")) && !(await host.$(".minicard .timerrow")), "…and has no tables or timer tick boxes — everyone draws at once");
+  await host.click('.ideas .chipbtn:has-text("Blind Drawing")');
+  await until(host, () => { const el = document.getElementById("toast"); return el && el.classList.contains("show") && el.textContent.includes("once for the night"); });
+  ok(await host.evaluate(() => window.__G.S.minis.list.length === 1), "only one Blind Drawing a night — a second one isn't added");
   // ready-made Christmas drawings
   await host.click('[data-action="draw-gallery"]');
   await until(host, () => document.querySelectorAll(".gallery .gpic").length === 10);
@@ -123,8 +125,7 @@ async function hold(page, sel) {
   }
   // a player without a phone can't draw
   await host.evaluate(async () => { const D = await import("/js/data.js"); await D.addPlayer("Grandpa Pine", "team1"); });
-  // tables are set up for the other games — blind drawing ignores them
-  await host.evaluate(async () => { const D = await import("/js/data.js"); await D.act("miniTables", { tables: "Kitchen, Garage" }); });
+  // blind drawing is played by everybody at once — it never gets tables
   const btnText = () => host.evaluate(() => (document.querySelector(".r-buttons") || {}).textContent || "");
   const clickBtn = (text) => host.locator(".r-buttons button", { hasText: text }).first().click();
 

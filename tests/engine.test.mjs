@@ -592,7 +592,7 @@ console.log("engine tests");
   ok(open.p1.id !== was && hus.pair === wif.pair, `🎲 re-drawing the husband brings his wife along (${hus.name} vs ${wif.name})`);
 
   // Two tables at once: two different couples, nobody drawn twice.
-  go("miniTables", { tables: "Kitchen, Garage" });
+  go("miniUpdate", { id: gid, patch: { tables: 2 } });
   go("miniReset", { id: gid });
   go("miniPlay", { id: gid });
   go("miniNext", { id: gid });
@@ -617,7 +617,7 @@ console.log("engine tests");
   // Switched off, it's a free-for-all again.
   go("setSettings", { patch: { pairUp: false } });
   go("miniReset", { id: gid });
-  go("miniTables", { tables: "" });
+  go("miniUpdate", { id: gid, patch: { tables: 1 } });
   go("miniPlay", { id: gid });
   let mixed = 0;
   for (let i = 0; i < 7; i++) {

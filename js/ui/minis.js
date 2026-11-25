@@ -8,7 +8,7 @@ import { PICTURES, BUILTIN, builtin, isBuiltin, builtinStrokes } from "../pictur
 import { cachedDrawing, loadDrawing } from "../data.js";
 
 const tn = (G, t) => E.teamName(G.S || {}, t);
-export const TYPE_LABEL = { h2h: "Head-to-head", best: "Best overall", draw: "Blind drawing" };
+export const TYPE_LABEL = { h2h: "Head-to-head", best: "Best overall", all: "Everyone at once", draw: "Blind drawing" };
 const isDraw = (g) => !!g && g.mode === "draw";
 const typeLabel = (g) => (isDraw(g) ? TYPE_LABEL.draw : TYPE_LABEL[g.type]);
 // A saved drawing as a picture; loads it (and refreshes the screen) the first time it's needed.
@@ -120,6 +120,7 @@ export function minisStage(G, opts = {}) {
   if (!g) return hub(G, M, opts);
   if (g.status === "done") return resultView(G, g);
   if (isDraw(g)) return drawView(G, M, g);
+  if (g.type === "all") return allView(G, M, g);
   return g.type === "h2h" ? h2hView(G, M, g) : bestView(G, M, g);
 }
 
@@ -208,6 +209,15 @@ function h2hView(G, M, g) {
       <span class="t team2"><b>${st.wins.team2}</b> ${esc(tn(G, "team2"))}</span>
     </div>
     <div class="mhistory">${past.map((x) => matchChip(G, x)).join("")}${st.wins.ties ? `<span class="mchip tie">${st.wins.ties} tied</span>` : ""}</div>
+  </div>`;
+}
+
+// Everyone at once: no draws, no scores — the whole room plays and Jaren says who won.
+function allView(G, M, g) {
+  return `<div class="mgame mgame--all" data-key="mg-${esc(g.id)}">
+    ${gameHead(M, g, G)}
+    <div class="allgo"><div class="allgo-big">🏆 Everybody plays!</div>
+      <div class="allgo-sub">${esc(tn(G, "team1"))} vs ${esc(tn(G, "team2"))} — ${money(g.points)} to the winners</div></div>
   </div>`;
 }
 
@@ -339,6 +349,17 @@ function gameSteps(G, { privateView = false } = {}) {
   // ---- blind drawing ----
   if (isDraw(g)) return drawSteps(G, g, { btn, act, B, st, n1, n2 });
 
+  // ---- everyone at once: just say who won ----
+  if (g.type === "all") {
+    status = `<b>${esc(g.name)}</b> · everyone plays at the same time — tap who won. <span class="muted">${money(g.points)} to the winners</span>`;
+    btn(`🏆 ${esc(n1)}`, "act", act("miniFinish", { id: g.id, winner: "team1" }), "t1", "1");
+    btn(`🏆 ${esc(n2)}`, "act", act("miniFinish", { id: g.id, winner: "team2" }), "t2", "2");
+    btn("🤝 Tie <small>(split the points)</small>", "act", act("miniFinish", { id: g.id, winner: "tie" }), "ghost", "T");
+    btn("No winner <small>(no points)</small>", "act", act("miniFinish", { id: g.id, winner: "none" }), "ghost");
+    btn("↩ Games list", "act", act("miniClose"));
+    return { status, panel, buttons: B };
+  }
+
   // ---- head-to-head ----
   if (g.type === "h2h") {
     const tally = `${esc(n1)} <b>${st.wins.team1}</b> – <b>${st.wins.team2}</b> ${esc(n2)}`;
@@ -444,13 +465,13 @@ function gameSteps(G, { privateView = false } = {}) {
 const editing = (G, id) => G.ui.miniEdit && G.ui.miniEdit[id];
 // Move one table's matchup / player to another table (swaps with whoever is there).
 function tableMove(G, g, x) {
-  const tables = E.minisTables(G.S);
+  const tables = E.miniSlots(G.S, g).filter(Boolean);
   if (tables.length < 2) return "";
   return `<select class="msel" data-change="mini-move" data-id="${esc(g.id)}" data-ref="${esc(x.id)}" aria-label="Move to table">${tables.map((t) => `<option value="${esc(t)}"${t === x.table ? " selected" : ""}>📍 ${esc(t)}</option>`).join("")}</select>`;
 }
 // Which table to send the drawn player(s) to — right in the mini-game controls.
 function tablePicker(G, g, current) {
-  const tables = E.minisTables(G.S);
+  const tables = E.miniSlots(G.S, g).filter(Boolean);
   if (!tables.length) return "";
   return `<div class="mpanel wrap tablepick"><span class="muted">📍 Send them to:</span>${tables.map((t) =>
     `<button class="${cls("chipbtn", t === current && "on")}" ${actAttr("miniSetTable", { id: g.id, table: t })} aria-pressed="${t === current}">${t === current ? "✓ " : ""}${esc(t)}</button>`).join("")}</div>`;
@@ -459,11 +480,11 @@ function tablePicker(G, g, current) {
 // Add / remove tables, right where you draw who's up next. A table someone is
 // playing at can't be removed until it's free.
 function tableControls(G, g, items) {
-  const tables = E.minisTables(G.S);
+  const tables = E.miniSlots(G.S, g).filter(Boolean);
   const busy = new Set(items.map((x) => x.table).filter(Boolean));
-  const chips = tables.map((t) => `<span class="echip tchip" data-key="tb-${esc(t)}"><span class="mchip">📍 ${esc(t)}</span>${busy.has(t) ? "" : `<button class="x" title="Remove ${esc(t)}" aria-label="Remove ${esc(t)}" ${actAttr("miniTableRemove", { table: t })}>✕</button>`}</span>`).join("");
-  const add = tables.length < 8 ? `<button class="btn ghost sm" data-key="tb-add" ${actAttr("miniTableAdd", {})}>+ Add table</button>` : "";
-  return `<div class="mpanel wrap tablectl" data-key="tablectl"><span class="muted">${tables.length ? `Playing at ${tables.length} tables at once:` : "📍 Playing at one table."}</span>${chips}${add}</div>`;
+  const chips = tables.map((t) => `<span class="echip tchip" data-key="tb-${esc(t)}"><span class="mchip">📍 ${esc(t)}</span>${busy.has(t) ? "" : `<button class="x" title="Remove ${esc(t)}" aria-label="Remove ${esc(t)}" ${actAttr("miniTableRemove", { id: g.id, table: t })}>✕</button>`}</span>`).join("");
+  const add = tables.length < 8 ? `<button class="btn ghost sm" data-key="tb-add" ${actAttr("miniTableAdd", { id: g.id })}>+ ${tables.length ? "Add table" : "Play at two tables at once"}</button>` : "";
+  return `<div class="mpanel wrap tablectl" data-key="tablectl"><span class="muted">${tables.length ? `Playing at ${tables.length} tables at once:` : "📍 Playing in one spot."}</span>${chips}${add}</div>`;
 }
 
 function playerSelect(G, g, team, selectedId, ref = "") {
@@ -570,6 +591,7 @@ export function minisTab(G) {
         <select aria-label="Type of game" ${field(g, "type")}${started ? " disabled" : ""}>
           <option value="h2h"${g.type === "h2h" ? " selected" : ""}>⚔️ Head-to-head</option>
           <option value="best"${g.type === "best" ? " selected" : ""}>🏅 Best overall</option>
+          <option value="all"${g.type === "all" ? " selected" : ""}>🏆 Everyone at once</option>
         </select>
         <label class="pts"><span>$</span><input type="number" inputmode="numeric" min="0" step="50" value="${g.points}" aria-label="Points" ${field(g, "points")}></label>
       </div>
@@ -580,6 +602,8 @@ export function minisTab(G) {
            </select>`
         : isDraw(g)
         ? ""
+        : g.type === "all"
+        ? `<span class="muted small">Everyone plays at the same time — no scores to type, you just tap who won.</span>`
         : `<select aria-label="Which score wins" ${field(g, "better")}>
              <option value="high"${g.better === "high" ? " selected" : ""}>Highest score wins</option>
              <option value="low"${g.better === "low" ? " selected" : ""}>Lowest wins (fastest time)</option>
@@ -590,7 +614,7 @@ export function minisTab(G) {
         <label class="timertick"><input type="checkbox"${g.timed ? " checked" : ""} data-change="mini-timed" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-timed"><span>⏱ Timer</span></label>
         ${g.timed ? `<label class="pts secs"><input type="number" inputmode="numeric" min="5" max="3600" value="${g.seconds}" aria-label="Seconds on the clock" ${field(g, "seconds")}><span>seconds <small>(${timerLabel(g)})</small></span></label>` : `<span class="muted small">Tick it for a game played against the clock</span>`}
       </div>`}
-      ${g.type === "best" ? `<label class="mini-row drawtick"><input type="checkbox"${isDraw(g) ? " checked" : ""}${started ? " disabled" : ""} data-change="mini-draw" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-draw"><span>✏️ Blind drawing <small>— everyone draws at once, the website scores every drawing, and the best one wins the points for its team</small></span></label>` : ""}
+      ${isDraw(g) || g.type === "all" ? "" : `<label class="mini-row drawtick"><input type="checkbox"${(g.tables || 1) > 1 ? " checked" : ""} data-change="mini-tables" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-tables"><span>⏩ Two tables at once <small>— ${(g.tables || 1) > 2 ? `played at ${g.tables} tables at the same time` : "the same game runs at both tables, so you get through it twice as fast"}</small></span></label>`}
       <textarea class="desc auto" rows="1" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>${esc(g.desc)}</textarea>
       <div class="mini-row foot">${state}<span class="grow"></span>
         ${started ? `<button class="btn ghost sm" data-action="mini-reset-ask" data-id="${esc(g.id)}">↺ Reset</button>` : ""}
@@ -608,10 +632,13 @@ export function minisTab(G) {
     <div class="btnrow add">
       <button class="btn primary sm" data-action="mini-add" data-type="h2h">+ ⚔️ Head-to-head</button>
       <button class="btn primary sm" data-action="mini-add" data-type="best">+ 🏅 Best overall</button>
+      <button class="btn primary sm" data-action="mini-add" data-type="all">+ 🏆 Everyone at once</button>
     </div>
     <ul class="explain">
       <li><b>Head-to-head:</b> one of the ${esc(n1)} faces one of the ${esc(n2)} each round. You tap who won.</li>
       <li><b>Best overall:</b> everyone takes a turn and you type their score. The best score wins it for their team.</li>
+      <li><b>Everyone at once:</b> the whole room plays at the same time and you just tap who won — no draws, no scores.</li>
+      <li><b>⏩ Two tables at once:</b> tick it on a head-to-head or best-overall game and it runs at both tables at the same time, so you get through it twice as fast. Add more tables from the controls while you play.</li>
       <li>The game draws who's up next at random. Once picked, a player is out of the pool until everyone on their team has had a go — and people who haven't played any mini game yet tonight go first.</li>
     </ul>
   </section>
@@ -664,6 +691,7 @@ export function playerMinis(G, extra = "") {
 
   const head = `<div class="ph-mini-head"><div class="kicker">${typeLabel(g)} · ${prize(g)}</div><h2>${esc(g.name)}</h2>${g.desc ? `<p>${esc(g.desc)}</p>` : ""}${clockBox(G, g, "ph")}</div>`;
   if (isDraw(g)) return head + drawPhone(G, g);
+  if (g.type === "all") return `${head}<div class="youup big">🏆 Everybody plays!<small>Go go go — Jaren says who won</small></div>`;
   const pick = E.currentPick(S);
   const spinning = isSpinning(G);
   const mine = !!pick && pick.pids.includes(G.deviceId);

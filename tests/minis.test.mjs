@@ -448,89 +448,86 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   const { SUMMONS, summonText } = await import("../js/summons.js");
   const w = world(roster(3, 3), 11);
   const id = w.add({ name: "Toss", type: "h2h" });
+  eq(w.game().tables, 1, "a new game is played in one spot");
   w.run("miniPlay", { id });
   w.run("miniNext", { id });
-  ok(!("table" in E.openMatch(w.game())), "no tables set up: nothing to summon to");
+  ok(!("table" in E.openMatch(w.game())), "one spot: nothing to summon to");
   eq(E.currentPick(w.state).table, null, "no table on the pick");
   w.run("miniMatch", { id, winner: "team1" });
-  w.run("miniTables", { tables: " Kitchen ,Garage; kitchen\nPorch" });
-  eq(w.state.minis.tables, ["Kitchen", "Garage", "Porch"], "table names are cleaned and de-duplicated");
-  // Same game at all three tables at once
+  // ⏩ Two tables at once — the setting lives on the game
+  w.run("miniUpdate", { id, patch: { tables: 3 } });
+  eq(E.miniSlots(w.state, w.game()), ["Table 1", "Table 2", "Table 3"], "three tables, numbered");
   w.run("miniNext", { id });
   let open = E.openMatches(w.game());
-  eq(open.map((m) => m.table), ["Kitchen", "Garage", "Porch"], "one draw fills every table with its own matchup");
+  eq(open.map((m) => m.table), ["Table 1", "Table 2", "Table 3"], "one draw fills every table with its own matchup");
   const ids = open.flatMap((m) => [m.p1.id, m.p2.id]);
   eq(new Set(ids).size, 6, "nobody is drawn for two tables at once");
   eq(new Set(open.map((m) => m.summon)).size, 3, "each table gets its own Christmas summons");
   eq(E.currentPick(w.state).items.length, 3, "the screens get all three matchups");
   w.run("miniNext", { id });
   ok(w.noop, "no free table → nothing to draw");
-  const garage = open[1];
-  w.run("miniMatch", { id, matchId: garage.id, winner: "team2" });
-  eq(E.openMatches(w.game()).map((m) => m.table), ["Kitchen", "Porch"], "a result at one table leaves the others playing");
+  const second = open[1];
+  w.run("miniMatch", { id, matchId: second.id, winner: "team2" });
+  eq(E.openMatches(w.game()).map((m) => m.table), ["Table 1", "Table 3"], "a result at one table leaves the others playing");
   w.run("miniNext", { id });
   open = E.openMatches(w.game());
-  eq(open.map((m) => m.table).sort(), ["Garage", "Kitchen", "Porch"], "the next draw fills just the free table");
-  const busyNow = open.filter((m) => m.table !== "Garage").flatMap((m) => [m.p1.id, m.p2.id]);
-  const g2 = open.find((m) => m.table === "Garage");
+  eq(open.map((m) => m.table).sort(), ["Table 1", "Table 2", "Table 3"], "the next draw fills just the free table");
+  const busyNow = open.filter((m) => m.table !== "Table 2").flatMap((m) => [m.p1.id, m.p2.id]);
+  const g2 = open.find((m) => m.table === "Table 2");
   ok(!busyNow.includes(g2.p1.id) && !busyNow.includes(g2.p2.id), "…with players who aren't busy at another table");
   const lines = open.map((m) => m.summon);
   for (const m of open) w.run("miniMatch", { id, matchId: m.id, winner: "tie" });
-  w.run("miniUpdate", { id, patch: { table: "Porch" } });
   w.run("miniNext", { id });
-  eq(E.openMatches(w.game()).map((m) => m.table), ["Kitchen", "Garage", "Porch"], "every game plays at all the tables (no per-game table setting)");
   ok(!E.openMatches(w.game()).map((m) => m.summon).some((x) => lines.includes(x)), "summons don't repeat right away");
-  const porch = E.openMatches(w.game()).find((m) => m.table === "Porch");
-  const before = porch.summon;
-  w.run("miniRepick", { id, matchId: porch.id, team: "team1" });
-  const porch2 = E.openMatches(w.game()).find((m) => m.id === porch.id);
-  eq(porch2.table, "Porch", "re-drawing keeps the table");
-  ok(porch2.summon !== before, "re-drawing gives a fresh summon");
+  const third = E.openMatches(w.game()).find((m) => m.table === "Table 3");
+  const before = third.summon;
+  w.run("miniRepick", { id, matchId: third.id, team: "team1" });
+  const third2 = E.openMatches(w.game()).find((m) => m.id === third.id);
+  eq(third2.table, "Table 3", "re-drawing keeps the table");
+  ok(third2.summon !== before, "re-drawing gives a fresh summon");
   // add / remove tables from the "who's up next" controls
-  w.run("miniTableRemove", { table: "Porch" });
-  ok(!!w.error && w.error.includes("Porch"), "a table someone is playing at can't be removed");
+  w.run("miniTableRemove", { id, table: "Table 3" });
+  ok(!!w.error && w.error.includes("Table 3"), "a table someone is playing at can't be removed");
   for (const m of E.openMatches(w.game())) w.run("miniMatch", { id, matchId: m.id, winner: "tie" });
-  w.run("miniTableRemove", { table: "Garage" });
-  eq(w.state.minis.tables, ["Kitchen", "Porch"], "a free table can be removed");
-  w.run("miniTableAdd", {});
-  eq(w.state.minis.tables, ["Kitchen", "Porch", "Table 1"], "adding a table gives it the next free number");
-  w.run("miniTableRemove", { table: "Table 1" });
-  w.run("miniTableRemove", { table: "Porch" });
-  eq(w.state.minis.tables, [], "down to one table = back to playing in one spot");
-  w.run("miniTableAdd", {});
-  eq(w.state.minis.tables, ["Table 1", "Table 2"], "from one spot, + Add table makes Table 1 and Table 2");
-  w.run("miniTableAdd", {});
-  eq(w.state.minis.tables, ["Table 1", "Table 2", "Table 3"], "…then Table 3");
-  w.run("miniTableRemove", { table: "Table 2" });
-  w.run("miniTableAdd", {});
-  eq(w.state.minis.tables, ["Table 1", "Table 3", "Table 2"], "a removed number is reused");
-  for (let i = 0; i < 10; i++) w.run("miniTableAdd", {});
-  eq(w.state.minis.tables.length, 8, "at most 8 tables");
+  w.run("miniTableRemove", { id, table: "Table 3" });
+  eq(w.game().tables, 2, "a free table can be removed");
+  w.run("miniTableAdd", { id });
+  eq(w.game().tables, 3, "+ Add table puts one back");
+  w.run("miniTableRemove", { id, table: "Table 3" });
+  w.run("miniTableRemove", { id, table: "Table 2" });
+  eq([w.game().tables, E.miniSlots(w.state, w.game())], [1, [null]], "down to one table = back to playing in one spot");
+  w.run("miniTableAdd", { id });
+  eq(E.miniSlots(w.state, w.game()), ["Table 1", "Table 2"], "from one spot, + Add table makes two tables");
+  for (let i = 0; i < 10; i++) w.run("miniTableAdd", { id });
+  eq(w.game().tables, 8, "at most 8 tables");
   ok(!!w.error, "…with a message when you try for more");
-  w.run("miniTables", { tables: "Kitchen, Garage, Porch" });
+  w.run("miniUpdate", { id, patch: { tables: 3 } });
+  // each game has its own setting
+  const solo = w.add({ name: "Relay", type: "h2h" });
+  eq([E.miniSlots(w.state, w.game(1)), w.game().tables], [[null], 3], "another game is still played in one spot");
+  w.run("miniRemove", { id: solo });
   // more tables than players: only as many matchups as there are free players
   const few = world(roster(1, 2), 3);
-  few.run("miniTables", { tables: "A, B, C" });
-  const fid = few.add({ name: "Toss", type: "h2h" });
+  const fid = few.add({ name: "Toss", type: "h2h", tables: 3 });
   few.run("miniPlay", { id: fid });
   few.run("miniNext", { id: fid });
   eq(E.openMatches(few.game()).length, 1, "with one husband, only one table can play at a time");
-  const txt = summonText(0, ["Ann", "Bo"], "Porch");
-  ok(txt.includes("Ann and Bo") && txt.includes("Porch") && !txt.includes("{"), "summon fills in names and table");
+  const txt = summonText(0, ["Ann", "Bo"], "Table 2");
+  ok(txt.includes("Ann and Bo") && txt.includes("Table 2") && !txt.includes("{"), "summon fills in names and table");
   ok(SUMMONS.length >= 30, "plenty of summon lines");
-  const b = w.add({ name: "Stack", type: "best" });
+  const b = w.add({ name: "Stack", type: "best", tables: 3 });
   w.run("miniPlay", { id: b });
   w.run("miniNext", { id: b });
   const turns = E.turnsOf(w.game(1));
-  eq(turns.map((t) => t.table), ["Kitchen", "Garage", "Porch"], "best overall: one player per table, all at once");
+  eq(turns.map((t) => t.table), ["Table 1", "Table 2", "Table 3"], "best overall: one player per table, all at once");
   eq(new Set(turns.map((t) => t.pid)).size, 3, "…three different players");
   w.run("miniScore", { id: b, turnId: turns[1].id, score: 7 });
-  eq(E.turnsOf(w.game(1)).map((t) => t.table), ["Kitchen", "Porch"], "a score at one table frees just that table");
+  eq(E.turnsOf(w.game(1)).map((t) => t.table), ["Table 1", "Table 3"], "a score at one table frees just that table");
   eq(w.game(1).entries.map((e) => [e.name, e.score]), [[turns[1].name, 7]], "the score goes to the right player");
-  w.run("miniTables", { tables: Array.from({ length: 9 }, (_, i) => "T" + i) });
-  ok(!!w.error, "at most 8 tables");
+  w.run("miniUpdate", { id: b, patch: { tables: 99 } });
+  eq(w.game(1).tables, 8, "at most 8 tables, however it's set");
   w.run("newGame");
-  eq(w.state.minis.tables, ["Kitchen", "Garage", "Porch"], "tables survive a new game");
+  eq(w.state.minis.list[0].tables, 3, "a game's tables survive a new game");
 }
 
 // ---------- ugly sweater vote ----------
@@ -657,19 +654,18 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
 // ---------- host picks the table; Final wager undo ----------
 {
   const w = world(roster(2, 2), 5);
-  w.run("miniTables", { tables: "Kitchen, Garage" });
-  const id = w.add({ name: "Toss", type: "h2h" });
+  const id = w.add({ name: "Toss", type: "h2h", tables: 2 });
   w.run("miniPlay", { id });
   w.run("miniNext", { id });
-  const other = E.currentPick(w.state).table === "Kitchen" ? "Garage" : "Kitchen";
+  const other = E.currentPick(w.state).table === "Table 1" ? "Table 2" : "Table 1";
   w.run("miniSetTable", { id, table: other });
   eq(E.currentPick(w.state).table, other, "host sends the drawn players to a different table");
   w.run("miniSetTable", { id, table: "Attic" });
   ok(w.noop, "only tables that exist");
-  const b = w.add({ name: "Stack", type: "best" });
+  const b = w.add({ name: "Stack", type: "best", tables: 2 });
   w.run("miniPlay", { id: b });
   w.run("miniNext", { id: b });
-  const t2 = E.currentPick(w.state).table === "Kitchen" ? "Garage" : "Kitchen";
+  const t2 = E.currentPick(w.state).table === "Table 1" ? "Table 2" : "Table 1";
   w.run("miniSetTable", { id: b, table: t2 });
   eq(E.currentPick(w.state).table, t2, "works for best-overall turns too");
 
@@ -741,7 +737,7 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
 
   ok(w.run("miniTimerDone", { id }, 1000).noop, "no horn while there's time left");
   // Several tables are playing the same game — they all run off this one clock.
-  w.run("miniTableAdd");
+  w.run("miniTableAdd", { id });
   w.run("miniNext", { id });
   eq(E.openMatches(w.game(1)).length, 2, "two tables are playing");
   eq(w.game(1).clock.endsAt, ends, "…off the same clock");
@@ -769,6 +765,41 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   // A blind drawing has its own step clock, so it never gets this one.
   const d = w.add({ name: "Blind Drawing", type: "draw", timed: true, seconds: 30 });
   eq(w.state.minis.list[2].timed, false, "blind drawing runs on its own step clock");
+}
+
+// ---------- everyone at once: no draws, no scores, Jaren says who won ----------
+{
+  const w = world(roster(2, 2), 3);
+  const id = w.add({ name: "Tug of War", type: "all", points: 400, timed: true, seconds: 20 });
+  eq([w.game().type, w.game().tables, w.game().timed], ["all", 1, true], "everyone at once: one spot, and it can still be timed");
+  w.run("miniUpdate", { id, patch: { tables: 4 } });
+  eq(w.game().tables, 1, "it can't be split across tables — the whole room plays together");
+  w.run("minisStart");
+  w.run("miniPlay", { id });
+  ok(w.run("miniNext", { id }).noop, "nobody is drawn");
+  eq(E.currentPick(w.state), null, "…so there's no name shuffle");
+  ok(w.run("miniTableAdd", { id }).error, "…and no tables to add");
+  w.run("miniTimerStart", { id });
+  ok(!!E.miniClock(w.game()), "the clock still works for it");
+  w.run("miniFinish", { id, winner: "team2" });
+  eq([w.state.scores.team2, w.state.scores.team1, w.game().result.winner, w.game().status], [400, 0, "team2", "done"], "Jaren taps who won and the points go on");
+  eq(w.game().clock, null, "…and the clock is put away");
+  w.run("miniReset", { id });
+  eq(w.state.scores.team2, 0, "↺ Reset hands the points back");
+  w.run("miniPlay", { id });
+  w.run("miniFinish", { id, winner: "tie" });
+  eq([w.state.scores.team1, w.state.scores.team2], [200, 200], "a tie splits them");
+}
+
+// ---------- blind drawing is a once-a-night thing ----------
+{
+  const w = world(roster(2, 2), 3);
+  w.add({ name: "Blind Drawing", type: "draw" });
+  w.add({ name: "Another Drawing", type: "draw" });
+  ok(!!w.error && w.error.includes("once for the night"), "only one Blind Drawing a night");
+  eq(w.state.minis.list.length, 1, "…so the second one isn't added");
+  w.add({ name: "Toss", type: "h2h" });
+  eq(w.state.minis.list.length, 2, "other games are fine");
 }
 
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");

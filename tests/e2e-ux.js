@@ -70,18 +70,13 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await join("Bob", "team2");
   await until(host, () => window.__G.P.length === 3);
 
-  // ---- Santa's list needs a first AND last name ----
+  // ---- one name is plenty, as long as nobody has it ----
   const newbie = await device("Newbie", { width: 390, height: 844 });
   await newbie.goto(URL);
   await newbie.fill("#jn-name", "Dave");
   await newbie.click(".teambtn.team1");
-  await until(newbie, () => !!document.querySelector(".namenote"));
-  ok((await newbie.textContent(".namenote")).includes("Last name"), "one name isn't enough — the join screen asks for a last name");
-  ok(await newbie.$eval('[data-action="join"]', (b) => b.disabled), "…and the Join button stays off");
-  await shot(newbie, "u00-join-needs-last-name");
-  await newbie.fill("#jn-name", "Dave N.");
-  await until(newbie, () => !document.querySelector(".namenote"));
-  ok(!(await newbie.$eval('[data-action="join"]', (b) => b.disabled)), "a last initial is enough");
+  await newbie.waitForTimeout(300);
+  ok(!(await newbie.$eval('[data-action="join"]', (b) => b.disabled)) && !(await newbie.$(".dupnote")), "a first name on its own is fine when nobody else has it");
   await newbie.ctx.close();
 
   // ---- a name that's already taken ----
@@ -90,7 +85,8 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await dup.fill("#jn-name", "ann bell");
   await until(dup, () => !!document.querySelector(".dupnote"));
   ok((await dup.textContent(".dupnote")).includes("Santa already has someone called Ann Bell"), "typing a name someone already has warns you (names aren't case-sensitive)");
-  ok((await dup.textContent(".dupnote")).includes("last initial"), "…and suggests adding a last initial");
+  ok((await dup.textContent(".dupnote")).includes("last name or an initial"), "…and asks for a last name or initial");
+  ok(await dup.$eval('[data-action="join"]', (b) => b.disabled) || !(await dup.$('.teambtn.on')), "…and they can't join until they change it");
   await shot(dup, "u01-join-duplicate-name");
   await dup.fill("#jn-name", "Ann Kringle");
   await until(dup, () => !document.querySelector(".dupnote"));

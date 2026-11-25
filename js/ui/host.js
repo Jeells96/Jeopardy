@@ -170,7 +170,7 @@ function playersTab(G) {
         <button class="btn bad sm" data-action="player-remove" data-id="${esc(p.id)}" title="Remove (they can rejoin)">✕</button>
       </div>`;
       }).join("") : `<p class="muted">Nobody yet.</p>`}
-      <div class="prow add"><input id="add-player-${t}" maxlength="32" placeholder="First and last name" aria-label="Add a player to ${esc(tn(G, t))}" data-sticky>
+      <div class="prow add"><input id="add-player-${t}" maxlength="32" placeholder="Add someone without a phone" aria-label="Add a player to ${esc(tn(G, t))}" data-sticky>
         <button class="btn ghost sm" data-action="player-add" data-team="${t}">+ Add</button></div>
     </section>`;
   }).join("");

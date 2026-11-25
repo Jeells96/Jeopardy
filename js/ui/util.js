@@ -13,17 +13,18 @@ export function money(n) {
 export const isPlural = (name) => /[^s]s$/i.test(String(name || "").trim());
 export const verb = (name, singular, plural) => (isPlural(name) ? plural : singular);
 
-// Everyone goes on Santa's list with a first AND last name — two Mikes in a room full of
-// couples is chaos. A last initial counts ("Jo B.").
+// One name is plenty — until someone already has it. Two Mikes on the board is chaos, so
+// the second Mike has to add a last name or an initial ("Mike B.").
 export const NAME_MAX = 32;
 export const cleanName = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, NAME_MAX);
-export function nameProblem(v) {
+export const sameName = (a, b) => !!cleanName(a) && cleanName(a).toLowerCase() === cleanName(b).toLowerCase();
+// `others` are the people already playing (leave out whoever is being renamed).
+export const nameTaken = (v, others = []) => (cleanName(v) ? (others || []).find((p) => sameName(p.name, v)) || null : null);
+export function nameProblem(v, others = []) {
   const n = cleanName(v);
   if (!n) return "Type your name.";
-  const parts = n.split(" ").filter((w) => /\p{L}/u.test(w));
-  if (parts.length < 2) return "Last name too, please — an initial is fine, like “Jo B.”";
-  if (parts[0].replace(/[^\p{L}]/gu, "").length < 2) return "That first name looks too short.";
-  return "";
+  const taken = nameTaken(n, others);
+  return taken ? `${taken.name} is already on Santa's list — add your last name or an initial, like “${n.split(" ")[0]} B.”` : "";
 }
 
 export const attr = (cond, name, value = "") => (cond ? ` ${name}${value !== "" ? `="${esc(value)}"` : ""}` : "");

@@ -88,11 +88,10 @@ const NAMES = ["Grandma Jo", "Uncle Bartholomew", "Aunt Marguerite-Rose", "Cousi
   console.log("Mini games");
   await host.evaluate(async () => {
     const D = await import("/js/data.js");
-    await D.act("miniAdd", { game: { name: "Snowball Toss", type: "h2h" } });
+    await D.act("miniAdd", { game: { name: "Snowball Toss", type: "h2h", tables: 3 } });
     await D.act("miniAdd", { game: { name: "Present Stack", type: "best", unit: "boxes" } });
   });
   const [g1, g2] = await host.evaluate(() => window.__G.S.minis.list.map((g) => g.id));
-  await act(host, "miniTables", { tables: "Table 1, Table 2, Table 3" });
   await act(host, "minisStart");
   await act(host, "miniPlay", { id: g1 });
   await act(host, "miniNext", { id: g1 });
@@ -105,7 +104,6 @@ const NAMES = ["Grandma Jo", "Uncle Bartholomew", "Aunt Marguerite-Rose", "Cousi
   for (const m of (await host.evaluate(() => window.__G.S.minis.list[0].matches.filter((x) => !x.winner))) ) await act(host, "miniMatch", { id: g1, matchId: m.id, winner: "team1" });
   await act(host, "miniFinish", { id: g1 });
   await act(host, "miniClose");
-  await act(host, "miniTables", { tables: "" });
   await act(host, "miniPlay", { id: g2 });
   for (let i = 0; i < 34; i++) { await act(host, "miniNext", { id: g2 }); await act(host, "miniScore", { id: g2, score: (i * 7) % 23 }); }
   await sleep(500);

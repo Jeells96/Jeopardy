@@ -515,8 +515,6 @@ input, textarea, select { font-family: var(--ui); }
 .pairf.warn { background: none; border: 0; margin: 0; padding: 0; }
 .pairf.warn input { border-color: #ff8b98; }
 .pairf.warn .ptag { color: #ff8b98; }
-.namenote { text-align: left; margin: 8px 0 0; }
-.hintnote { text-align: left; margin: 8px 0 0; background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.14); color: var(--muted); }
 .keys { display: grid; gap: 8px; }
 .keys div { display: flex; align-items: center; gap: 12px; }
 .keys kbd { min-width: 90px; }
@@ -967,6 +965,9 @@ select option { color: #10142e; background: #fff; }
 .minicard .drawtick input { width: 20px; height: 20px; flex: none; accent-color: var(--gold); }
 .minicard .drawtick small { color: var(--muted); }
 .minicard .small { font-size: 13px; line-height: 1.4; }
+.allgo { display: grid; gap: 6px; place-items: center; margin-top: 10px; }
+.allgo-big { font: 400 clamp(34px, 6vw, 86px)/1 var(--display); letter-spacing: 1px; color: var(--gold); text-shadow: 3px 3px 0 #000; }
+.allgo-sub { font: 700 clamp(14px, 1.8vw, 26px) var(--ui); color: #dfe4ff; }
 .tally-note { color: var(--muted); font: 600 15px var(--ui); margin-top: 4px; text-align: center; }
 .tally .t small { display: block; font: 600 13px var(--ui); color: var(--muted); }
 .newname { width: 100%; margin-bottom: 8px; font-size: 15px; padding: 11px 12px; }

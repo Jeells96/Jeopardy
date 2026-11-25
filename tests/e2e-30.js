@@ -84,7 +84,8 @@ const dump = async () => (await fetch(URL + "__fs/dump", { method: "POST" })).js
   }, sel);
   await Promise.all([...phones.map((p) => watch(p, ".buzz.live")), watch(board, ".status--open")]);
   // A's phone is on slow Wi-Fi: everything it sends takes an extra 450 ms.
-  await A.route("**/__fs/commit", async (route) => { await sleep(450); await route.continue(); });
+  // (if the phone has moved on by the time the delay is up, the request is already gone)
+  await A.route("**/__fs/commit", async (route) => { await sleep(450); try { await route.continue(); } catch { /* request gone */ } });
   const t0 = Date.now();
   // An eager player presses while the question is still being read: TOO SOON, locked out
   // for a quarter second, and the press doesn't count.
