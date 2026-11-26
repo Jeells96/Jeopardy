@@ -63,6 +63,7 @@ export function defaultState(keep = {}) {
     minis: freshMinis(),
     vote: freshVote(),
     loaded: null, // which question set from the library is on the board: { id, name, at }
+    draws: {},    // tie-breaks Jaren has drawn for a 🎟 scratch-it, keyed by award / game
     jStarted: false, // Jeopardy has been started at least once (so "Start" means resume)
     history: [],
     sfx: null,
@@ -1512,26 +1513,46 @@ export function nightAwards(s) {
   return out;
 }
 
-// The one person who won a mini game for their whole team — nobody for head-to-head,
-// where every matchup has its own winner.
-export function miniHero(g) {
-  if (!g || g.type === "h2h" || g.status !== "done" || !g.result || !TEAMS.includes(g.result.winner)) return null;
-  if (g.result.by) return g.result.by;
-  const top = miniStanding(g).sorted[0];
-  return top && top.team === g.result.winner ? { pid: top.pid, name: top.name, team: top.team } : null;
+// Who won a mini game for their whole team — nobody for head-to-head, where every matchup
+// has its own winner, and more than one when the top score is shared.
+export function miniHeroes(g) {
+  if (!g || g.type === "h2h" || g.status !== "done" || !g.result || !TEAMS.includes(g.result.winner)) return [];
+  if (g.result.by) return [g.result.by];
+  const sorted = miniStanding(g).sorted.filter((e) => e.team === g.result.winner);
+  if (!sorted.length) return [];
+  const best = sorted[0].score;
+  const seen = new Set();
+  return sorted.filter((e) => e.score === best && !seen.has(e.pid) && seen.add(e.pid)).map((e) => ({ pid: e.pid, name: e.name, team: e.team }));
 }
-// Everyone with a 🎟 scratch-it coming to them tonight, and what for.
+export const miniHero = (g) => { const all = miniHeroes(g); return all.length === 1 ? all[0] : null; };
+
+// There's only one scratch-it per award, so a tie waits for Jaren to draw for it on the
+// night — everyone gets to see they tied first, and the draw happens in front of them.
+export const PRIZE_SPIN_MS = 2400;
+export const prizeDraws = (s) => (s && s.draws) || {};
+// Every 🎟 on offer: what it's for, who's in line for it, and who got it.
+//   { key, what, among: [{pid,name,team}], winner | null, tied, at }
 export function scratchIts(s) {
+  const drawn = prizeDraws(s);
   const out = [];
-  for (const a of nightAwards(s)) {
-    if (a.prize) for (const w of a.winners) out.push({ pid: w.pid, name: w.name, team: w.team, what: `${a.icon} ${a.title}` });
-  }
-  for (const g of minisOf(s).list) {
-    if (!g.prize) continue;
-    const hero = miniHero(g);
-    if (hero) out.push({ pid: hero.pid, name: hero.name, team: hero.team, what: `🏆 ${g.name}` });
-  }
+  const add = (key, what, among) => {
+    if (!among.length) return;
+    const pick = among.length === 1 ? among[0] : among.find((p) => drawn[key] && p.pid === drawn[key].pid) || null;
+    out.push({ key, what, among, winner: pick || null, tied: among.length > 1, at: (drawn[key] && drawn[key].at) || 0 });
+  };
+  for (const a of nightAwards(s)) if (a.prize) add(a.id, `${a.icon} ${a.title}`, a.winners);
+  for (const g of minisOf(s).list) if (g.prize) add(`mini:${g.id}`, `🏆 ${g.name}`, miniHeroes(g));
   return out;
+}
+export const scratchIt = (s, key) => scratchIts(s).find((x) => x.key === key) || null;
+// Jaren draws for a tied scratch-it (and can draw again if he wants to).
+export function drawPrize(s, { key }, ctx) {
+  const row = scratchIt(s, key);
+  if (!row || !row.tied) return null;
+  const pick = row.among[Math.floor(random(ctx) * row.among.length)];
+  return builder(s, ctx)
+    .field("draws", { ...prizeDraws(s), [key]: { pid: pick.pid, name: pick.name, team: pick.team || null, at: ctx.now } })
+    .sfx("pick").done();
 }
 
 
@@ -1542,6 +1563,6 @@ export const ACTIONS = {
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
   miniSetTable, miniDrawRound, miniDrawStart, miniDrawCancel, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
-  miniTableAdd, miniTableRemove, setAward, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
+  miniTableAdd, miniTableRemove, setAward, drawPrize, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

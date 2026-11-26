@@ -103,13 +103,29 @@ function myNight(G) {
   ].join("") : "";
   // Awards this player won: one gold tag each (no run-on sentence).
   const won = mine.length ? `<div class="night-won"><div class="nw-head">🌟 You made the North Pole Awards! 🌟</div>
-      ${mine.map((a) => `<div class="nw-tag aw-${a.id}"><span>${a.icon}</span><b>${esc(a.title)}</b>${a.prize ? `<i class="nw-ticket">🎟</i>` : ""}</div>`).join("")}</div>` : "";
-  // 🎟 Scratch-its: what this player has coming to them.
-  const tickets = E.scratchIts(G.S).filter((x) => x.pid === G.deviceId);
-  const tix = tickets.length ? `<div class="ph-card ticket" data-key="tickets">
+      ${mine.map((a) => {
+        const row = E.scratchIt(G.S, a.id);
+        const tick = !row ? "" : row.winner && row.winner.pid === G.deviceId ? "🎟" : row.winner ? "" : "🎲";
+        return `<div class="nw-tag aw-${a.id}"><span>${a.icon}</span><b>${esc(a.title)}</b>${tick ? `<i class="nw-ticket">${tick}</i>` : ""}</div>`;
+      }).join("")}</div>` : "";
+  // 🎟 Scratch-its: what this player has coming to them — and any tie they're in.
+  const all = E.scratchIts(G.S);
+  const mineHere = (t) => t.among.some((w) => w.pid === G.deviceId);
+  const tickets = all.filter((t) => t.winner && t.winner.pid === G.deviceId);
+  const waiting = all.filter((t) => !t.winner && mineHere(t));
+  const lost = all.filter((t) => t.winner && t.tied && t.winner.pid !== G.deviceId && mineHere(t));
+  const tix = `${tickets.length ? `<div class="ph-card ticket" data-key="tickets">
       <div class="big-emoji">🎟</div><h2>${tickets.length === 1 ? "A scratch-it for you!" : `${tickets.length} scratch-its for you!`}</h2>
-      <p>${tickets.map((t) => esc(t.what)).join(" · ")}</p><small class="muted">See Jaren to claim ${tickets.length === 1 ? "it" : "them"}.</small>
-    </div>` : "";
+      <p>${tickets.map((t) => esc(t.what) + (t.tied ? " <small>(won the draw!)</small>" : "")).join(" · ")}</p>
+      <small class="muted">See Jaren to claim ${tickets.length === 1 ? "it" : "them"}.</small>
+    </div>` : ""}${waiting.length ? `<div class="ph-card ticket tied" data-key="tiewait">
+      <div class="big-emoji">🎲</div><h2>It's a tie!</h2>
+      <p>${waiting.map((t) => `${esc(t.what)} <small>— you and ${t.among.length - 1} other${t.among.length === 2 ? "" : "s"}</small>`).join("<br>")}</p>
+      <small class="muted">One scratch-it, so Jaren draws for it — watch the big screen.</small>
+    </div>` : ""}${lost.length ? `<div class="ph-card ticket lost" data-key="tielost">
+      <div class="big-emoji">🎲</div><h2>So close!</h2>
+      <p>${lost.map((t) => `${esc(t.what)} <small>— the draw went to ${esc(t.winner.name)}</small>`).join("<br>")}</p>
+    </div>` : ""}`;
   const night = `<div class="ph-card night" data-key="night">
     <div class="lbl">📜 Your Nice List report</div>
     ${stats ? `<div class="night-stats">${stats}</div>` : `<p class="muted">Santa didn't catch you buzzing in this year — there's always next Christmas! 🎅</p>`}

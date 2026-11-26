@@ -95,7 +95,7 @@ function kicker(M, g) {
   return `Mini game ${i} of ${M.list.length} · ${typeLabel(g)} · ${prize(g)}`;
 }
 // A name that shuffles through the candidates, then lands on the pick (driven by app.js tick()).
-function spin(names, final, at, extra = "") {
+export function spin(names, final, at, extra = "") {
   // --len lets the CSS shrink long names to fit instead of cutting them off.
   return `<span class="${cls("spin", extra)}" style="--len:${Math.max(7, String(final).length)}" data-keep data-spin="${J(names.slice(0, 40))}" data-until="${(at || 0) + E.SPIN_MS}" data-final="${esc(final)}">${esc(final)}</span>`;
 }
@@ -622,7 +622,7 @@ export function minisTab(G) {
         <label class="timertick"><input type="checkbox"${g.timed ? " checked" : ""} data-change="mini-timed" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-timed"><span>⏱ Timer</span></label>
         ${g.timed ? `<label class="pts secs"><input type="number" inputmode="numeric" min="5" max="3600" value="${g.seconds}" aria-label="Seconds on the clock" ${field(g, "seconds")}><span>seconds <small>(${timerLabel(g)})</small></span></label>` : `<span class="muted small">Tick it for a game played against the clock</span>`}
       </div>`}
-      ${g.type === "h2h" ? "" : `<label class="mini-row drawtick prizetick"><input type="checkbox"${g.prize ? " checked" : ""} data-change="mini-prize" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-prize"><span>🎟 Scratch-it <small>— for whoever wins it for their team</small></span></label>`}
+      ${g.type === "h2h" || isDraw(g) ? "" : `<label class="mini-row drawtick prizetick"><input type="checkbox"${g.prize ? " checked" : ""} data-change="mini-prize" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-prize"><span>🎟 Scratch-it <small>— for whoever wins it for their team</small></span></label>`}
       ${isDraw(g) || g.type === "all" ? "" : `<label class="mini-row drawtick"><input type="checkbox"${(g.tables || 1) > 1 ? " checked" : ""} data-change="mini-tables" data-id="${esc(g.id)}" data-key="mf-${esc(g.id)}-tables"><span>⏩ Two tables at once <small>— ${(g.tables || 1) > 2 ? `played at ${g.tables} tables at the same time` : "the same game runs at both tables, so you get through it twice as fast"}</small></span></label>`}
       <textarea class="desc auto" rows="1" maxlength="240" placeholder="How to play (shown on the big screen) — optional" aria-label="How to play" ${field(g, "desc")}>${esc(g.desc)}</textarea>
       <div class="mini-row foot">${state}<span class="grow"></span>

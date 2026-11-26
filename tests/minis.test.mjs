@@ -867,8 +867,8 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
     if (i < 3) w.run("miniNext", { id: best });
   }
   w.run("miniFinish", { id: best });
-  const hero = E.miniHero(w.game(2));
-  ok(hero && hero.team === w.game(2).result.winner, `best overall: the top score wins the scratch-it (${hero && hero.name})`);
+  const heroes = E.miniHeroes(w.game(2));
+  ok(heroes.length && heroes.every((h) => h.team === w.game(2).result.winner), `best overall: the top score wins the scratch-it (${heroes.map((h) => h.name).join(" & ")})`);
   // head-to-head: nobody, even if someone ticked it
   w.run("miniPlay", { id: h2h });
   w.run("miniNext", { id: h2h });
@@ -877,7 +877,22 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq(E.miniHero(w.game(0)), null, "head-to-head: no single winner, so no scratch-it");
   const tix = E.scratchIts(w.state);
   eq(tix.map((t) => t.what).sort(), ["🏆 Speed Wrap", "🏆 Tug of War"], "the host's list has one per game that was ticked");
-  ok(tix.some((t) => t.name === "Wife1"), "…by name");
+  ok(tix.some((t) => t.winner && t.winner.name === "Wife1"), "…by name");
+  // Two people share the best score: the scratch-it waits for Jaren to draw for it.
+  const t2 = world(roster(2, 2), 8);
+  const bid = t2.add({ name: "Ring Toss", type: "best", points: 100, prize: true });
+  t2.run("minisStart");
+  t2.run("miniPlay", { id: bid });
+  for (let i = 0; i < 4; i++) {
+    t2.run("miniNext", { id: bid });
+    for (const t of E.turnsOf(t2.game())) t2.run("miniScore", { id: bid, turnId: t.id, score: t.team === "team1" ? 9 : 5 });
+  }
+  t2.run("miniFinish", { id: bid });
+  const row = E.scratchIts(t2.state)[0];
+  eq([row.tied, row.winner, row.among.length], [true, null, 2], "both husbands threw 9 — nobody has the scratch-it yet");
+  t2.run("drawPrize", { key: row.key });
+  const after = E.scratchIts(t2.state)[0];
+  ok(after.winner && row.among.some((x) => x.pid === after.winner.pid), `🎲 Jaren draws and it's ${after.winner.name}'s`);
   // untick it and it's off the list
   w.run("miniUpdate", { id: all, patch: { prize: false } });
   eq(E.scratchIts(w.state).length, 1, "unticking 🎟 takes it off the list");

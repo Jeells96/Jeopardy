@@ -240,10 +240,20 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(await host.$eval('.awrow[data-key="aw-art"] input[data-change="award-prize"]', (e) => e.disabled), "an award that's switched off can't have a scratch-it on it");
   await host.check('input[data-change="award-prize"][data-id="brain"]');
   await host.check('input[data-change="award-prize"][data-id="fast"]');
-  await until(host, () => (window.__G.S.settings.awardPrize || []).length === 2);
-  ok(true, "the host ticks the two awards he's handing a scratch-it to");
+  await host.check('input[data-change="award-prize"][data-id="minis"]');
+  await until(host, () => (window.__G.S.settings.awardPrize || []).length === 3);
+  ok(true, "the host ticks the awards he's handing a scratch-it to");
   await shot(host, "u08b-settings-awards");
   await host.keyboard.press("Escape");
+  // two people win a mini game each → a tie for 🏆 North Pole Champ, which has a 🎟 on it
+  const pid = (n) => host.evaluate((x) => window.__G.P.find((p) => p.name.startsWith(x)).id, n);
+  for (const [name, who] of [["Snow Shovel", "Ann Bell"], ["Cocoa Chug", "Bob"]]) {
+    await act(host, "miniAdd", { game: { name, type: "all", points: 100 } });
+    const gid = await host.evaluate((n) => window.__G.S.minis.list.find((g) => g.name === n).id, name);
+    await act(host, "miniPlay", { id: gid });
+    await act(host, "miniFinish", { id: gid, winner: who === "Bob" ? "team2" : "team1", pid: await pid(who) });
+  }
+  await until(host, () => window.__G.S.minis.list.every((g) => g.status === "done"));
   await act(host, "endGame");
   await until(board, () => document.querySelectorAll(".awards .award").length >= 3);
   const awardsTxt = await board.textContent(".awards");
@@ -256,7 +266,7 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   const fits = await board.evaluate(() => { const m = document.querySelector(".stage-main").getBoundingClientRect(); return [...document.querySelectorAll(".award, .aw-head, .over-title, .os")].every((el) => { const r = el.getBoundingClientRect(); return r.top >= m.top - 1 && r.bottom <= m.bottom + 1; }); });
   ok(fits, "winner, scores and awards all fit on the board");
   ok(!awardsTxt.includes("Sketch Artist"), "an award the host switched off isn't given");
-  ok((await board.$$(".award .aw-prize")).length === 2, "the two he ticked say Scratch-it! on the board");
+  ok((await board.$$(".award .aw-prize")).length === 3, "every award he ticked says so on the board");
   const dupe = await board.evaluate(() => {
     const names = [...document.querySelectorAll(".award .aw-name")].map((el) => el.textContent.trim());
     return names.length !== new Set(names).size;
@@ -269,6 +279,31 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   ok(night.includes("You made the North Pole Awards") && (await P.Ann.textContent(".night-won .nw-tag")).includes("Head Elf"), "…with a gold tag for each award that player won (one per line)");
   ok((await P.Ann.$$(".ph-awards .pa-row")).length >= 3, "phones list all of the night's awards");
   ok((await P.Ann.textContent(".ph-card.ticket")).includes("scratch-it"), "a winner's phone tells them they've got a scratch-it coming");
+
+  // ---- a tie for a scratch-it waits for Jaren, in front of everybody ----
+  const tie = await host.evaluate(async () => {
+    const E2 = await import("/js/engine.js");
+    const t = E2.scratchIts(window.__G.S).find((x) => x.tied);
+    return t ? { key: t.key, among: t.among.map((w) => w.name) } : null;
+  });
+  ok(tie && tie.among.length === 2, `two people tied for the 🏆 North Pole Champ scratch-it (${tie && tie.among.join(" & ")})`);
+  ok((await board.textContent(".awards")).includes("Tied"), "the board says they tied — the website doesn't quietly pick one");
+  ok((await P.Ann.textContent(".ph-card.ticket.tied")).includes("It's a tie"), "a tied player's phone says Jaren is drawing for it");
+  await shot(board, "u09b-board-tied");
+  ok((await host.textContent(".r-panel")).includes("Draw for it"), "the host gets a 🎲 Draw for it button");
+  await host.locator('.tk-row.tied .btn:has-text("Draw for it")').click();
+  await until(board, (k) => !!(window.__G.S.draws || {})[k], tie.key, 8000);
+  const won = await host.evaluate((k) => window.__G.S.draws[k].name, tie.key);
+  ok(tie.among.includes(won), `🎲 the draw lands on one of them (${won})`);
+  await until(board, () => !!document.querySelector(".aw-prize.won"));
+  await sleep(2800);
+  ok((await board.textContent(".aw-prize.won")).includes(won), "…and the board lands on their name after the drum roll");
+  await shot(board, "u09c-board-tie-drawn");
+  const after = await host.textContent(".r-panel");
+  ok(after.includes(won) && !after.includes("Draw for it"), "the host's list now says who to hand that one to");
+  const loser = tie.among.find((n) => n !== won);
+  const loserPage = Object.values(P).find((pg) => pg.name && loser.startsWith(pg.name));
+  if (loserPage) ok((await loserPage.textContent(".ph-card.ticket.lost")).includes(won), "the one who missed out is told where it went");
   await shot(P.Ann, "u10-phone-your-night");
   await P.Ann.evaluate(() => window.scrollTo(0, 9999));
   await shot(P.Ann, "u11-phone-awards");

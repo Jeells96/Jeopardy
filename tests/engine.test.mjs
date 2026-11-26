@@ -460,8 +460,25 @@ console.log("engine tests");
   const off = { ...night, settings: { awardsOff: ["bold", "fast"], awardPrize: ["brain"] } };
   eq(E.nightAwards(off).map((a) => a.id), ["brain", "earn"], "switched-off awards aren't given");
   ok(E.nightAwards(off)[0].prize && !E.nightAwards(off)[1].prize, "…and only the ticked one comes with a scratch-it");
-  eq(E.scratchIts(off).map((x) => [x.name, x.what]), [["Al", "🧝 Head Elf"]], "the host's scratch-it list says who gets one and why");
+  eq(E.scratchIts(off).map((x) => [x.winner.name, x.what, x.tied]), [["Al", "🧝 Head Elf", false]], "the host's scratch-it list says who gets one and why");
   eq(E.scratchIts(night), [], "no scratch-its unless the host ticks for them");
+  // A tie waits for Jaren: everyone sees they tied, and he draws for it in front of them.
+  const tie = { history: [H("a", "Al", "team1", 100, 300), H("b", "Bea", "team2", 100, 300), H("c", "Cat", "team2", 100, 300)],
+    settings: { awardsOff: ["fast", "earn", "bold"], awardPrize: ["brain"] } };
+  const row = E.scratchIts(tie)[0];
+  eq([row.key, row.among.map((x) => x.name), row.winner, row.tied], ["brain", ["Al", "Bea", "Cat"], null, true], "three tied for the Head Elf scratch-it — nothing is decided");
+  const drawn = {};
+  for (let i = 0; i < 60; i++) {
+    const ch = E.ACTIONS.drawPrize(tie, { key: "brain" }, { now: 5000 + i, rand: Math.random });
+    drawn[ch.set.draws.brain.name] = true;
+    if (i === 0) eq(ch.set.sfx.sound, "pick", "…the draw gets the drum roll");
+  }
+  eq(Object.keys(drawn).sort(), ["Al", "Bea", "Cat"], "🎲 the draw can land on any of them");
+  const after = { ...tie, draws: { brain: { pid: "b", name: "Bea", team: "team2", at: 9000 } } };
+  const won = E.scratchIts(after)[0];
+  eq([won.winner.name, won.tied, won.among.length], ["Bea", true, 3], "once he's drawn, the scratch-it is Bea's (and it still says who she beat)");
+  ok(!!E.ACTIONS.drawPrize(after, { key: "brain" }, { now: 9100, rand: Math.random }), "he can draw again if he wants to");
+  ok(!E.ACTIONS.drawPrize(off, { key: "brain" }, { now: 1, rand: Math.random }), "nothing to draw for when only one person won it");
   const two = E.nightAwards({ ...night, settings: { awardPrize: ["brain", "earn"] } });
   ok(two.every((a) => (["brain", "earn"].includes(a.id) ? a.prize : !a.prize)), "a host can hand out several");
   const crowd = { history: ["a", "b", "c", "d"].map((p) => H(p, p, "team1", 100, 300)) };

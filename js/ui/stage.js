@@ -2,7 +2,7 @@
 // podiums and lobby. Used by the projector board and the host console.
 import { esc, money, cls, verb, possessive } from "./util.js";
 import * as E from "../engine.js";
-import { minisStage } from "./minis.js";
+import { minisStage, spin } from "./minis.js";
 
 export const tn = (G, t) => E.teamName(G.S || {}, t);
 export const findQ = (G, id) => G.Q.find((q) => q.id === id) || null;
@@ -290,6 +290,16 @@ function overView(G) {
 }
 
 // The North Pole Awards (Head Elf, Fastest Reindeer, …), revealed one after another.
+// The 🎟 on an award: a tie waits for Jaren, and his draw lands on a name in front of
+// everyone (the same drum-roll reel the mini games use).
+export function prizeTag(G, key) {
+  const row = E.scratchIt(G.S, key);
+  if (!row) return "";
+  if (!row.tied) return `<div class="aw-prize">🎟 Scratch-it!</div>`;
+  if (!row.winner) return `<div class="aw-prize tie">🎲 Tied — one scratch-it to draw for</div>`;
+  const names = row.among.map((w) => w.name);
+  return `<div class="aw-prize won" data-key="pd-${esc(key)}-${row.at}">🎟 ${spin(names, row.winner.name, row.at - E.SPIN_MS + E.PRIZE_SPIN_MS)}</div>`;
+}
 export const winnerNames = (G, a) => a.winners.map((w) => ((G.P.find((p) => p.id === w.pid) || {}).name || w.name)).join(" & ");
 export function awards(G, { cls: extra = "" } = {}) {
   const list = E.nightAwards(G.S);
@@ -298,7 +308,7 @@ export function awards(G, { cls: extra = "" } = {}) {
     <div class="${cls("awards", list.length > 4 && "many")}">${list.map((a, i) => `<div class="award" style="animation-delay:${(0.6 + i * 0.45).toFixed(2)}s" data-key="aw-${a.id}">
       <div class="aw-ico">${a.icon}</div><div class="aw-title">${esc(a.title)}</div>
       <div class="${cls("aw-name", a.winners.length === 1 && a.winners[0].team)}">${esc(winnerNames(G, a))}</div><div class="aw-detail">${esc(a.detail)}</div>
-      ${a.prize ? `<div class="aw-prize">🎟 Scratch-it!</div>` : ""}</div>`).join("")}</div></div>`;
+      ${a.prize ? prizeTag(G, a.id) : ""}</div>`).join("")}</div></div>`;
 }
 
 // ---------------- podiums ----------------

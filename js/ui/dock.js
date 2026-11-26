@@ -258,17 +258,25 @@ export function hostSteps(G, { privateView = false } = {}) {
   return { status, panel, buttons: B };
 }
 
-// 🎟 Who to hand a scratch-it to, and what for — one line per person.
+// 🎟 Who to hand a scratch-it to, and what for. A tie is listed as a tie until Jaren
+// draws for it — one tap, in front of everybody.
 function ticketPanel(G) {
   const tix = E.scratchIts(G.S);
   if (!tix.length) return "";
-  const by = new Map();
-  for (const t of tix) by.set(t.pid, [...(by.get(t.pid) || []), t.what]);
-  const name = (pid, fallback) => ((G.P.find((p) => p.id === pid) || {}).name || fallback);
-  return `<div class="tickets"><div class="tk-head">🎟 Scratch-its to hand out <small>(${tix.length})</small></div>
-    ${[...by.entries()].map(([pid, what]) => {
-      const who = tix.find((t) => t.pid === pid);
-      return `<div class="tk-row" data-key="tk-${esc(pid)}"><b>${esc(name(pid, who.name))}</b><span>${what.map(esc).join(" · ")}</span><i>${what.length} 🎟</i></div>`;
+  const name = (w) => ((G.P.find((p) => p.id === w.pid) || {}).name || w.name);
+  const settled = tix.filter((t) => t.winner);
+  return `<div class="tickets"><div class="tk-head">🎟 Scratch-its to hand out <small>(${settled.length} of ${tix.length})</small></div>
+    ${tix.map((t) => {
+      const draw = `data-action="act" data-p="${esc(JSON.stringify({ name: "drawPrize", p: { key: t.key } }))}"`;
+      if (!t.tied) return `<div class="tk-row" data-key="tk-${esc(t.key)}"><b>${esc(name(t.winner))}</b><span>${esc(t.what)}</span><i>🎟</i></div>`;
+      if (!t.winner) {
+        return `<div class="tk-row tied" data-key="tk-${esc(t.key)}"><b>${t.among.length} tied</b>
+          <span>${esc(t.what)} — ${t.among.map((w) => esc(name(w))).join(", ")}</span>
+          <button class="btn primary sm" ${draw}>🎲 Draw for it</button></div>`;
+      }
+      return `<div class="tk-row" data-key="tk-${esc(t.key)}"><b>${esc(name(t.winner))}</b>
+        <span>${esc(t.what)} <small class="muted">— drawn from ${t.among.length}</small></span>
+        <button class="btn ghost sm" ${draw} title="Draw again">🎲</button></div>`;
     }).join("")}</div>`;
 }
 

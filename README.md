@@ -65,10 +65,12 @@ points go straight onto the team's score and carry into Jeopardy.
   🏆 North Pole Champ (the board says "Won for the Wives by Liz Eells"). There are still
   plain **🏆 Husbands / 🏆 Wives (whole team)** buttons when nobody stood out.
 - **🎟 Scratch-it for the winner:** tick 🎟 on a game and whoever wins it for their team gets
-  a scratch-it — the person you tapped on an **Everyone at once** game, the top score on a
-  **Best overall** game, the best drawing in **Blind Drawing**. Head-to-head games don't have
-  it (every matchup has its own winner), and it all lands in the same **🎟 Scratch-its to hand
-  out** list in your controls at the end of the night.
+  a scratch-it — the person you tapped on an **Everyone at once** game, or the top score on a
+  **Best overall** game. Head-to-head games don't have it (every matchup has its own winner),
+  and neither does **Blind Drawing** — that prize is 🎨 Santa's Sketch Artist in the awards
+  list, so it's only in one place. If two people share the top score, it's a tie and you
+  draw for it the same way. It all lands in the same **🎟 Scratch-its to hand out** list in
+  your controls at the end of the night.
 - **⏱ Played against the clock?** Tick **⏱ Timer** on the game in Settings → Mini games and
   type the seconds (it shows you the time, e.g. `0:45`). **You** start it: your controls get
   **⏱ Start the timer (0:45)** (keyboard **K**). The countdown then shows big on the
@@ -281,8 +283,13 @@ switch off phone renaming there too.
   box for each one. Untick it and it isn't given at all.
 - **🎟 Scratch-its:** tick the 🎟 next to an award and its winner gets a scratch-it — the gift
   tag on the board says **🎟 Scratch-it!**, their phone opens with "🎟 A scratch-it for you!",
-  and your own controls list **who to hand one to, and what for** (one line per person, so a
-  double winner is one line with two tickets).
+  and your own controls list **who to hand one to, and what for**.
+- **Tied for a scratch-it?** Nothing is decided behind the scenes: the board says
+  **🎲 Tied — one scratch-it to draw for**, the tied players' phones say "It's a tie! …
+  Jaren draws for it — watch the big screen", and your list shows **2 tied** with a
+  **🎲 Draw for it** button. Tap it when the room is watching: the names shuffle on the big
+  screen with the drum roll and land on one of them, their phone says "A scratch-it for you!
+  (won the draw!)" and the other's says where it went. Tap 🎲 again if you want to redraw.
 - Every phone gets a **"📜 Your Nice List report"**: right answers, misses, money won for the
   team, fastest buzz, mini-game wins and best drawing — then "🌟 You made the North Pole
   Awards!" with a gold tag for each award that player won — plus the full list of awards.
