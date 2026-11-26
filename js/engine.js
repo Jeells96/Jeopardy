@@ -23,6 +23,8 @@ export const DEFAULT_SETTINGS = {
   playersRename: true,    // players may rename their own team before Jeopardy starts
   pairUp: true,           // mini games: couples (1a / 1b in Settings → Players) face each other
   announce: true,         // mini games: read "who's up next" out loud on the screen with sound on
+  awardsOff: [],          // North Pole Awards the host has switched off
+  awardPrize: [],         // …and the ones whose winner gets a 🎟 scratch-it
 };
 
 export const DEFAULT_NAMES = { team1: "Husbands", team2: "Wives" };
@@ -744,6 +746,8 @@ function cleanMini(src) {
     // Played at this many tables at the same time, to get through it faster. Blind drawing
     // and "everyone at once" games are played by everybody together, so they have one spot.
     tables: mode === "draw" || type === "all" ? 1 : clamp(Math.round(Number(src.tables)) || 1, [1, MAX_TABLES]),
+    // 🎟 a scratch-it for whoever wins it (only where one person wins it for their team)
+    prize: type !== "h2h" && !!src.prize,
   };
 }
 
@@ -1448,12 +1452,38 @@ export function playerStats(s) {
 // The awards, best first: { id, icon, title, detail, winners: [{ pid, name, team }] }.
 // (The North Pole Awards: Head Elf, Fastest Reindeer, …) Only awards somebody actually earned are listed (and not when more than 3 people tie —
 // then it isn't much of an award).
+// Every award, in the order they're revealed. The host can switch any of them off, and
+// say which ones come with a 🎟 scratch-it (⚙ Settings → Game → North Pole Awards).
+export const AWARDS = [
+  { id: "brain", icon: "🧝", title: "Head Elf", about: "most right answers" },
+  { id: "fast", icon: "🦌", title: "Fastest Reindeer", about: "quickest winning buzz" },
+  { id: "earn", icon: "💰", title: "Christmas Bonus", about: "most money won" },
+  { id: "minis", icon: "🏆", title: "North Pole Champ", about: "most mini-game wins" },
+  { id: "art", icon: "🎨", title: "Santa's Sketch Artist", about: "best Blind Drawing" },
+  { id: "bold", icon: "🪨", title: "Naughty List", about: "most wrong or unanswered" },
+  { id: "sweater", icon: "🧶", title: "Ugliest Sweater", about: "the vote" },
+];
+export const awardById = (id) => AWARDS.find((a) => a.id === id) || null;
+export const awardOn = (s, id) => !(((s && s.settings && s.settings.awardsOff) || []).includes(id));
+export const awardPrize = (s, id) => ((s && s.settings && s.settings.awardPrize) || []).includes(id);
+// Switch an award off, or say its winner gets a scratch-it.
+export function setAward(s, { id, on, prize }, ctx) {
+  if (!awardById(id)) return null;
+  const st = { ...DEFAULT_SETTINGS, ...(s.settings || {}) };
+  const next = { ...st };
+  if (on !== undefined) next.awardsOff = on ? (st.awardsOff || []).filter((x) => x !== id) : [...new Set([...(st.awardsOff || []), id])];
+  if (prize !== undefined) next.awardPrize = prize ? [...new Set([...(st.awardPrize || []), id])] : (st.awardPrize || []).filter((x) => x !== id);
+  return builder(s, ctx).field("settings", next).done();
+}
+
 export function nightAwards(s) {
   const rows = Object.values(playerStats(s));
   const out = [];
-  const add = (id, icon, title, list, detail) => {
-    if (!list.length || list.length > 3) return;
-    out.push({ id, icon, title, detail, winners: list.map((r) => ({ pid: r.pid, name: r.name, team: r.team })) });
+  // One person can win several — being the Head Elf doesn't rule you out of anything else.
+  const add = (id, list, detail) => {
+    const a = awardById(id);
+    if (!a || !list.length || list.length > 3 || !awardOn(s, id)) return;
+    out.push({ id, icon: a.icon, title: a.title, detail, prize: awardPrize(s, id), winners: list.map((r) => ({ pid: r.pid, name: r.name, team: r.team })) });
   };
   const most = (key, min = 1) => {
     const top = Math.max(0, ...rows.map((r) => r[key] || 0));
@@ -1462,27 +1492,48 @@ export function nightAwards(s) {
   const mon = (n) => "$" + Math.abs(n).toLocaleString("en-US");
   const brain = most("right");
   const brainBest = brain.length > 1 ? brain.filter((r) => r.earned === Math.max(...brain.map((x) => x.earned))) : brain;
-  add("brain", "🧝", "Head Elf", brainBest, brain.length ? `${brain[0].right} right answer${brain[0].right === 1 ? "" : "s"}` : "");
+  add("brain", brainBest, brain.length ? `${brain[0].right} right answer${brain[0].right === 1 ? "" : "s"}` : "");
   const fastest = Math.min(Infinity, ...rows.filter((r) => r.fast != null).map((r) => r.fast));
-  add("fast", "🦌", "Fastest Reindeer", Number.isFinite(fastest) ? rows.filter((r) => r.fast === fastest) : [], Number.isFinite(fastest) ? `${(fastest / 1000).toFixed(2)}s buzz` : "");
-  // (Big earner only when it isn't simply the Brainiac again.)
+  add("fast", Number.isFinite(fastest) ? rows.filter((r) => r.fast === fastest) : [], Number.isFinite(fastest) ? `${(fastest / 1000).toFixed(2)}s buzz` : "");
   const earn = most("earned");
-  const same = (a, b) => a.length === b.length && a.every((r) => b.includes(r));
-  if (!same(earn, brainBest)) add("earn", "💰", "Christmas Bonus", earn, earn.length ? `won ${mon(earn[0].earned)}` : "");
+  add("earn", earn, earn.length ? `won ${mon(earn[0].earned)}` : "");
   const mvp = most("minis");
-  add("minis", "🏆", "North Pole Champ", mvp, mvp.length ? `${mvp[0].minis} mini-game win${mvp[0].minis === 1 ? "" : "s"}` : "");
+  add("minis", mvp, mvp.length ? `${mvp[0].minis} mini-game win${mvp[0].minis === 1 ? "" : "s"}` : "");
   const art = rows.filter((r) => r.drawing != null);
   const bestArt = Math.max(-1, ...art.map((r) => r.drawing));
-  add("art", "🎨", "Santa's Sketch Artist", bestArt > 0 ? art.filter((r) => r.drawing === bestArt) : [], bestArt > 0 ? `${bestArt}% match drawing` : "");
+  add("art", bestArt > 0 ? art.filter((r) => r.drawing === bestArt) : [], bestArt > 0 ? `${bestArt}% match drawing` : "");
   // A lump of coal for the most wrong or unanswered questions (buzzed in, then ran out of time).
   const coal = most("wrong");
   const coalWhy = (r) => [r.wrong - r.unanswered ? `${r.wrong - r.unanswered} wrong` : "", r.unanswered ? `${r.unanswered} unanswered` : ""].filter(Boolean).join(" · ");
-  add("bold", "🪨", "Naughty List", coal, coal.length === 1 ? coalWhy(coal[0]) : coal.length ? `${coal[0].wrong} wrong or unanswered` : "");
+  add("bold", coal, coal.length === 1 ? coalWhy(coal[0]) : coal.length ? `${coal[0].wrong} wrong or unanswered` : "");
   const V = voteOf(s);
   const crowned = V.stage === "reveal" ? voteResults(s).winners : V.last || [];
-  if (crowned.length) add("sweater", "🧶", "Ugliest Sweater", crowned.map((w) => ({ pid: w.pid, name: w.name, team: null })), `${crowned[0].votes} vote${crowned[0].votes === 1 ? "" : "s"}`);
+  if (crowned.length) add("sweater", crowned.map((w) => ({ pid: w.pid, name: w.name, team: null })), `${crowned[0].votes} vote${crowned[0].votes === 1 ? "" : "s"}`);
   return out;
 }
+
+// The one person who won a mini game for their whole team — nobody for head-to-head,
+// where every matchup has its own winner.
+export function miniHero(g) {
+  if (!g || g.type === "h2h" || g.status !== "done" || !g.result || !TEAMS.includes(g.result.winner)) return null;
+  if (g.result.by) return g.result.by;
+  const top = miniStanding(g).sorted[0];
+  return top && top.team === g.result.winner ? { pid: top.pid, name: top.name, team: top.team } : null;
+}
+// Everyone with a 🎟 scratch-it coming to them tonight, and what for.
+export function scratchIts(s) {
+  const out = [];
+  for (const a of nightAwards(s)) {
+    if (a.prize) for (const w of a.winners) out.push({ pid: w.pid, name: w.name, team: w.team, what: `${a.icon} ${a.title}` });
+  }
+  for (const g of minisOf(s).list) {
+    if (!g.prize) continue;
+    const hero = miniHero(g);
+    if (hero) out.push({ pid: hero.pid, name: hero.name, team: hero.team, what: `🏆 ${g.name}` });
+  }
+  return out;
+}
+
 
 export const ACTIONS = {
   startGame, setControl, startRound2, pickClue, unpickClue, setDDTeam, lockDDWager, openBuzzers,
@@ -1491,6 +1542,6 @@ export const ACTIONS = {
   finalRevealClue, finalWagerUndo, finalAnswer, finalLock, finalJudge, finalFinish, endGame,
   setTeamName, setSettings, newGame, setLoaded, leaveJeopardy, leaveMinis,
   miniSetTable, miniDrawRound, miniDrawStart, miniDrawCancel, miniDrawSubmitted, miniDrawJudge, voteSetup, voteToggle, voteOpen, castVote, voteReveal, voteBack,
-  miniTableAdd, miniTableRemove, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
+  miniTableAdd, miniTableRemove, setAward, miniTimerStart, miniTimerStop, miniTimerDone, miniAdd, miniUpdate, miniRemove, miniMove, miniReset, minisStart, minisEnd, miniPlay, miniClose,
   miniNext, miniRepick, miniSetPlayer, miniMatch, miniMatchRemove, miniScore, miniEntryRemove, miniFinish,
 };

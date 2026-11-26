@@ -428,7 +428,7 @@ console.log("engine tests");
   const byId = (id) => aw.find((a) => a.id === id);
   eq(byId("brain").winners.map((w) => w.name), ["Ann"], "Head Elf: most right answers");
   eq([byId("fast").winners[0].name, byId("fast").detail], ["Bob", "0.09s buzz"], "Fastest Reindeer: the quickest winning buzz");
-  ok(!byId("earn"), "no Christmas Bonus when it's just the Head Elf again");
+  eq(byId("earn").winners.map((w) => w.name), ["Ann"], "one person can win several — the Head Elf takes the Christmas Bonus too");
   eq([byId("bold").icon, byId("bold").winners.map((w) => w.name), byId("bold").detail], ["🪨", ["Bob"], "1 wrong"], "Naughty List: a lump of coal for the most wrong answers");
   ok(!byId("minis") && !byId("art"), "no mini-game awards without mini games");
   // Undo takes the stat back with the points
@@ -455,7 +455,15 @@ console.log("engine tests");
   aw = E.nightAwards(night);
   eq(aw.map((a) => [a.id, a.winners.map((x) => x.name).join("&"), a.detail]),
     [["brain", "Al", "2 right answers"], ["fast", "Bea", "0.21s buzz"], ["earn", "Bea", "won $500"], ["bold", "Cat", "1 wrong · 1 unanswered"]],
-    "Head Elf, Fastest Reindeer, Christmas Bonus (someone else) and Naughty List");
+    "Head Elf, Fastest Reindeer, Christmas Bonus and Naughty List");
+  // the host switches awards off and puts a 🎟 scratch-it on the ones he's handing out
+  const off = { ...night, settings: { awardsOff: ["bold", "fast"], awardPrize: ["brain"] } };
+  eq(E.nightAwards(off).map((a) => a.id), ["brain", "earn"], "switched-off awards aren't given");
+  ok(E.nightAwards(off)[0].prize && !E.nightAwards(off)[1].prize, "…and only the ticked one comes with a scratch-it");
+  eq(E.scratchIts(off).map((x) => [x.name, x.what]), [["Al", "🧝 Head Elf"]], "the host's scratch-it list says who gets one and why");
+  eq(E.scratchIts(night), [], "no scratch-its unless the host ticks for them");
+  const two = E.nightAwards({ ...night, settings: { awardPrize: ["brain", "earn"] } });
+  ok(two.every((a) => (["brain", "earn"].includes(a.id) ? a.prize : !a.prize)), "a host can hand out several");
   const crowd = { history: ["a", "b", "c", "d"].map((p) => H(p, p, "team1", 100, 300)) };
   ok(!E.nightAwards(crowd).some((a) => a.id === "brain" || a.id === "fast"), "no award when more than 3 people tie for it");
   // mini games: head-to-head wins, best overall, drawing

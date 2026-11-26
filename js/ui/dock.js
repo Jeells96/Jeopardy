@@ -250,11 +250,26 @@ export function hostSteps(G, { privateView = false } = {}) {
     const sc = S.scores;
     const champ = tn(G, sc.team1 > sc.team2 ? "team1" : "team2");
     status = sc.team1 === sc.team2 ? "It's a tie!" : `🏆 ${esc(champ)} ${verb(champ, "wins", "win")}!`;
+    panel = ticketPanel(G);
     btn("🧶 Ugly sweater vote", "act", act("voteSetup"), "primary", "");
     btn("🎄 New game", "confirm", { what: "newGame" }, "ghost", "");
     return { status, panel, buttons: B };
   }
   return { status, panel, buttons: B };
+}
+
+// 🎟 Who to hand a scratch-it to, and what for — one line per person.
+function ticketPanel(G) {
+  const tix = E.scratchIts(G.S);
+  if (!tix.length) return "";
+  const by = new Map();
+  for (const t of tix) by.set(t.pid, [...(by.get(t.pid) || []), t.what]);
+  const name = (pid, fallback) => ((G.P.find((p) => p.id === pid) || {}).name || fallback);
+  return `<div class="tickets"><div class="tk-head">🎟 Scratch-its to hand out <small>(${tix.length})</small></div>
+    ${[...by.entries()].map(([pid, what]) => {
+      const who = tix.find((t) => t.pid === pid);
+      return `<div class="tk-row" data-key="tk-${esc(pid)}"><b>${esc(name(pid, who.name))}</b><span>${what.map(esc).join(" · ")}</span><i>${what.length} 🎟</i></div>`;
+    }).join("")}</div>`;
 }
 
 function ddPanel(G, team, lim) {

@@ -88,6 +88,16 @@ function gameTab(G) {
     ${toggle("playersRename", "Teams can rename themselves", st.playersRename !== false, "From their phones, until Jeopardy starts")}
     ${toggle("announce", "Announce who's up out loud", st.announce !== false, "Mini games: the screen with 🔊 on reads the names aloud")}
   </section>
+  <section class="sect"><h4>🌟 North Pole Awards <small>on the final-scores screen</small></h4>
+    <div class="awlist">${E.AWARDS.map((a) => {
+      const on = E.awardOn(S, a.id);
+      return `<div class="awrow${on ? "" : " off"}" data-key="aw-${a.id}">
+        <label class="awtick" title="Give this award"><input type="checkbox"${on ? " checked" : ""} data-change="award-on" data-id="${a.id}"><span class="aw-ico">${a.icon}</span><span class="aw-name">${esc(a.title)}<small>${esc(a.about)}</small></span></label>
+        <label class="awprize${E.awardPrize(S, a.id) ? " on" : ""}" title="The winner gets a scratch-it"><input type="checkbox"${E.awardPrize(S, a.id) ? " checked" : ""}${on ? "" : " disabled"} data-change="award-prize" data-id="${a.id}"><span>🎟</span></label>
+      </div>`;
+    }).join("")}</div>
+    <small class="muted">Untick an award to leave it out. Tick 🎟 and the winner gets a <b>scratch-it</b> — the board, their phone and your controls all say who to hand one to. The same person can win as many awards as they earn.</small>
+  </section>
   <section class="sect"><h4>Scores</h4>
     ${E.TEAMS.map((t) => `<div class="field-row"><span class="dot ${t}"></span><span class="grow">${esc(tn(G, t))}</span><b>${money(S.scores[t])}</b><button class="btn ghost sm" data-action="score-panel" data-team="${t}">Adjust</button></div>`).join("")}
   </section>

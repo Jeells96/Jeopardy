@@ -77,7 +77,8 @@ async function hold(page, sel) {
   // It's a Best overall game with the drawing tick box on — no separate kind of game.
   ok((await host.$$eval(".minicard select[data-f='type'] option", (els) => els.map((e) => e.textContent.trim()))).join("|") === "⚔️ Head-to-head|🏅 Best overall|🏆 Everyone at once", "three kinds of mini game to choose from");
   ok(await host.$eval(".minicard select[data-f='type']", (e) => e.value === "best"), "Blind Drawing is scored like a 🏅 Best overall game");
-  ok(!(await host.$(".minicard .drawtick")) && !(await host.$(".minicard .timerrow")), "…and has no tables or timer tick boxes — everyone draws at once");
+  ok(!(await host.$(".minicard .drawtick:not(.prizetick)")) && !(await host.$(".minicard .timerrow")), "…and has no tables or timer tick boxes — everyone draws at once");
+  ok(!!(await host.$(".minicard .prizetick")), "…but it can have a 🎟 scratch-it for the best drawing");
   await host.click('.ideas .chipbtn:has-text("Blind Drawing")');
   await until(host, () => { const el = document.getElementById("toast"); return el && el.classList.contains("show") && el.textContent.includes("once for the night"); });
   ok(await host.evaluate(() => window.__G.S.minis.list.length === 1), "only one Blind Drawing a night — a second one isn't added");

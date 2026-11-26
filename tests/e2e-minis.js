@@ -627,7 +627,7 @@ async function until(page, fn, arg, timeout = 8000) {
   await until(solo, () => window.__G.S.minis.list.some((x) => x.type === "all"));
   const tug2 = (await minis(solo)).find((x) => x.type === "all");
   ok((await solo.textContent(`.minicard[data-key="mini-${tug2.id}"]`)).includes("no scores to type"), "the card says everyone plays at once and you just tap who won");
-  ok(!(await solo.$(`.minicard[data-key="mini-${tug2.id}"] .drawtick`)), "…so there's no two-tables tick box on it");
+  ok(!(await solo.$(`.minicard[data-key="mini-${tug2.id}"] .drawtick:not(.prizetick)`)), "…so there's no two-tables tick box on it");
   await solo.click(`.minicard[data-key="mini-${tug2.id}"] [data-action="act"][data-p*="miniPlay"]`);
   await until(solo, () => window.__G.S.minis.current === window.__G.S.minis.list.find((x) => x.type === "all").id);
   ok((await solo.textContent(".r-status")).includes("everyone plays at the same time"), "the controls say the whole room is playing");

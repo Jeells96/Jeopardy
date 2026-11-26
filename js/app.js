@@ -864,6 +864,9 @@ document.addEventListener("change", async (e) => {
     else if (k === "mini-field") await D.act("miniUpdate", { id: el.dataset.id, patch: { [el.dataset.f]: el.value } });
     else if (k === "mini-tables") await D.act("miniUpdate", { id: el.dataset.id, patch: { tables: el.checked ? 2 : 1 } });
     else if (k === "mini-timed") await D.act("miniUpdate", { id: el.dataset.id, patch: { timed: el.checked } });
+    else if (k === "mini-prize") await D.act("miniUpdate", { id: el.dataset.id, patch: { prize: el.checked } });
+    else if (k === "award-on") await D.act("setAward", { id: el.dataset.id, on: el.checked });
+    else if (k === "award-prize") await D.act("setAward", { id: el.dataset.id, prize: el.checked });
     else if (k === "mini-player") await D.act("miniSetPlayer", { id: el.dataset.id, team: el.dataset.team || null, pid: el.value, matchId: el.dataset.ref || undefined, turnId: el.dataset.ref || undefined });
     else if (k === "mini-move") await D.act("miniSetTable", { id: el.dataset.id, table: el.value, matchId: el.dataset.ref, turnId: el.dataset.ref });
   } catch (err) {

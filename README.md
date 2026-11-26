@@ -64,6 +64,11 @@ points go straight onto the team's score and carry into Jeopardy.
   tap the person who won and their **team gets the points** and **they** get the win toward
   🏆 North Pole Champ (the board says "Won for the Wives by Liz Eells"). There are still
   plain **🏆 Husbands / 🏆 Wives (whole team)** buttons when nobody stood out.
+- **🎟 Scratch-it for the winner:** tick 🎟 on a game and whoever wins it for their team gets
+  a scratch-it — the person you tapped on an **Everyone at once** game, the top score on a
+  **Best overall** game, the best drawing in **Blind Drawing**. Head-to-head games don't have
+  it (every matchup has its own winner), and it all lands in the same **🎟 Scratch-its to hand
+  out** list in your controls at the end of the night.
 - **⏱ Played against the clock?** Tick **⏱ Timer** on the game in Settings → Mini games and
   type the seconds (it shows you the time, e.g. `0:45`). **You** start it: your controls get
   **⏱ Start the timer (0:45)** (keyboard **K**). The countdown then shows big on the
@@ -266,12 +271,18 @@ switch off phone renaming there too.
 - Under the winner, the board reveals the awards one after another, each on a gift tag with a
   candy-cane stripe and a bow:
   🧝 **Head Elf** (most right answers), 🦌 **Fastest Reindeer** (quickest winning buzz),
-  💰 **Christmas Bonus** (most money won, when that's not the Head Elf again),
-  🏆 **North Pole Champ** (most mini-game wins), 🎨 **Santa's Sketch Artist** (best Blind
-  Drawing), 🪨 **Naughty List** (a lump of coal for the most wrong or unanswered questions —
-  buzzing in and running out of time counts), and 🧶 **Ugliest Sweater** once
-  the vote is done. An award only appears if someone earned it (and not when more than three
-  people tie).
+  💰 **Christmas Bonus** (most money won), 🏆 **North Pole Champ** (most mini-game wins),
+  🎨 **Santa's Sketch Artist** (best Blind Drawing), 🪨 **Naughty List** (a lump of coal for
+  the most wrong or unanswered questions — buzzing in and running out of time counts), and
+  🧶 **Ugliest Sweater** once the vote is done. An award only appears if someone earned it
+  (and not when more than three people tie). **One person can win several** — being the Head
+  Elf doesn't rule you out of the Christmas Bonus or anything else.
+- **Pick which awards you're giving:** ⚙ Settings → Game → **🌟 North Pole Awards** has a tick
+  box for each one. Untick it and it isn't given at all.
+- **🎟 Scratch-its:** tick the 🎟 next to an award and its winner gets a scratch-it — the gift
+  tag on the board says **🎟 Scratch-it!**, their phone opens with "🎟 A scratch-it for you!",
+  and your own controls list **who to hand one to, and what for** (one line per person, so a
+  double winner is one line with two tickets).
 - Every phone gets a **"📜 Your Nice List report"**: right answers, misses, money won for the
   team, fastest buzz, mini-game wins and best drawing — then "🌟 You made the North Pole
   Awards!" with a gold tag for each award that player won — plus the full list of awards.

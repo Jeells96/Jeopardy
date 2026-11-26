@@ -103,15 +103,21 @@ function myNight(G) {
   ].join("") : "";
   // Awards this player won: one gold tag each (no run-on sentence).
   const won = mine.length ? `<div class="night-won"><div class="nw-head">🌟 You made the North Pole Awards! 🌟</div>
-      ${mine.map((a) => `<div class="nw-tag aw-${a.id}"><span>${a.icon}</span><b>${esc(a.title)}</b></div>`).join("")}</div>` : "";
+      ${mine.map((a) => `<div class="nw-tag aw-${a.id}"><span>${a.icon}</span><b>${esc(a.title)}</b>${a.prize ? `<i class="nw-ticket">🎟</i>` : ""}</div>`).join("")}</div>` : "";
+  // 🎟 Scratch-its: what this player has coming to them.
+  const tickets = E.scratchIts(G.S).filter((x) => x.pid === G.deviceId);
+  const tix = tickets.length ? `<div class="ph-card ticket" data-key="tickets">
+      <div class="big-emoji">🎟</div><h2>${tickets.length === 1 ? "A scratch-it for you!" : `${tickets.length} scratch-its for you!`}</h2>
+      <p>${tickets.map((t) => esc(t.what)).join(" · ")}</p><small class="muted">See Jaren to claim ${tickets.length === 1 ? "it" : "them"}.</small>
+    </div>` : "";
   const night = `<div class="ph-card night" data-key="night">
     <div class="lbl">📜 Your Nice List report</div>
     ${stats ? `<div class="night-stats">${stats}</div>` : `<p class="muted">Santa didn't catch you buzzing in this year — there's always next Christmas! 🎅</p>`}
     ${won}
   </div>`;
-  if (!list.length) return night;
-  return night + `<div class="ph-card ph-awards" data-key="awards"><div class="lbl">🌟 The North Pole Awards</div>
-    ${list.map((a) => `<div class="${cls("pa-row", "aw-" + a.id, a.winners.some((w) => w.pid === G.deviceId) && "me")}"><span class="pa-ico">${a.icon}</span><span class="pa-txt"><small>${esc(a.title)}</small><b>${esc(winnerNames(G, a))}</b></span><span class="pa-det">${esc(a.detail)}</span></div>`).join("")}
+  if (!list.length) return tix + night;
+  return tix + night + `<div class="ph-card ph-awards" data-key="awards"><div class="lbl">🌟 The North Pole Awards</div>
+    ${list.map((a) => `<div class="${cls("pa-row", "aw-" + a.id, a.winners.some((w) => w.pid === G.deviceId) && "me")}"><span class="pa-ico">${a.icon}</span><span class="pa-txt"><small>${esc(a.title)}${a.prize ? " · 🎟" : ""}</small><b>${esc(winnerNames(G, a))}</b></span><span class="pa-det">${esc(a.detail)}</span></div>`).join("")}
   </div>`;
 }
 

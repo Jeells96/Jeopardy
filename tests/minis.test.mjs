@@ -845,6 +845,44 @@ for (const [h, wv] of [[3, 3], [2, 5], [5, 2], [1, 4], [4, 1], [1, 1], [6, 6]]) 
   eq(w.state.minis.list.length, 2, "other games are fine");
 }
 
+// ---------- 🎟 scratch-its for the one person who wins a mini game ----------
+{
+  const w = world(roster(2, 2), 6);
+  const h2h = w.add({ name: "Toss", type: "h2h", points: 100, prize: true });
+  eq(w.game(0).prize, false, "head-to-head games get no scratch-it — every matchup has its own winner");
+  const all = w.add({ name: "Tug of War", type: "all", points: 500, prize: true });
+  const best = w.add({ name: "Speed Wrap", type: "best", points: 300, prize: true, better: "low", unit: "seconds" });
+  eq([w.game(1).prize, w.game(2).prize], [true, true], "the games one person can win for their team do");
+  w.run("minisStart");
+  // everyone at once: the person Jaren taps
+  w.run("miniPlay", { id: all });
+  w.run("miniFinish", { id: all, winner: "team2", pid: "w1" });
+  eq(E.miniHero(w.game(1)).name, "Wife1", "everyone at once: the person who won it for their team");
+  // best overall: whoever posted the winning score
+  w.run("miniPlay", { id: best });
+  w.run("miniNext", { id: best });
+  for (let i = 0; i < 4 && E.turnsOf(w.game(2)).length; i++) {
+    const t = E.turnsOf(w.game(2))[0];
+    w.run("miniScore", { id: best, turnId: t.id, score: t.team === "team1" ? 10 : 20 });
+    if (i < 3) w.run("miniNext", { id: best });
+  }
+  w.run("miniFinish", { id: best });
+  const hero = E.miniHero(w.game(2));
+  ok(hero && hero.team === w.game(2).result.winner, `best overall: the top score wins the scratch-it (${hero && hero.name})`);
+  // head-to-head: nobody, even if someone ticked it
+  w.run("miniPlay", { id: h2h });
+  w.run("miniNext", { id: h2h });
+  w.run("miniMatch", { id: h2h, winner: "team1" });
+  w.run("miniFinish", { id: h2h, winner: "team1" });
+  eq(E.miniHero(w.game(0)), null, "head-to-head: no single winner, so no scratch-it");
+  const tix = E.scratchIts(w.state);
+  eq(tix.map((t) => t.what).sort(), ["🏆 Speed Wrap", "🏆 Tug of War"], "the host's list has one per game that was ticked");
+  ok(tix.some((t) => t.name === "Wife1"), "…by name");
+  // untick it and it's off the list
+  w.run("miniUpdate", { id: all, patch: { prize: false } });
+  eq(E.scratchIts(w.state).length, 1, "unticking 🎟 takes it off the list");
+}
+
 ok(unsafe === 0, "no undefined values or nested arrays ever sent to the database");
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

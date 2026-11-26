@@ -230,8 +230,20 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await until(P.Bob, () => document.querySelector("#netbar") && document.querySelector("#netbar").textContent.includes("Back online"), null, 15000);
   ok(true, "…and “Back online” when it's back");
 
-  // ---- the night's awards ----
+  // ---- the host picks which awards he's giving, and which come with a scratch-it ----
   console.log("Awards");
+  await host.click('[data-action="drawer"]');
+  await until(host, () => document.querySelectorAll(".awlist .awrow").length === 7);
+  ok(true, "Settings lists every award with its own tick box");
+  await host.uncheck('input[data-change="award-on"][data-id="art"]');
+  await until(host, () => (window.__G.S.settings.awardsOff || []).includes("art"));
+  ok(await host.$eval('.awrow[data-key="aw-art"] input[data-change="award-prize"]', (e) => e.disabled), "an award that's switched off can't have a scratch-it on it");
+  await host.check('input[data-change="award-prize"][data-id="brain"]');
+  await host.check('input[data-change="award-prize"][data-id="fast"]');
+  await until(host, () => (window.__G.S.settings.awardPrize || []).length === 2);
+  ok(true, "the host ticks the two awards he's handing a scratch-it to");
+  await shot(host, "u08b-settings-awards");
+  await host.keyboard.press("Escape");
   await act(host, "endGame");
   await until(board, () => document.querySelectorAll(".awards .award").length >= 3);
   const awardsTxt = await board.textContent(".awards");
@@ -243,11 +255,20 @@ async function shot(page, name) { if (SHOTS) await page.screenshot({ path: `${SH
   await shot(board, "u09-board-awards");
   const fits = await board.evaluate(() => { const m = document.querySelector(".stage-main").getBoundingClientRect(); return [...document.querySelectorAll(".award, .aw-head, .over-title, .os")].every((el) => { const r = el.getBoundingClientRect(); return r.top >= m.top - 1 && r.bottom <= m.bottom + 1; }); });
   ok(fits, "winner, scores and awards all fit on the board");
+  ok(!awardsTxt.includes("Sketch Artist"), "an award the host switched off isn't given");
+  ok((await board.$$(".award .aw-prize")).length === 2, "the two he ticked say Scratch-it! on the board");
+  const dupe = await board.evaluate(() => {
+    const names = [...document.querySelectorAll(".award .aw-name")].map((el) => el.textContent.trim());
+    return names.length !== new Set(names).size;
+  });
+  ok(dupe, "one person can win more than one award");
+  ok((await host.textContent(".r-panel")).includes("Scratch-its to hand out"), "the host's controls list who to hand a scratch-it to");
   await until(P.Ann, () => !!document.querySelector(".night .night-stats"));
   const night = await P.Ann.textContent(".night");
   ok(night.includes("Nice List report") && night.includes("right answer") && night.includes("+$200") && night.includes("fastest buzz"), "each phone gets a “Nice List report”: right answers, money won, fastest buzz");
   ok(night.includes("You made the North Pole Awards") && (await P.Ann.textContent(".night-won .nw-tag")).includes("Head Elf"), "…with a gold tag for each award that player won (one per line)");
   ok((await P.Ann.$$(".ph-awards .pa-row")).length >= 3, "phones list all of the night's awards");
+  ok((await P.Ann.textContent(".ph-card.ticket")).includes("scratch-it"), "a winner's phone tells them they've got a scratch-it coming");
   await shot(P.Ann, "u10-phone-your-night");
   await P.Ann.evaluate(() => window.scrollTo(0, 9999));
   await shot(P.Ann, "u11-phone-awards");

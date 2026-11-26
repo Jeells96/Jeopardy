@@ -297,7 +297,8 @@ export function awards(G, { cls: extra = "" } = {}) {
   return `<div class="${cls("awards-wrap", extra)}"><div class="aw-head">🌟 The North Pole Awards 🌟</div>
     <div class="${cls("awards", list.length > 4 && "many")}">${list.map((a, i) => `<div class="award" style="animation-delay:${(0.6 + i * 0.45).toFixed(2)}s" data-key="aw-${a.id}">
       <div class="aw-ico">${a.icon}</div><div class="aw-title">${esc(a.title)}</div>
-      <div class="${cls("aw-name", a.winners.length === 1 && a.winners[0].team)}">${esc(winnerNames(G, a))}</div><div class="aw-detail">${esc(a.detail)}</div></div>`).join("")}</div></div>`;
+      <div class="${cls("aw-name", a.winners.length === 1 && a.winners[0].team)}">${esc(winnerNames(G, a))}</div><div class="aw-detail">${esc(a.detail)}</div>
+      ${a.prize ? `<div class="aw-prize">🎟 Scratch-it!</div>` : ""}</div>`).join("")}</div></div>`;
 }
 
 // ---------------- podiums ----------------
